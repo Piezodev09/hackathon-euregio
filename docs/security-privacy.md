@@ -79,10 +79,23 @@ als Ziel), OWASP Top 10 und NIST SP 800-63B für Passwörter.
 | DB-Leak | Passwörter scrypt, Tokens gehasht, 2FA-Geheimnisse AES-GCM |
 | Missbrauch von Anzeige-Links | nur Lesen, begrenzte Daten, rotierbar, Rate-Limit |
 | Fehlinterpretation eines Alarms | sachlicher Text, kein Personenbezug |
+| Gefälschtes Zertifikat beim Pi-Setup (MITM) | Zertifikat wird nur mit passendem SPKI-Pin geladen (`curl --pinnedpubkey`), danach nur noch mit `--cacert` |
+| Kartennummern-Leak | nur HMAC-SHA256 mit Datenschlüssel gespeichert, je Mandant verschieden; die UID wird nirgends angezeigt (neue Karten erkennt man am Zeitpunkt und Stellplatz des Taps) |
+| Wiederholte/verspätete NFC-Taps | Sequenz je Gerät (Doppelungen verworfen), Taps älter als 60 s verworfen |
+| Missbrauch der Stellplatz-Ansicht / „Problem melden“ | eigenes rotierbares Token, nur Lesen + Meldung, 3 Meldungen je 10 min je IP, max. 300 Zeichen, keine Personendaten |
+| Kamerabilder in falschen Händen | aus per Voreinstellung, Freigabe-Vermerk Pflicht, nur Admins, jeder Abruf im Audit-Log, Dateien `0600`, Löschung nach 1–72 h, `Cache-Control: no-store` |
+| Bösartiger Bild-Upload | nur Geräte-Token der Station, nur `image/jpeg` mit JPEG-Signatur, max. 2 MB (Limit je Pfad), zufälliger Dateiname |
 
 ## Datenschutz
 
-- Keine Kamera (nur als nicht genehmigte Idee notiert), keine Personenerkennung. Der NFC-Leser ist geplant; ob und welche Kartendaten verarbeitet werden, ist vor dem Einsatz festzulegen und zu prüfen. Messdaten: Stellplatz, Zustand, Erschütterungswert, Zeit, Quelle.
+- Messdaten: Stellplatz, Zustand, Erschütterungswert, Zeit, Quelle. Keine Personenerkennung.
+- **NFC:** gespeichert werden nur der HMAC der Karten-UID, eine frei gewählte Bezeichnung (kein Name nötig),
+  Parkvorgänge (Stellplatz, Beginn, Ende, Betrag). Wer welche Karte besitzt, weiß nur die Organisation.
+- **Kamera (optional):** standardmäßig **aus**. Einschalten nur mit Tarif-Merkmal und eingetragener Freigabe
+  (z. B. „Schulleitung, Datum“). Nur Einzelbilder bei einer Erschütterungswarnung oder auf Anforderung eines Admins,
+  keine Videos, keine Speicherung auf dem Pi, Löschung nach 1–72 h (Standard 24 h), Ausschalten löscht sofort alle Bilder.
+  Display und Stellplatz-Ansicht zeigen „Kamera aktiv“. Vor dem Einsatz sind Hinweisschild, Rechtsgrundlage und ggf.
+  eine DSFA mit Schulleitung und Datenschutzbeauftragten zu klären – die Technik ersetzt diese Freigabe nicht.
 - Kontodaten: Name, E-Mail, Rolle, Sprache; Sitzungen: IP und Browserkennung (Sicherheitszweck, max. 12 h).
 - Betroffenenrechte: Datenexport (JSON, Art. 20), Konto löschen, Organisation vollständig löschen (Kaskade).
 - Keine Tracking-/Werbe-Cookies; nur ein technisch notwendiges Session-Cookie.
@@ -92,7 +105,7 @@ als Ziel), OWASP Top 10 und NIST SP 800-63B für Passwörter.
 
 ## Bekannte Grenzen / offene Punkte
 
-- Keine Zahlungsanbindung – Tarifwechsel werden protokolliert, Abrechnung manuell.
+- Keine Zahlungsanbindung – Beträge, Aufstellungen und Rechnungen werden berechnet, Zahlungen von Hand als bezahlt markiert ([abrechnung.md](abrechnung.md)).
 - Ratenbegrenzung im Speicher je Prozess (bei mehreren Instanzen: Redis o. ä. nötig).
 - SQLite für kleinen Betrieb; für viele Kunden auf PostgreSQL mit Row-Level-Security umstellen.
 - Kein QR-Code für die 2FA-Einrichtung (Schlüssel + `otpauth://`-Link); WebAuthn/Passkeys als Erweiterung.

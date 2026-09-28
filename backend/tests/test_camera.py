@@ -96,3 +96,12 @@ def test_snapshot_request_needs_managed_gateway(env):
     owner, sid, token = school(env)
     owner.put(f"/api/v1/stations/{sid}/camera", {"enabled": True, "approved_by": "SL"})
     assert owner.post(f"/api/v1/stations/{sid}/camera/snapshot").status_code == 409
+
+
+def test_deleting_station_removes_images_from_disk(env):
+    owner, sid, token = school(env)
+    owner.put(f"/api/v1/stations/{sid}/camera", {"enabled": True, "approved_by": "SL"})
+    assert upload(owner, token).status_code == 201
+    assert len(list(env.app.state.snapshots.dir.glob("*.jpg"))) == 1
+    assert owner.delete(f"/api/v1/stations/{sid}").status_code == 200
+    assert not list(env.app.state.snapshots.dir.glob("*.jpg"))

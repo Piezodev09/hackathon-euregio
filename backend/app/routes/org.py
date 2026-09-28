@@ -220,5 +220,6 @@ def delete_org(body: DeleteOrgIn, request: Request, response: Response, ctx: Ctx
                detail={"name": ctx.tenant["name"]})
     core.db.execute("DELETE FROM audit_log WHERE tenant_id = ?", (tid,))
     core.db.execute("DELETE FROM tenant WHERE id = ?", (tid,))  # ON DELETE CASCADE entfernt alles Weitere
+    request.app.state.snapshots.purge()  # Kamerabilder auch von der Platte
     core.clear_cookie(response)
     return {"status": "deleted"}

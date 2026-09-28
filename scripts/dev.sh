@@ -3,7 +3,8 @@
 #   API + Portal (http://127.0.0.1:8000) und einen Demo-Kunden.
 #
 #   scripts/dev.sh                 Agent (wie auf dem Pi) mit eingebautem Simulator – im Portal verwaltbar
-#   scripts/dev.sh --interactive   Simulator mit Tastatursteuerung -> Gateway (Rütteln, Sensorfehler …)
+#   scripts/dev.sh --interactive   Simulator mit Tastatursteuerung -> Gateway (Rütteln, Sensorfehler, NFC-Karte …)
+#   scripts/demo-reset.sh          alles zurücksetzen und frisch starten
 #
 # Alle Simulatordaten sind als "simuliert" gekennzeichnet.
 set -euo pipefail
@@ -45,6 +46,8 @@ cat <<INFO
  Portal:        http://127.0.0.1:8000/app
  Login:         $DEMO_EMAIL / $DEMO_PASSWORD
  Kiosk-Anzeige: $DISPLAY_URL
+ Stellplatz-Ansicht (QR): ${STALL_URL:-–}
+ Demo-Karte: 04A1B2C3D4 (im Simulator: Befehl n)
  Registrierungs-/Reset-Mails erscheinen im Log (mail.backend = console).
 ────────────────────────────────────────────────────────────
 INFO

@@ -47,15 +47,31 @@ class Licensing:
             "notes": lic["notes"] if lic else "",
         }
 
+    def billable_from(self, tenant: sqlite3.Row) -> str | None:
+        """Erster abrechenbarer Tag (YYYY-MM-DD); None ohne Testphase. Die Testphase endet nach trial_days
+        oder früher, sobald ein Vertrag beginnt."""
+        plan = get_plan(tenant["plan"])
+        if not plan.trial_days:
+            return None
+        end = tenant["created_at"] + plan.trial_days * 86400
+        lic = self.db.one("SELECT valid_from FROM license WHERE tenant_id = ?", (tenant["id"],))
+        if lic:
+            end = min(end, lic["valid_from"])
+        return billing.day_str(end)
+
     def stall_days(self, tenant: sqlite3.Row, month: str) -> tuple[int, int]:
-        """(Stellplatz-Tage, Tage) im Monat bis heute. Ohne Aufzeichnung zählt die heutige Anzahl ab Anlagedatum."""
+        """(abrechenbare Stellplatz-Tage, Tage) im Monat bis heute. Tage in der kostenlosen Testphase zählen nicht.
+        Ohne Aufzeichnung zählt die heutige Anzahl ab Anlagedatum."""
         now = self.core.clock()
+        first = self.billable_from(tenant)
         recorded = {r["day"]: r["stalls"] for r in self.db.all("SELECT day, stalls FROM usage_day WHERE tenant_id = ? AND day LIKE ?",
                                                               (tenant["id"], f"{month}-%"))}
         stations = [s["created_at"] for s in self.db.all("SELECT created_at FROM station WHERE tenant_id = ?", (tenant["id"],))]
         days = billing.days_of_month(month, until=now)
         total = 0
         for d in days:
+            if first and d < first:
+                continue
             if d in recorded:
                 total += recorded[d]
             else:
@@ -67,13 +83,14 @@ class Licensing:
         plan = get_plan(tenant["plan"])
         stall_days, days = self.stall_days(tenant, month)
         lines = []
-        if lic["base_month_cents"]:
+        if lic["base_month_cents"] and stall_days:
             lines.append({"text": f"Grundgebühr {plan.name} {month}", "qty": 1, "unit_cents": lic["base_month_cents"],
                           "total_cents": lic["base_month_cents"]})
         if lic["price_per_stall_day_cents"] and stall_days:
             lines.append({"text": f"Stellplatz-Tage {month}", "qty": stall_days, "unit_cents": lic["price_per_stall_day_cents"],
                           "total_cents": stall_days * lic["price_per_stall_day_cents"]})
         return {"tenant_id": tenant["id"], "tenant_name": tenant["name"], "month": month, "plan": plan.id, "days": days,
+                "trial_until": lic["valid_until"] if lic["trial"] else None,
                 "stall_days": stall_days, "lines": lines, "total_cents": sum(x["total_cents"] for x in lines), "license": lic}
 
     def issue(self, tenant: sqlite3.Row, month: str) -> dict:
@@ -93,4 +110,3 @@ class Licensing:
         return {"id": r["id"], "tenant_id": r["tenant_id"], "tenant_name": name, "number": r["number"], "month": r["month"],
                 "created_at": _iso(r["created_at"]), "lines": json.loads(r["lines"]), "total_cents": r["total_cents"],
                 "status": r["status"], "paid_at": _iso(r["paid_at"])}
-

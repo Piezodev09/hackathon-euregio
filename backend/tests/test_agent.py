@@ -252,3 +252,11 @@ def test_pinned_install_commands_for_self_signed_cert(env, tmp_path):
 
 def test_no_cert_endpoint_without_tls(env):
     assert env.client().get("/install/server.crt").status_code == 404
+
+
+def test_whoami_checks_token_without_side_effects(env):
+    owner, sid = setup_station(env)
+    token = owner.post(f"/api/v1/stations/{sid}/devices", {"name": "Pi"}).json()["token"]
+    r = env.client().c.get("/api/v1/agent/whoami", headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 200 and r.json()["station_id"] == sid and r.json()["server_time"] == env.clock()
+    assert env.client().c.get("/api/v1/agent/whoami", headers={"Authorization": "Bearer bsd_falsch_falsch"}).status_code == 401

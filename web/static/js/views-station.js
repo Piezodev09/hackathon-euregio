@@ -3,7 +3,7 @@
 import { get, post, patch, put, del, describeError } from "./api.js";
 import { getLang, t } from "./i18n.js";
 import { el, clear, field, toast, confirmDialog, fmtDateTime, fmtTime, copyText, icon, effectiveState, reasonText,
-  stallStatus, stallBadge, fmtAge } from "./ui.js";
+  stallStatus, stallBadge, fmtAge, fmtCents } from "./ui.js";
 import { state, can, every, go } from "./state.js";
 import { sessionSummary, tariffForm, tariffText } from "./views-parking.js";
 
@@ -24,6 +24,8 @@ function stallCard(s) {
       live.state === "unknown" && live.unknown_reason ? el("span", {}, reasonText(live.unknown_reason)) :
         live.age_s !== null && live.age_s !== undefined ? el("span", {}, t("st.age", { s: fmtAge(live.age_s) })) : null,
       live.alert ? el("span", { class: "badge warn" }, icon("vib"), t("st.alert")) : null,
+      live.maintenance ? el("span", { class: "badge" }, icon("wrench"), t("ss.maintenance")) : null,
+      live.session ? el("span", { class: "badge ok" }, icon("card"), t("pk.checked_in"), " · ", fmtCents(live.session.amount_cents)) : null,
       live.simulated_data ? el("span", { class: "badge sim" }, t("st.sim")) : null));
 }
 
@@ -36,8 +38,18 @@ export function viewOverview() {
     try {
       const [{ stations }, { events }] = await Promise.all([get("/api/v1/stations"), get("/api/v1/events?open_only=true&limit=100")]);
       const count = (st) => stations.filter((s) => (s.live?.state || "unknown") === st).length;
+      let today = { checkins: "–", revenue: "–" };
+      try {
+        const { sessions } = await get(`/api/v1/parking/sessions?month=${new Date().toISOString().slice(0, 7)}&limit=1000`);
+        const d0 = new Date(); d0.setHours(0, 0, 0, 0);
+        const todays = sessions.filter((s) => new Date(s.started_at) >= d0);
+        const ended = sessions.filter((s) => s.status === "closed" && s.ended_at && new Date(s.ended_at) >= d0);
+        today = { checkins: todays.length, revenue: fmtCents(ended.reduce((a, s) => a + (s.amount_cents || 0), 0)) };
+      } catch (_) { /* Parkvorgänge optional */ }
       clear(kpis, kpi(stations.length, t("ov.stations")), kpi(count("free"), t("ov.state_free")),
-        kpi(count("unknown"), t("ov.state_unknown")), kpi(events.length, t("ov.alerts")));
+        kpi(count("unknown"), t("ov.state_unknown")), kpi(events.length, t("ov.alerts")),
+        kpi(stations.filter((s) => s.live?.session).length, t("ov.parked_now")), kpi(today.checkins, t("ov.checkins_today")),
+        kpi(today.revenue, t("ov.revenue_today")));
       clear(cards, stations.length ? stations.map(stallCard) : el("div", { class: "card" }, el("p", {}, t("ov.empty")),
         can("admin") ? el("a", { class: "btn primary", href: "#/stations/new" }, t("ov.create")) : null));
     } catch (e) { clear(cards, errorCard(e)); }
@@ -450,7 +462,7 @@ export function viewStationSettings(id, setTitle) {
     const on = el("input", { type: "checkbox", checked: st.camera_enabled, disabled: !planOk });
     const approved = el("input", { type: "text", maxlength: "200", value: st.camera_approved_by || "", placeholder: t("cam.approved_ph") });
     const hours = el("input", { type: "number", min: "1", max: "72", value: String(st.camera_retention_h || 24) });
-    const list = el("div");
+    const list = el("div", { class: "cam-images" });
     const loadList = async () => {
       if (!st.camera_enabled) { clear(list); return; }
       try {

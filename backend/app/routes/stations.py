@@ -102,6 +102,7 @@ def delete_station(station_id: str, request: Request, ctx: Ctx = Depends(require
     core = core_of(request)
     st = _station(core, ctx, station_id)
     core.db.execute("DELETE FROM station WHERE id = ?", (st["id"],))
+    request.app.state.snapshots.purge()  # Kamerabilder der Station sofort auch von der Platte
     core.audit("station_deleted", tenant_id=ctx.tenant_id, user_id=ctx.user["id"], actor=ctx.actor, ip=ctx.ip, target=st["id"],
                detail={"name": st["name"]})
     return {"status": "deleted"}

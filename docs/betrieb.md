@@ -27,6 +27,16 @@ sudo systemctl restart bike-api
 
 Das Portal zeigt beim Einrichten eines Gateways Pin und Fingerabdruck; der Pi vertraut genau diesem Zertifikat.
 
+### Update der Plattform
+
+```bash
+sudo /opt/smart-bike-station/deploy/update.sh          # Sicherung → git pull (nur Fast-Forward) → Abhängigkeiten → Neustart → /health
+sudo /opt/smart-bike-station/deploy/update.sh --tests  # vorher alle Tests
+```
+
+Schlägt der Health-Check fehl, setzt das Skript automatisch auf den vorherigen Stand zurück und startet neu.
+Datenbank-Migrationen (aktuell Schema 5) laufen beim Start automatisch.
+
 ## Raspberry Pi (je Station, beim Kunden)
 
 Empfohlen: **Agent-Installation per Kopplungscode** – Portal → Station → Einstellungen → *Gateway
@@ -57,9 +67,25 @@ Nach einem Neustart gelten alte Zustände nicht automatisch: Der Arduino meldet 
 
 ## Demodaten löschen
 
-Kunden löschen ihre Daten selbst (Portal → Organisation → Löschen). Für die Demo: `sudo -u bikestation deploy/delete-demo-data.sh`.
+Kunden löschen ihre Daten selbst (Portal → Organisation → Löschen). Für die Demo: `sudo -u bikestation deploy/delete-demo-data.sh`
+(Messungen, Ereignisse, Parkvorgänge, Kamerabilder; Konten, Karten, Tarife und Rechnungen bleiben).
 Messdaten und Ereignisse werden automatisch nach der Tarif-Frist gelöscht (Free 7, Schule 30, Pro 90 Tage), das Audit-Log nach 365 Tagen.
+Kamerabilder liegen unter `/var/lib/bike-station/snapshots/` (`0600`) und werden nach 1–72 h gelöscht (Prüfung alle 10 min);
+sie sind bewusst **nicht** Teil der Datenbanksicherung.
+
+## Lizenzabrechnung (Plattform-Betreiber)
+
+Portal → **Plattform → Rechnungen**: Monat wählen → Vorschau je Kunde (Stellplatz-Tage × Tagespreis + Grundgebühr) →
+*Rechnung festschreiben* (Nummer `SBB-JJJJMM-NNNN`) → nach Zahlungseingang *bezahlt*. CSV-Export für die Buchhaltung.
+Vertragspreise und Laufzeit je Kunde unter *Lizenz bearbeiten*. Tage in der 30-tägigen Testphase werden nicht berechnet.
+Die Anzahl Stellplätze je Tag wird alle 10 min festgehalten (`usage_day`, Maximum des Tages).
+Einzelheiten: [abrechnung.md](abrechnung.md).
 
 ## Lokale Entwicklung
 
-`scripts/dev.sh` startet API, Simulator und Gateway auf einem Rechner (ohne TLS, nur lokal).
+| Skript | Zweck |
+|---|---|
+| `scripts/dev.sh` | API, Demo-Kunde und Agent mit Simulator auf einem Rechner (ohne TLS, nur lokal) |
+| `scripts/dev.sh --interactive` | Simulator per Tastatur: `p` einstellen/ausparken, `b` anstoßen, `s` rütteln, `e` Sensorfehler, `n [UID]` NFC-Karte |
+| `scripts/demo-reset.sh [--yes]` | alles zurücksetzen: frische Demo mit Karte, Tarif und 7 Tagen simulierter Parkhistorie |
+| `scripts/check.sh` | alle Tests (Backend, Gateway), JS-Syntax, Übersetzungs-Vollständigkeit, Shell-Syntax |

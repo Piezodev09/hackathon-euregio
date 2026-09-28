@@ -491,6 +491,67 @@ class Agent:
         return self.exit_code
 
 
+# ---------------------------------------------------------------------- Diagnose
+def doctor(state: State, out=print) -> int:
+    """Prüft die typischen Fehlerquellen vor Ort und gibt eine verständliche Liste aus. Rückgabe: Anzahl Fehler."""
+    errors = 0
+
+    def line(ok: bool | None, text: str, hint: str = "") -> None:
+        nonlocal errors
+        mark = "✓" if ok else ("–" if ok is None else "✗")
+        errors += ok is False
+        out(f" {mark} {text}" + (f"\n     → {hint}" if hint and ok is False else ""))
+
+    out(f"Smart Bicycle Box – Diagnose (Agent {VERSION})")
+    line(sys.version_info >= (3, 11), f"Python {platform.python_version()}", "Raspberry Pi OS Bookworm oder neuer verwenden")
+    try:
+        state.load()
+        line(True, f"Gekoppelt mit Station {state['station_id']} ({state.get('station_name')})")
+    except AgentError as exc:
+        line(False, "Nicht gekoppelt", f"sudo sh agent.sh --code … ({exc})")
+        return errors
+    src = state.get("source", "serial")
+    if src == "serial":
+        try:
+            import serial  # noqa: F401
+            line(True, "pyserial installiert")
+        except ImportError:
+            line(False, "pyserial fehlt", "sudo apt install python3-serial")
+        ports = sorted(str(p) for pat in ("ttyACM*", "ttyUSB*") for p in Path("/dev").glob(pat))
+        port = state.get("serial_port", "")
+        line(bool(ports), f"Serielle Ports: {', '.join(ports) or 'keine'}", "Arduino per USB anschließen, Kabel mit Datenleitung verwenden")
+        if ports:
+            line(port in ports, f"Konfigurierter Port {port}", f"neu koppeln mit --serial-port {ports[0]}")
+    else:
+        line(None, "Datenquelle: Simulator (keine Hardware)")
+    cam = Camera(simulated=src == "simulator")
+    line(None if cam.kind == "none" else True, f"Kamera: {cam.kind}",
+         "optional – nur nötig, wenn die Kamera im Portal freigegeben ist")
+    ca = state.get("ca_file")
+    if ca:
+        line(Path(ca).is_file(), f"Plattform-Zertifikat {ca}", "Datei fehlt – neu koppeln")
+    try:
+        api = Api(state["api_url"], ca, state.get("allow_http", False), timeout=8)
+        t0 = time.time()
+        status, _ = api.request("GET", "/health")
+        line(status == 200, f"Plattform erreichbar: {state['api_url']} ({int((time.time() - t0) * 1000)} ms)", f"HTTP {status}")
+        status, who = api.request("GET", "/api/v1/agent/whoami", token=state["token"])
+        line(status == 200, f"Geräte-Token gültig (Stellplatz: {who.get('station_name', '?')})", "Gerät im Portal gesperrt? Neu koppeln")
+        if status == 200 and isinstance(who.get("server_time"), (int, float)):
+            skew = time.time() - who["server_time"]
+            line(abs(skew) <= 5, f"Uhrzeit weicht {skew:+.1f} s von der Plattform ab",
+                 "Zeitsynchronisation prüfen: timedatectl (NTP aktiv?) – sonst erscheinen Messungen als veraltet")
+    except (urllib.error.URLError, OSError, AgentError) as exc:
+        reason = getattr(exc, "reason", exc)  # urllib verpackt TLS-Fehler in URLError
+        if isinstance(reason, ssl.SSLError):
+            line(False, f"TLS-Fehler: {reason}",
+                 "Zertifikat geändert oder IP fehlt im Zertifikat → Befehle im Portal neu anzeigen und neu koppeln")
+        else:
+            line(False, f"Plattform nicht erreichbar: {exc}", "Netzwerk, Firewall (Port) und Adresse prüfen")
+    out("Fertig: " + ("keine Fehler." if not errors else f"{errors} Problem(e) gefunden."))
+    return errors
+
+
 # ---------------------------------------------------------------------- CLI
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Agent der Smart Bicycle Box")
@@ -509,6 +570,7 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("status", help="Zustand anzeigen (ohne Geheimnisse)")
     sub.add_parser("rollback", help="Auf die vorherige Version zurückschalten")
     sub.add_parser("version")
+    sub.add_parser("doctor", help="Diagnose: Kopplung, Arduino, Kamera, Plattform, Zertifikat")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -537,6 +599,8 @@ def main(argv: list[str] | None = None) -> int:
                 raise AgentError("keine vorherige Version vorhanden")
             switch_current(prefix, others[0])
             print(f"Zurückgeschaltet auf {others[0].name}. Neustart: sudo systemctl restart bike-agent")
+        elif args.cmd == "doctor":
+            return 1 if doctor(state) else 0
         elif args.cmd == "run":
             state.load()
             check_rollback(state.dir)

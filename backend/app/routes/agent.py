@@ -275,6 +275,14 @@ class HeartbeatIn(Strict):
     camera: str = Field(default="", max_length=20, pattern=r"^[a-z-]*$")
 
 
+@router.get("/api/v1/agent/whoami")
+def whoami(request: Request, dev=Depends(require_device)):
+    """Nebenwirkungsfreie Prüfung des Geräte-Tokens (für `agent.py doctor`)."""
+    core = core_of(request)
+    st = core.db.one("SELECT id, name FROM station WHERE id = ?", (dev["station_id"],))
+    return {"device_id": dev["id"], "station_id": st["id"], "station_name": st["name"], "server_time": core.clock()}
+
+
 @router.post("/api/v1/agent/heartbeat")
 def heartbeat(body: HeartbeatIn, request: Request, dev=Depends(require_device)):
     core = core_of(request)

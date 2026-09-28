@@ -7,6 +7,7 @@ import json
 import os
 import sys
 import tarfile
+import time
 from pathlib import Path
 
 import pytest
@@ -216,3 +217,45 @@ def test_agent_uploads_snapshot_on_alert_hint(tmp_path):
     assert ag.capture_and_upload("alert", "evt_1") == 201
     assert calls[0][0] == "/api/v1/agent/snapshot?reason=alert&event_id=evt_1" and calls[0][2] == "bsd_alt"
     assert ag.capture_and_upload("manual") == 0  # höchstens ein Bild alle 10 s
+
+
+def test_doctor_reports_unpaired_and_unreachable(tmp_path):
+    lines = []
+    assert A.doctor(A.State(tmp_path / "leer"), out=lines.append) >= 1
+    assert any("Nicht gekoppelt" in x for x in lines)
+    lines.clear()
+    s = enrolled_state(tmp_path)  # api_url zeigt auf 127.0.0.1:1 -> nicht erreichbar
+    errors = A.doctor(s, out=lines.append)
+    assert errors >= 1 and any("nicht erreichbar" in x for x in lines) and any("Simulator" in x for x in lines)
+
+
+def test_doctor_checks_token_and_clock(tmp_path, monkeypatch):
+    now = time.time()
+
+    class FakeApi(RecordingApi):
+        def __init__(self, *a, **kw):
+            super().__init__({"/health": (200, {"status": "ok"}),
+                              "/api/v1/agent/whoami": (200, {"station_name": "Schulhof", "server_time": now - 60})})
+
+    monkeypatch.setattr(A, "Api", FakeApi)
+    lines = []
+    assert A.doctor(enrolled_state(tmp_path), out=lines.append) == 1
+    assert any("Geräte-Token gültig" in x and "Schulhof" in x for x in lines)
+    assert any("✗ Uhrzeit weicht +6" in x for x in lines) and any("timedatectl" in x for x in lines)
+
+
+def test_doctor_explains_tls_errors(tmp_path, monkeypatch):
+    import ssl
+    import urllib.error
+
+    class TlsFail:
+        def __init__(self, *a, **kw):
+            pass
+
+        def request(self, *a, **kw):
+            raise urllib.error.URLError(ssl.SSLCertVerificationError(1, "self-signed certificate"))
+
+    monkeypatch.setattr(A, "Api", TlsFail)
+    lines = []
+    assert A.doctor(enrolled_state(tmp_path), out=lines.append) == 1
+    assert any("TLS-Fehler" in x for x in lines) and any("IP fehlt im Zertifikat" in x for x in lines)

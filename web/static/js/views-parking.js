@@ -191,7 +191,7 @@ export function viewParkingBilling() {
   };
   loadTariff();
   loadStatements();
-  return el("div", {}, tariffBox, statements);
+  return el("div", { class: "page-stack" }, tariffBox, statements);
 }
 
 // ---------------------------------------------------------------------- Lizenz (Kundensicht)
@@ -204,8 +204,8 @@ export function licenseCard() {
           el("small", {}, l.valid_until ? t("lic.until", { t: fmtDateTime(l.valid_until), d: l.days_left }) : t("lic.unlimited")))),
         el("div", {}, el("dt", {}, t("lic.price")), el("dd", {}, t("lic.per_day", { p: fmtCents(l.price_per_stall_day_cents) }),
           el("small", {}, t("lic.base", { p: fmtCents(l.base_month_cents) }), l.custom ? " · " + t("lic.custom") : ""))),
-        el("div", {}, el("dt", {}, t("lic.month", { m: c.month })), el("dd", { class: "mono" }, fmtCents(c.total_cents),
-          el("small", {}, t("lic.stall_days", { n: c.stall_days, d: c.days }))))),
+        el("div", {}, el("dt", {}, t("lic.month", { m: c.month })), el("dd", {}, el("span", { class: "mono" }, fmtCents(c.total_cents)),
+          el("small", {}, t("lic.stall_days", { n: c.stall_days, d: c.days }), c.trial_until ? [" · ", t("lic.trial_free")] : null)))),
       l.expired ? el("div", { class: "alert-box warn" }, t("lic.expired_hint")) : null,
       invoices.length ? [el("h3", {}, t("lic.invoices")), el("div", { class: "table-wrap" }, el("table", {},
         th(t("lic.number"), t("pk.month"), t("pk.amount"), t("c.status")),
@@ -243,7 +243,7 @@ export function viewPlatformBilling() {
                 inv && inv.status === "open" ? el("button", { class: "btn small", type: "button", onclick: async () => {
                   try { await patch(`/api/v1/platform/invoices/${inv.id}`, { status: "paid" }); load(); } catch (e) { toast(describeError(e), "error"); }
                 } }, t("pk.mark_paid")) : null,
-                el("button", { class: "btn small", type: "button", onclick: () => editLicense(x, load) }, t("pf.license"))));
+                el("button", { class: "btn small", type: "button", onclick: () => editLicense(x, load) }, t("pf.license")))));
           })))));
     } catch (e) { clear(box, errorCard(e)); }
   };

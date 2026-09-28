@@ -49,7 +49,7 @@ Der Ein-Zeilen-Befehl (`curl … | sudo sh -s -- --code …`) ist bequemer, prü
 | Kopplung | `agent.py enroll` – Code per Umgebungsvariable (nicht in der Prozessliste) |
 | Zustand | `/var/lib/bike-agent/agent.json`, Rechte `0600`, enthält das Geräte-Token |
 | Dienst | `bike-agent.service`, gehärtet (`NoNewPrivileges`, `ProtectSystem=strict`, keine Capabilities, nur tty-Geräte) |
-| Hilfsbefehl | `bike-agent status` · `bike-agent rollback` |
+| Hilfsbefehl | `bike-agent status` · `bike-agent rollback` · `bike-agent doctor` (Diagnose: Kopplung, Arduino-Port, Kamera, Plattform/Zertifikat, Uhrzeit – ohne Nebenwirkung) |
 
 Das Skript ist wiederholbar; eine Neuinstallation mit neuem Code koppelt das Gerät neu.
 
@@ -93,7 +93,7 @@ damit selbst eine kompromittierte Plattform keine Updates einschleusen kann.
 
 | Symptom | Prüfen |
 |---|---|
-| Gateway bleibt offline | `systemctl status bike-agent`, `journalctl -u bike-agent -f`; Netz/Firewall zur Plattform (Port 443) |
+| Gateway bleibt offline | zuerst `sudo bike-agent doctor`; dann `systemctl status bike-agent`, `journalctl -u bike-agent -f`; Netz/Firewall zur Plattform (Port 443) |
 | „Arduino ✗“ | USB-Kabel, `ls /dev/ttyACM* /dev/ttyUSB*`, Port in `bike-agent status`; neu koppeln mit `--serial-port` |
 | „Token abgelehnt“ | Gerät im Portal gesperrt? Neu koppeln: neuen Code erzeugen, `sudo sh agent.sh --code …` |
 | `curl: (60) … self-signed certificate` | Alten Befehl ohne Zertifikat benutzt → die Befehle aus dem Portal (mit `--pinnedpubkey`) verwenden |

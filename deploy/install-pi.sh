@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# MANUELLE Alternative zur Agent-Installation (ohne Portal-Kopplung, ohne Fernwartung/Updates/Kamera).
+# Empfohlen ist stattdessen: Portal -> Stellplatz -> Einstellungen -> "Gateway einrichten" (docs/agent.md).
 # Einrichtung des Raspberry Pi. Als root ausführen, Repo liegt unter /opt/smart-bike-station.
 set -euo pipefail
 APP=/opt/smart-bike-station

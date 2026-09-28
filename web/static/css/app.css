@@ -214,3 +214,20 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h1[tabindex="-1"]:focus { outline: 
   .print-sticker img { image-rendering: pixelated; }
   .print-sticker__title { font-size: 28px; font-weight: 700; }
 }
+
+/* ---------- Landingpage (Ausbau) ---------- */
+.steps-cards { list-style: none; padding: 0; margin: 0; }
+.steps-cards li { position: relative; padding-top: 56px; }
+.step-no { position: absolute; top: 16px; left: 24px; width: 32px; height: 32px; border-radius: 50%; background: var(--petrol);
+  color: var(--on-petrol); display: grid; place-items: center; font-weight: 700; }
+.sub-h { margin-top: var(--space-12); }
+.calc { margin-top: var(--space-6); }
+.calc-row { display: flex; flex-wrap: wrap; gap: 16px 24px; }
+.calc-row input { width: 6em; }
+.calc-result { font-size: 24px; font-weight: 700; margin: 16px 0 4px; }
+.faq { display: grid; gap: 8px; max-width: 80ch; }
+.faq details { background: var(--surface-raised); border: 1px solid var(--line); border-radius: var(--radius-md); padding: 4px 16px; }
+.faq details[open] { padding-bottom: 12px; }
+.check .hint, .check small { display: block; font-weight: 400; margin-top: 2px; }
+.page-stack > * + * { margin-top: var(--space-6); }
+.card > h3:not(:first-child), .cam-images:not(:empty) { margin-top: var(--space-6); }
