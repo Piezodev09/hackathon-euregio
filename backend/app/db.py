@@ -1,4 +1,8 @@
-"""SQLite-Datenhaltung, mandantenfähig. Jede fachliche Tabelle trägt tenant_id bzw. hängt an einer Station."""
+"""SQLite-Datenhaltung, mandantenfähig. Jede fachliche Tabelle trägt tenant_id bzw. hängt an einer Station.
+
+Eine Station ist genau ein vorne offener Fahrradstellplatz. Intern hängen Messungen und Ereignisse
+an genau einer Zeile in `slot` (Schlüssel "A"), die beim Anlegen der Station entsteht.
+"""
 
 from __future__ import annotations
 
@@ -8,7 +12,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS tenant (
@@ -91,6 +95,7 @@ CREATE TABLE IF NOT EXISTS station (
 );
 CREATE INDEX IF NOT EXISTS idx_station_tenant ON station (tenant_id);
 
+-- Genau ein Eintrag je Station (der Stellplatz selbst).
 CREATE TABLE IF NOT EXISTS slot (
     id          TEXT PRIMARY KEY,
     station_id  TEXT NOT NULL REFERENCES station(id) ON DELETE CASCADE,
@@ -206,12 +211,17 @@ class Database:
             if version == 2:
                 self._migrate_2_to_3()
                 version = 3
+            single_stall = version == 3
+            if single_stall:
+                version = 4
             if version not in (0, SCHEMA_VERSION):
                 raise RuntimeError(
                     f"Datenbank hat Schema-Version {version}, erwartet {SCHEMA_VERSION}. "
                     "Alte Demo-Datenbank bitte sichern und entfernen."
                 )
             self._conn.executescript(SCHEMA)
+            if single_stall:
+                self._migrate_3_to_4()
             self._conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         if self.path != ":memory:":
             try:
@@ -233,6 +243,15 @@ class Database:
             for d in defs:
                 if d.split()[0] not in existing:
                     self._conn.execute(f"ALTER TABLE {table} ADD COLUMN {d}")
+
+    def _migrate_3_to_4(self) -> None:
+        """Eine Station = ein Stellplatz: überzählige Plätze (samt Messungen/Ereignissen) entfernen."""
+        self._conn.execute(
+            "DELETE FROM slot WHERE id NOT IN ("
+            "  SELECT id FROM (SELECT id, ROW_NUMBER() OVER (PARTITION BY station_id ORDER BY position, key) AS n FROM slot)"
+            "  WHERE n = 1)"
+        )
+        self._conn.execute("UPDATE slot SET key = 'A', position = 1")
 
     @contextmanager
     def tx(self) -> Iterator[sqlite3.Connection]:

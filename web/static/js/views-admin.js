@@ -264,14 +264,14 @@ export function viewOrg() {
 
 // ---------------------------------------------------------------------- Tarif
 function planFeatures(p) {
-  return [t("bill.f_stations", { n: p.max_stations }), t("bill.f_slots", { n: p.max_slots_per_station }), t("bill.f_users", { n: p.max_users }),
+  return [t("bill.f_stations", { n: p.max_stations }), t("bill.f_users", { n: p.max_users }),
     t("bill.f_retention", { n: p.retention_days }), p.ml_enabled ? t("bill.f_ml") : null, p.audit_log ? t("bill.f_audit") : null,
     p.public_display ? t("bill.f_display") : null].filter(Boolean);
 }
 export function planCard(p, { current, action, featured } = {}) {
   return el("article", { class: `card plan${featured ? " featured" : ""}` },
-    el("h3", {}, p.name, current ? el("span", { class: "badge ok" }, " " + t("bill.current_badge")) : null,
-      featured && !current ? el("span", { class: "badge" }, " " + t("l.popular")) : null),
+    el("h3", {}, p.name, current ? [" ", el("span", { class: "badge ok" }, t("bill.current_badge"))] : null,
+      featured && !current ? [" ", el("span", { class: "badge" }, t("l.popular"))] : null),
     el("p", { class: "price" }, p.price_eur_month ? fmtMoney(p.price_eur_month) : t("bill.free"),
       p.price_eur_month ? el("span", { class: "small muted" }, " " + t("bill.per_month")) : null),
     el("ul", {}, planFeatures(p).map((f) => el("li", {}, f))), action || null);
@@ -289,7 +289,7 @@ export function viewBilling(rerender) {
   };
   const usage = el("section", { class: "card" }, el("h2", {}, t("bill.usage")),
     meter(t("bill.stations"), u.stations, p.max_stations), meter(t("bill.users"), u.users, p.max_users),
-    el("p", { class: "muted" }, `${t("bill.slots")}: ${u.slots} · ${t("bill.devices")}: ${u.devices}`));
+    el("p", { class: "muted" }, `${t("bill.devices")}: ${u.devices}`));
   const plans = el("div", { class: "grid cols-3" });
   get("/api/v1/org/plans").then(({ plans: list }) => {
     clear(plans, list.map((pl) => planCard(pl, { current: pl.id === p.id, featured: pl.id === "school",

@@ -34,11 +34,11 @@ Beide laufen immer parallel. Welches die **sichtbare** Warnung erzeugt, steuert
 
 ## Daten aufnehmen (Plan 8.2)
 
-1. Normale Vorgänge mehrfach: leer, einstellen, geparkt, leichtes Anstoßen, Nachbarplatz, ausparken.
+1. Normale Vorgänge mehrfach: leer, einstellen, geparkt, leichtes Anstoßen, ausparken.
 2. Auffällige Vorgänge kontrolliert simulieren: wiederholtes starkes Bewegen des Demo-Objekts.
    Niemanden zu echtem Diebstahl oder Beschädigung anleiten.
 3. Jeden Durchlauf mit Start/Ende notieren und exportieren:
-   `python3 ml/export_windows.py --db … --slot A --since … --until … --label normal --run-id r01`
+   `python3 ml/export_windows.py --db … --station <STATION_ID> --since … --until … --label normal --run-id r01`
 4. Trainieren und vergleichen: `python3 ml/train.py ml/data/recorded.csv`
    → Aufteilung nach ganzen Läufen, Ergebnis in `ml/report.md`, Modell in `ml/models/`.
 5. API neu starten, damit das Modell geladen wird (`/health` → `ai_model_available: true`).
@@ -58,5 +58,5 @@ als demonstrierte, aber noch nicht ausreichend zuverlässige Forschungsfunktion 
 ## Bekannte Grenzen
 
 - Wenige Hackathon-Messungen reichen nicht für belastbare Aussagen über echte Diebstähle.
-- Neues Fahrrad, vorbeigehende Personen, Wind, Nachbarplätze oder Ausparken können Fehlalarme auslösen.
+- Neues Fahrrad, vorbeigehende Personen, Wind oder Ausparken können Fehlalarme auslösen.
 - Ein rein digitaler Vibrationssensor liefert nur Impulszahlen – die Stärke-Merkmale sind dann grob.

@@ -43,7 +43,8 @@ class Strict(BaseModel):
 # ---------------------------------------------------------------------- Telemetrie (Gateway)
 class MeasurementIn(Strict):
     station_id: str = Field(pattern=ID_PATTERN)
-    slot_id: str = Field(pattern=SLOT_KEY_PATTERN)  # Platzkennung ("A")
+    # Veraltet: eine Station hat genau einen Stellplatz. Wird nur noch für alte Gateways akzeptiert ("A").
+    slot_id: str | None = Field(default=None, pattern=SLOT_KEY_PATTERN)
     # Vom Gateway vergeben, monoton steigend; verhindert Doppelungen bei Wiederholung.
     sequence: int = Field(ge=0, le=2**62)
     # None nur zusammen mit sensor_state="error".
@@ -154,20 +155,9 @@ class DeleteOrgIn(Strict):
 
 
 # ---------------------------------------------------------------------- Stationen
-class SlotIn(Strict):
-    key: str = Field(pattern=SLOT_KEY_PATTERN)
-    label: Name
-
-
-class SlotPatch(Strict):
-    label: Name | None = None
-    position: int | None = Field(default=None, ge=1, le=10_000)
-
-
 class StationIn(Strict):
     name: Name
     location: ShortText = ""
-    slots: list[SlotIn] = Field(default_factory=list, max_length=200)
 
 
 class StationPatch(Strict):

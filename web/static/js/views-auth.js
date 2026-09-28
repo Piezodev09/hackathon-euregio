@@ -1,10 +1,10 @@
 // Öffentliche Seiten: Anmelden (inkl. 2FA), Registrieren, E-Mail bestätigen, Passwort, Einladung.
 import { api, post, describeError, setCsrf } from "./api.js";
 import { t } from "./i18n.js";
-import { el, clear, field, langSwitcher, passwordMeter } from "./ui.js";
+import { el, clear, field, langSwitcher, passwordMeter, icon } from "./ui.js";
 import { state, go } from "./state.js";
 
-let meta = { password_min_length: 12, signup_enabled: true, product_name: "Smarte Radstation" };
+let meta = { password_min_length: 12, signup_enabled: true, product_name: "Smart Bicycle Box" };
 export async function loadMeta() {
   try { meta = await api("GET", "/api/v1/meta"); } catch (_) {}
   return meta;
@@ -13,7 +13,7 @@ export async function loadMeta() {
 function authCard(title, body, rerender) {
   return el("div", { class: "auth-wrap" },
     el("main", { class: "auth-card", id: "main" },
-      el("a", { class: "brand", href: "/" }, el("span", { class: "logo", "aria-hidden": "true" }, "R"), meta.product_name),
+      el("a", { class: "brand", href: "/" }, icon("logo", "logo"), meta.product_name),
       el("div", { class: "card" },
         el("div", { class: "btn-row", style: null }, el("h1", { tabindex: "-1" }, title)),
         body),

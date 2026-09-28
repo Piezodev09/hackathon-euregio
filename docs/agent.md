@@ -59,7 +59,7 @@ Das Skript ist wiederholbar; eine Neuinstallation mit neuem Code koppelt das Ger
   *Aktualisieren*. Es gibt bewusst **keine** Möglichkeit, beliebige Befehle auszuführen.
 - **Sperren**: Token sofort ungültig, Gerät kann keine Daten mehr senden.
 - **Updates automatisch einspielen** (je Station, Standard: an).
-- **Konfiguration**: Neue oder entfernte Stellplätze gelangen mit dem nächsten Heartbeat zum Agenten.
+- **Konfiguration**: Der Agent meldet seine Konfigurationsversion; Änderungen gelangen mit dem nächsten Heartbeat zum Agenten. Jede Station ist genau ein Stellplatz – eine Platzzuordnung gibt es nicht mehr.
 
 ## Sicherheit
 

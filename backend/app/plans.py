@@ -14,8 +14,7 @@ class Plan:
     id: str
     name: str
     price_eur_month: float
-    max_stations: int
-    max_slots_per_station: int
+    max_stations: int  # eine Station = ein Stellplatz
     max_users: int
     retention_days: int
     ml_enabled: bool
@@ -29,9 +28,9 @@ class Plan:
 PLANS: dict[str, Plan] = {
     p.id: p
     for p in (
-        Plan("free", "Free", 0, 1, 4, 2, 7, False, True, False),
-        Plan("school", "Schule", 19, 5, 30, 10, 30, True, True, True),
-        Plan("pro", "Pro", 79, 50, 200, 50, 90, True, True, True),
+        Plan("free", "Free", 0, 1, 2, 7, False, True, False),
+        Plan("school", "Schule", 19, 5, 10, 30, True, True, True),
+        Plan("pro", "Pro", 79, 50, 50, 90, True, True, True),
     )
 }
 DEFAULT_PLAN = "free"

@@ -225,9 +225,7 @@ def enroll(body: EnrollIn, request: Request):
 
 
 def _agent_config(core, st) -> dict:
-    slots = core.db.all("SELECT key FROM slot WHERE station_id = ? ORDER BY position, key", (st["id"],))
-    return {"config_version": st["config_version"], "slot_map": {s["key"]: s["key"] for s in slots},
-            "heartbeat_s": HEARTBEAT_S}
+    return {"config_version": st["config_version"], "heartbeat_s": HEARTBEAT_S}
 
 
 class HeartbeatIn(Strict):

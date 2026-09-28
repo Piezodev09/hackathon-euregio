@@ -1,7 +1,7 @@
 // Kundenportal: Router, Layout, Rechteprüfung in der Oberfläche (maßgeblich ist immer der Server).
 import { get, post, setCsrf, setAuthLostHandler } from "./api.js";
 import { applyStatic, getLang, setLang, t } from "./i18n.js";
-import { el, clear, langSwitcher } from "./ui.js";
+import { el, clear, langSwitcher, icon } from "./ui.js";
 import { state, can, clearTimers, go } from "./state.js";
 import * as A from "./views-auth.js";
 import * as S from "./views-station.js";
@@ -20,38 +20,37 @@ function navItems() {
   const me = state.me;
   const items = [];
   if (me.tenant) {
-    items.push(["section", t("nav.s_monitor")], ["/", t("nav.overview"), "◉"], ["/events", t("nav.events"), "⚠"]);
-    items.push(["section", t("nav.s_admin")], ["/stations", t("nav.stations"), "▦"], ["/devices", t("nav.devices"), "⌁"], ["/team", t("nav.team"), "☺"]);
-    if (can("admin")) items.push(["/org", t("nav.org"), "⌂"], ["/audit", t("nav.audit"), "≡"]);
-    items.push(["/billing", t("nav.billing"), "€"]);
+    items.push(["section", t("nav.s_monitor")], ["/", t("nav.overview")], ["/events", t("nav.events")]);
+    items.push(["section", t("nav.s_admin")], ["/stations", t("nav.stations")], ["/devices", t("nav.devices")], ["/team", t("nav.team")]);
+    if (can("admin")) items.push(["/org", t("nav.org")], ["/audit", t("nav.audit")]);
+    items.push(["/billing", t("nav.billing")]);
   }
-  if (me.user.is_platform_admin) items.push(["section", t("nav.s_platform")], ["/platform", t("nav.platform"), "✦"]);
-  items.push(["section", ""], ["/security", t("nav.security"), "🔒"]);
+  if (me.user.is_platform_admin) items.push(["section", t("nav.s_platform")], ["/platform", t("nav.platform")]);
+  items.push(["section", ""], ["/security", t("nav.security")]);
   return items;
 }
 
 function layout(title, content, currentPath, actions) {
   const me = state.me;
   const sidebar = el("nav", { class: "sidebar", id: "sidebar", "aria-label": t("c.menu") },
-    el("a", { class: "brand", href: "#/" }, el("span", { class: "logo", "aria-hidden": "true" }, "R"), me.product_name),
+    el("a", { class: "brand", href: "#/" }, icon("logo", "logo"), me.product_name),
     me.tenant ? el("p", { class: "small muted", style: null }, me.tenant.name, " · ", el("span", { class: "badge" }, me.tenant.plan.name)) : null,
-    el("ul", { class: "nav" }, navItems().map(([href, label, icon]) => href === "section"
+    el("ul", { class: "nav" }, navItems().map(([href, label]) => href === "section"
       ? el("li", { class: "section" }, label)
-      : el("li", {}, el("a", { href: "#" + href, "aria-current": currentPath === href ? "page" : null },
-          el("span", { "aria-hidden": "true" }, icon), label)))),
+      : el("li", {}, el("a", { href: "#" + href, "aria-current": currentPath === href ? "page" : null }, label)))),
     el("div", { class: "foot" },
       el("p", {}, el("strong", {}, me.user.name), el("br"), el("span", { class: "small muted" }, me.user.email)),
       el("div", { class: "btn-row" }, langSwitcher(() => route()),
         el("button", { class: "btn small", type: "button", onclick: logout }, t("c.logout")))));
   const toggle = el("button", { class: "btn small menu-toggle", type: "button", "aria-controls": "sidebar", "aria-expanded": "false",
-    onclick: () => { const open = sidebar.classList.toggle("open"); toggle.setAttribute("aria-expanded", String(open)); } }, "☰ " + t("c.menu"));
+    onclick: () => { const open = sidebar.classList.toggle("open"); toggle.setAttribute("aria-expanded", String(open)); } }, t("c.menu"));
   sidebar.addEventListener("click", (e) => { if (e.target.closest("a")) sidebar.classList.remove("open"); });
   const h1 = el("h1", { tabindex: "-1", id: "page-title" }, title);
   const main = el("main", { class: "main", id: "main" },
     el("div", { class: "topbar" }, el("div", { class: "btn-row" }, toggle, h1), actions || null),
     me.tenant && me.tenant.status !== "active" ? el("div", { class: "alert-box error" }, t("err.tenant_suspended")) : null,
     content);
-  return { node: el("div", { class: "shell" }, el("a", { class: "skip", href: "#main" }, "Skip"), sidebar, main), h1 };
+  return { node: el("div", { class: "shell" }, el("a", { class: "skip", href: "#main" }, t("c.skip")), sidebar, main), h1 };
 }
 
 async function logout() {
@@ -120,7 +119,7 @@ export async function route() {
   } else if (name === "stations" && parts[1]) {
     title = t("c.loading"); current = "/stations";
     view = null;
-    if (can("admin")) actions = el("a", { class: "btn", href: `#/stations/${parts[1]}/settings` }, "⚙ " + t("st.settings"));
+    if (can("admin")) actions = el("a", { class: "btn", href: `#/stations/${parts[1]}/settings` }, t("st.settings"));
   } else if (name === "stations") {
     title = t("nav.stations");
     view = S.viewStations();

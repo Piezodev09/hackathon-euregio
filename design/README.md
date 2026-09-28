@@ -20,5 +20,5 @@ Präsentation: Tasten `1` / `2` / `3` schalten FREI / BELEGT / STATUS UNBEKANNT;
 Alle Maße, Bauteile und Preise im Abschnitt „Stellplatz-Konzept“ sind Vorschläge und vor dem Bau zu prüfen
 (Liste im Abschnitt „Vor dem Bau prüfen“).
 
-Hinweis: Der übrige Code im Repository (Mehrplatz-Station/SaaS) stammt aus einem früheren Ansatz und
-ist nicht Grundlage dieses Entwurfs.
+Das Design ist auf die gesamte Weboberfläche übertragen: `web/static/css/tokens.css` (aus `tokens.json`
+erzeugt) und `web/static/css/components.css` (identisch mit den Komponenten im Prototyp).

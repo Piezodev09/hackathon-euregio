@@ -1,5 +1,5 @@
 #!/bin/sh
-# Installiert den Agenten der Smarten Radstation auf einem Raspberry Pi (Raspberry Pi OS / Debian).
+# Installiert den Agenten der Smart Bicycle Box auf einem Raspberry Pi (Raspberry Pi OS / Debian).
 #
 # Empfohlen (Skript vorher prüfen):
 #   curl -fsSLO __BASE_URL__/install/agent.sh
@@ -160,7 +160,7 @@ if [ "$NO_SYSTEMD" -eq 0 ]; then
   say "Dienst einrichten"
   cat > /etc/systemd/system/bike-agent.service <<UNIT
 [Unit]
-Description=Smarte Radstation - Agent (Gateway)
+Description=Smart Bicycle Box - Agent (Gateway)
 After=network-online.target
 Wants=network-online.target
 

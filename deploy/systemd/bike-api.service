@@ -1,7 +1,7 @@
 # Debian-VM auf Proxmox: API + Dashboard + KI
 # Installation: siehe docs/betrieb.md
 [Unit]
-Description=Smarte Radstation - API und Dashboard
+Description=Smart Bicycle Box - API und Dashboard
 After=network-online.target
 Wants=network-online.target
 

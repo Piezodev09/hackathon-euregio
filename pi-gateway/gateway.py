@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Raspberry-Pi-Gateway der Smarten Radstation (Plan 3.1, 5, 10.3).
+"""Raspberry-Pi-Gateway der Smart Bicycle Box (Plan 3.1, 5, 10.3).
 
 Aufgaben:
   * JSON-Zeilen vom Arduino (USB-Seriell) lesen, Format und Plausibilität prüfen
@@ -40,7 +40,6 @@ HERE = Path(__file__).resolve().parent
 class GatewayConfig:
     api_url: str
     station_id: str
-    slot_map: dict[str, str]
     token: str = field(repr=False)
     serial_port: str = "/dev/ttyACM0"
     baudrate: int = 115200
@@ -74,7 +73,6 @@ def load_config(path: str | os.PathLike) -> GatewayConfig:
         http_timeout_s=float(api.get("timeout_s", 5)),
         token=token,
         station_id=st["id"],
-        slot_map={str(k): str(v) for k, v in st["slot_map"].items()},
         serial_port=ser.get("port", "/dev/ttyACM0"),
         baudrate=int(ser.get("baudrate", 115200)),
         arduino_timeout_s=float(tim.get("arduino_timeout_s", 15)),
@@ -90,12 +88,13 @@ class ParseError(ValueError):
     pass
 
 
-def parse_line(line: str, slot_map: dict[str, str]) -> dict | None:
-    """Arduino-Zeile -> {'slot_id','occupied','vibration_score','sensor_state'}.
+def parse_line(line: str) -> dict | None:
+    """Arduino-Zeile -> {'occupied','vibration_score','sensor_state'} für den einen Stellplatz.
 
     Gibt None für Info-Zeilen (z. B. {"type":"hello"}) zurück, wirft ParseError bei ungültigen Daten.
-    Erwartetes Format: {"slot_id":"A","presence":1,"vibration":12,"seq":1042[,"state":"ok"]}
+    Erwartetes Format: {"presence":1,"vibration":12,"seq":1042[,"state":"ok"]}
     presence: 1 = belegt, 0 = frei, -1 = Sensor liefert keinen gültigen Wert.
+    Ein "slot_id" älterer Firmware wird nur als "A" akzeptiert – es gibt genau einen Stellplatz.
     """
     line = line.strip()
     if not line:
@@ -108,14 +107,12 @@ def parse_line(line: str, slot_map: dict[str, str]) -> dict | None:
         raise ParseError(f"kein JSON: {exc.msg}") from None
     if not isinstance(d, dict):
         raise ParseError("kein JSON-Objekt")
-    if "slot_id" not in d:
+    if "presence" not in d:
         if d.get("type") in ("hello", "info", "debug"):
             return None
-        raise ParseError("slot_id fehlt")
-
-    ard_slot = str(d["slot_id"])
-    if ard_slot not in slot_map:
-        raise ParseError(f"unbekannter Platz {ard_slot!r}")
+        raise ParseError("presence fehlt")
+    if "slot_id" in d and str(d["slot_id"]) != "A":
+        raise ParseError(f"unbekannter Platz {d['slot_id']!r} – nur ein Stellplatz vorgesehen")
 
     presence = d.get("presence")
     if isinstance(presence, bool) or presence not in (0, 1, -1):
@@ -134,7 +131,6 @@ def parse_line(line: str, slot_map: dict[str, str]) -> dict | None:
         state = "error"
 
     return {
-        "slot_id": slot_map[ard_slot],
         "occupied": None if state == "error" else bool(presence),
         "vibration_score": 0 if state == "error" else int(vib),
         "sensor_state": state,
@@ -310,7 +306,7 @@ class Gateway:
 
     def handle_line(self, line: str) -> None:
         try:
-            m = parse_line(line, self.cfg.slot_map)
+            m = parse_line(line)
         except ParseError as exc:
             log.warning("Ungültige Zeile verworfen: %s", exc)
             return
@@ -320,7 +316,7 @@ class Gateway:
         self._emit(m)
 
     def watchdog(self) -> None:
-        """Schweigt der Arduino, werden alle Plätze als Sensorfehler gemeldet."""
+        """Schweigt der Arduino, wird der Stellplatz als Sensorfehler (-> STATUS UNBEKANNT) gemeldet."""
         now = self.clock()
         silent = self.last_line_at is None or now - self.last_line_at > self.cfg.arduino_timeout_s
         if not silent:
@@ -329,10 +325,9 @@ class Gateway:
         if self.last_fault_sent is not None and now - self.last_fault_sent < self.cfg.heartbeat_s:
             return
         if self.last_line_at is not None or self.last_fault_sent is None:
-            log.warning("Keine Daten vom Arduino – alle Plätze werden als unbekannt gemeldet")
+            log.warning("Keine Daten vom Arduino – Stellplatz wird als unbekannt gemeldet")
         self.last_fault_sent = now
-        for slot in self.cfg.slot_map.values():
-            self._emit({"slot_id": slot, "occupied": None, "vibration_score": 0, "sensor_state": "error"})
+        self._emit({"occupied": None, "vibration_score": 0, "sensor_state": "error"})
 
 
 # ---------------------------------------------------------------------- Quellen

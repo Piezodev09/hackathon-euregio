@@ -1,13 +1,27 @@
-// Öffentliche Kiosk-Anzeige einer Station (nur lesend).
+// Öffentliche Kiosk-Anzeige EINES Stellplatzes (nur lesend) – z. B. auf dem Display oben vorne am Stellplatz.
 // Der Anzeige-Link hat die Form /display#<token>: Das Fragment wird nie an Server oder Proxys
 // übertragen; das Token geht nur als Header an die API.
-// Grundsatz: Bei fehlenden oder veralteten Daten NIE "frei" anzeigen.
+// Grundsatz: Bei fehlenden, veralteten oder fehlerhaften Daten NIE "frei" anzeigen.
 (function () {
   "use strict";
 
   const TOKEN = decodeURIComponent(location.hash.replace(/^#/, "")).trim();
-  const SYMBOL = { free: "✓", occupied: "■", unknown: "?" };
   const params = new URLSearchParams(location.search);
+  const NS = 'xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"';
+  const ICONS = {
+    free: `<svg ${NS}><circle cx="24" cy="24" r="20" fill="none" stroke="currentColor" stroke-width="4"/><path d="M14 25l7 7 13-15" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    occupied: `<svg ${NS}><circle cx="12" cy="32" r="8" fill="none" stroke="currentColor" stroke-width="3.5"/><circle cx="36" cy="32" r="8" fill="none" stroke="currentColor" stroke-width="3.5"/><path d="M12 32l8-14h11l5 14M20 18l7 14h-15M31 18l-2-6h5M17 13h6" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    unknown: `<svg ${NS}><circle cx="24" cy="24" r="20" fill="none" stroke="currentColor" stroke-width="4" stroke-dasharray="7 4"/><path d="M18 19a6 6 0 1 1 8.4 5.5c-1.6.8-2.4 2-2.4 3.5v1.5" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><circle cx="24" cy="35.5" r="2.8" fill="currentColor"/></svg>`,
+    vib: `<svg ${NS}><path d="M4 24h7l4-10 6 20 6-24 6 20 4-6h7" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  };
+  const parser = new DOMParser();
+  const icon = (name, cls) => {
+    const svg = document.importNode(parser.parseFromString(ICONS[name], "image/svg+xml").documentElement, true);
+    svg.setAttribute("class", cls || "");
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("focusable", "false");
+    return svg;
+  };
 
   let lang = pickLang();
   let pollMs = 2000;
@@ -15,6 +29,8 @@
   let last = null;
   let lastOkAt = null;
   let invalid = false;
+  let shownState = null;
+  let shownAlert = "";
 
   function pickLang() {
     const q = params.get("lang");
@@ -34,17 +50,12 @@
   const fmtTime = (iso) =>
     iso ? new Date(iso).toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "–";
 
-  function el(tag, attrs, ...children) {
-    const e = document.createElement(tag);
-    for (const [k, v] of Object.entries(attrs || {})) if (v !== undefined && v !== null) e.setAttribute(k === "class" ? "class" : k, v);
-    for (const c of children) if (c !== null && c !== undefined) e.append(c);
-    return e;
-  }
-
   function applyLang() {
     document.documentElement.lang = lang;
     document.querySelectorAll("[data-i18n]").forEach((n) => (n.textContent = t(n.dataset.i18n)));
     document.querySelectorAll("[data-lang]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.lang === lang)));
+    shownState = null;
+    shownAlert = "";
     render();
   }
   document.querySelectorAll("[data-lang]").forEach((b) =>
@@ -75,41 +86,40 @@
     document.getElementById("invalid").hidden = !invalid;
     const ageS = lastOkAt ? Math.round((Date.now() - lastOkAt) / 1000) : null;
     const connOk = ageS !== null && ageS * 1000 <= pollMs * 2 + 1500;
-    const stale = ageS === null || ageS > staleAfterS;
-    const conn = document.getElementById("connection");
-    conn.textContent = connOk ? t("connOk") : stale ? t("connLostStale") : t("connLost", ageS);
-    conn.className = connOk ? "ok" : "error";
+    const connLost = ageS === null || ageS > staleAfterS;
+    document.getElementById("connection").textContent = connOk ? t("connOk") : ageS === null ? "–" : t("connLost", ageS);
     if (last) {
       document.getElementById("station-name").textContent = last.display_name;
+      document.getElementById("location").textContent = last.location || "";
       document.title = last.display_name;
     }
-    const slots = !last ? [] : stale ? last.slots.map((s) => ({ ...s, state: "unknown", unknown_reason: "connection" })) : last.slots;
-    const free = slots.filter((s) => s.state === "free");
-    const rec = stale || !last ? null : slots.find((s) => s.slot_id === last.recommendation && s.state === "free");
-    document.getElementById("free-count").textContent = t("freeCount", free.length, slots.length || "–");
-    document.getElementById("recommendation").textContent = rec ? t("recommendation", rec.label) : t("noRecommendation");
-    document.getElementById("updated").textContent = t("updated", fmtTime(last && last.server_time));
+
+    // Zustand: nur aus aktueller, gültiger Antwort – sonst STATUS UNBEKANNT.
+    let state = "unknown";
+    let reason = "connection";
+    if (last && !connLost && !invalid) {
+      state = last.state;
+      reason = last.state === "unknown" ? last.unknown_reason || "no_data" : null;
+    }
+    const sub = state === "unknown" ? t("reason_" + reason, staleAfterS) : t("sub_" + state);
+    const box = document.getElementById("status");
+    box.dataset.state = state;
+    document.getElementById("status-word").textContent = t(state);
+    document.getElementById("status-sub").textContent = sub;
+    if (shownState !== state) {
+      shownState = state;
+      document.getElementById("status-icon").replaceChildren(icon(state, "sbb-status__icon"));
+      document.getElementById("live").textContent = `${t(state)}. ${sub}`;
+    }
     document.getElementById("simulated").hidden = !(last && last.simulated_data);
+    document.getElementById("updated").textContent = t("updated", fmtTime(last && last.last_update));
 
-    document.getElementById("slots").replaceChildren(...slots.map((s) => {
-      const isRec = rec && s.slot_id === rec.slot_id;
-      const reason = s.state === "unknown" && s.unknown_reason ? t("reason_" + s.unknown_reason) : null;
-      return el("li", { class: `slot ${s.state}${isRec ? " recommended" : ""}${s.alert ? " alerting" : ""}` },
-        el("span", { class: "slot-label" }, s.label),
-        el("span", { class: "slot-state" }, el("span", { class: "sym", "aria-hidden": "true" }, SYMBOL[s.state]), " ", t(s.state)),
-        reason ? el("span", { class: "slot-reason" }, reason) : null,
-        isRec ? el("span", { class: "badge rec" }, "→ " + t("recommended")) : null,
-        s.alert ? el("span", { class: "badge warn" }, "⚠ " + t("alertMovement")) : null,
-        el("span", { class: "slot-time small" }, fmtTime(s.last_update)));
-    }));
-
-    const alerts = document.getElementById("alerts");
-    const active = slots.filter((s) => s.alert);
-    const text = active.map((s) => t("alertText", s.label, fmtTime(s.alert.occurred_at))).join("\n");
-    if (alerts.dataset.text !== text) {
-      alerts.dataset.text = text; // nur bei Änderung neu setzen (Screenreader)
-      alerts.replaceChildren(...active.map((s) => el("p", { class: "alert" }, "⚠ " + t("alertText", s.label, fmtTime(s.alert.occurred_at)) +
-        (s.alert.simulated ? ` [${t("simulatedShort")}]` : ""))));
+    const a = !connLost && last && last.alert;
+    const text = a ? t("alert", fmtTime(a.occurred_at)) : "";
+    if (text !== shownAlert) {
+      shownAlert = text; // nur bei Änderung neu setzen (Screenreader)
+      const box2 = document.getElementById("alert");
+      box2.replaceChildren(...(a ? [icon("vib"), Object.assign(document.createElement("p"), { textContent: text })] : []));
     }
   }
 

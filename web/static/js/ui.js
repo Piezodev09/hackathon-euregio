@@ -95,6 +95,58 @@ export function field(labelText, input, hint) {
   return el("div", { class: "field" }, el("label", { for: input.id }, labelText), input, hint ? el("div", { class: "hint" }, hint) : null);
 }
 
-export function slotSymbol(state) {
-  return { free: "✓", occupied: "■", unknown: "?" }[state] || "?";
+// ---------------------------------------------------------------------- Icons (Design-System)
+// Feste SVG-Vorlagen (keine Nutzerdaten) -> per DOMParser in Knoten umgewandelt.
+const NS = 'xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"';
+const ICONS = {
+  free: `<svg ${NS}><circle cx="24" cy="24" r="20" fill="none" stroke="currentColor" stroke-width="4"/><path d="M14 25l7 7 13-15" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  occupied: `<svg ${NS}><circle cx="12" cy="32" r="8" fill="none" stroke="currentColor" stroke-width="3.5"/><circle cx="36" cy="32" r="8" fill="none" stroke="currentColor" stroke-width="3.5"/><path d="M12 32l8-14h11l5 14M20 18l7 14h-15M31 18l-2-6h5M17 13h6" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  unknown: `<svg ${NS}><circle cx="24" cy="24" r="20" fill="none" stroke="currentColor" stroke-width="4" stroke-dasharray="7 4"/><path d="M18 19a6 6 0 1 1 8.4 5.5c-1.6.8-2.4 2-2.4 3.5v1.5" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><circle cx="24" cy="35.5" r="2.8" fill="currentColor"/></svg>`,
+  warn: `<svg ${NS}><path d="M24 6 44 41H4Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M24 19v10" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><circle cx="24" cy="35" r="2.6" fill="currentColor"/></svg>`,
+  ok: `<svg ${NS}><circle cx="24" cy="24" r="19" fill="none" stroke="currentColor" stroke-width="4"/><path d="M15 25l6 6 12-13" fill="none" stroke="currentColor" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  fault: `<svg ${NS}><circle cx="24" cy="24" r="19" fill="none" stroke="currentColor" stroke-width="4"/><path d="M17 17l14 14M31 17 17 31" stroke="currentColor" stroke-width="4.5" stroke-linecap="round"/></svg>`,
+  nodata: `<svg ${NS}><circle cx="24" cy="24" r="19" fill="none" stroke="currentColor" stroke-width="4" stroke-dasharray="6 4"/><path d="M16 24h16" stroke="currentColor" stroke-width="4.5" stroke-linecap="round"/></svg>`,
+  info: `<svg ${NS}><circle cx="24" cy="24" r="19" fill="none" stroke="currentColor" stroke-width="4"/><path d="M24 22v13" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><circle cx="24" cy="15" r="2.6" fill="currentColor"/></svg>`,
+  vib: `<svg ${NS}><path d="M4 24h7l4-10 6 20 6-24 6 20 4-6h7" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  logo: `<svg ${NS}><path d="M6 42V12h36v30" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><rect x="14" y="14" width="20" height="8" rx="1" fill="currentColor"/><circle cx="16" cy="35" r="5" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="32" cy="35" r="5" fill="none" stroke="currentColor" stroke-width="3"/><path d="M16 35l5-8h7l4 8" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>`,
+};
+const parser = new DOMParser();
+export function icon(name, cls = "sbb-icon") {
+  const svg = document.importNode(parser.parseFromString(ICONS[name] || ICONS.unknown, "image/svg+xml").documentElement, true);
+  svg.setAttribute("class", cls);
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("focusable", "false");
+  return svg;
+}
+
+// ---------------------------------------------------------------------- Stellplatz-Zustand
+// Grundregel: FREI/BELEGT nur aus gültiger, aktueller Messung. Bricht die Verbindung zur API ab,
+// zeigt die Oberfläche STATUS UNBEKANNT – nie den zuletzt bekannten Zustand.
+export function effectiveState(status, connLost) {
+  if (!status || connLost) return { state: "unknown", reason: "connection" };
+  return { state: status.state, reason: status.state === "unknown" ? status.unknown_reason || "no_data" : null };
+}
+
+export function reasonText(reason, staleAfterS = 30) {
+  return t("st.r_" + reason, { s: staleAfterS });
+}
+
+// Große Status-Karte (Wort + Symbol + Farbe + bei UNBEKANNT Schraffur).
+export function stallStatus(status, { connLost = false, simulated = false } = {}) {
+  const { state, reason } = effectiveState(status, connLost);
+  const sub = state === "unknown" ? reasonText(reason, status?.stale_after_s) : t("st.sub_" + state);
+  return el("div", { class: "sbb-status", "data-state": state },
+    icon(state, "sbb-status__icon"),
+    el("div", {}, el("p", { class: "sbb-status__word" }, t("st." + state)), el("p", { class: "sbb-status__sub" }, sub)),
+    simulated ? el("span", { class: "sbb-status__corner sbb-tag sbb-tag--demo" }, t("st.sim")) : null);
+}
+
+// Kompaktes Badge für Listen.
+export function stallBadge(state) {
+  return el("span", { class: "sbb-badge", "data-state": state }, icon(state), t("st." + state));
+}
+
+export function fmtAge(seconds) {
+  const s = Math.max(0, Math.round(seconds));
+  return s < 60 ? `${s} s` : s < 3600 ? `${Math.floor(s / 60)} min ${s % 60} s` : `${Math.floor(s / 3600)} h`;
 }

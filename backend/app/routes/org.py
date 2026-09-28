@@ -55,10 +55,7 @@ def change_plan(body: PlanIn, request: Request, ctx: Ctx = Depends(require("owne
         raise HTTPException(422, "unknown_plan")
     plan = PLANS[body.plan]
     usage = core.tenant_usage(ctx.tenant_id)
-    max_slots = core.db.scalar(
-        "SELECT COALESCE(MAX(c), 0) FROM (SELECT COUNT(*) c FROM slot s JOIN station st ON st.id = s.station_id "
-        "WHERE st.tenant_id = ? GROUP BY s.station_id)", (ctx.tenant_id,))
-    if usage["stations"] > plan.max_stations or usage["users"] > plan.max_users or max_slots > plan.max_slots_per_station:
+    if usage["stations"] > plan.max_stations or usage["users"] > plan.max_users:
         raise HTTPException(409, {"code": "plan_limits_exceeded", "usage": usage})
     old = ctx.tenant["plan"]
     core.db.execute("UPDATE tenant SET plan = ? WHERE id = ?", (plan.id, ctx.tenant_id))
@@ -195,10 +192,9 @@ def export(request: Request, ctx: Ctx = Depends(require("owner"))):
         "organization": {k: ctx.tenant[k] for k in ("id", "name", "plan", "status", "mfa_required", "created_at")},
         "users": rows("SELECT id, email, name, role, locale, created_at, last_login_at, totp_enabled FROM user WHERE tenant_id = ?"),
         "stations": rows("SELECT id, name, location, alert_source, display_enabled, created_at FROM station WHERE tenant_id = ?"),
-        "slots": rows("SELECT s.id, s.station_id, s.key, s.label, s.position FROM slot s JOIN station st ON st.id = s.station_id WHERE st.tenant_id = ?"),
         "devices": rows("SELECT id, station_id, name, token_prefix, created_at, last_seen_at, revoked_at FROM device WHERE tenant_id = ?"),
-        "events": rows("SELECT id, station_id, slot_id, kind, severity, detector, occurred_at, acknowledged_at, acknowledged_by, source FROM event WHERE tenant_id = ?"),
-        "measurements": rows("SELECT m.station_id, m.slot_id, m.server_time, m.occupied, m.vibration_score, m.sensor_state, m.source "
+        "events": rows("SELECT id, station_id, kind, severity, detector, occurred_at, acknowledged_at, acknowledged_by, source FROM event WHERE tenant_id = ?"),
+        "measurements": rows("SELECT m.station_id, m.server_time, m.occupied, m.vibration_score, m.sensor_state, m.source "
                              "FROM measurement m JOIN station st ON st.id = m.station_id WHERE st.tenant_id = ? ORDER BY m.server_time"),
         "audit_log": rows("SELECT at, actor, action, target, ip, detail FROM audit_log WHERE tenant_id = ? ORDER BY at"),
     }

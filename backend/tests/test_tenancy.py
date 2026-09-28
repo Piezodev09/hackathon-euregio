@@ -14,7 +14,7 @@ def test_tenants_cannot_see_each_other(env):
     a = env.register(org="A")
     b = env.register(org="B")
     sid_a, token_a = env.station(a)
-    Device(a, sid_a, token_a).send("A", occupied=True)
+    Device(a, sid_a, token_a).send(occupied=True)
     assert b.get("/api/v1/stations").json()["stations"] == []
     for url in (f"/api/v1/stations/{sid_a}", f"/api/v1/stations/{sid_a}/status", f"/api/v1/stations/{sid_a}/devices",
                 f"/api/v1/stations/{sid_a}/occupancy"):
@@ -36,7 +36,7 @@ def test_device_token_bound_to_its_station(env):
     b = env.register(org="B")
     sid_a, token_a = env.station(a)
     sid_b, _ = env.station(b)
-    r = Device(a, sid_a, token_a).send("A", station=sid_b)
+    r = Device(a, sid_a, token_a).send(station=sid_b)
     assert r.status_code == 403 and r.json()["detail"] == "station_mismatch"
 
 
@@ -75,8 +75,8 @@ def test_plan_limits_and_upgrade(env):
     env.station(owner, name="Eins")
     r = owner.post("/api/v1/stations", {"name": "Zwei"})
     assert r.status_code == 409 and r.json()["detail"]["limit"] == "max_stations"
-    r = owner.post("/api/v1/stations", {"name": "x", "slots": [{"key": str(i), "label": "p"} for i in range(9)]})
-    assert r.status_code == 409
+    # Eine Station ist genau ein Stellplatz: Plätze lassen sich nicht mehr angeben.
+    assert owner.post("/api/v1/stations", {"name": "x", "slots": [{"key": "B", "label": "p"}]}).status_code == 422
     env.invite(owner, "zwei@example.org", "viewer")  # Free: 2 Nutzer
     assert owner.post("/api/v1/org/invitations", {"email": "drei@example.org", "role": "viewer"}).status_code == 409
     sid = owner.get("/api/v1/stations").json()["stations"][0]["id"]
@@ -94,7 +94,7 @@ def test_plan_limits_and_upgrade(env):
 def test_export_contains_no_secrets(env):
     owner = env.register()
     sid, token = env.station(owner)
-    Device(owner, sid, token).send("A", occupied=True)
+    Device(owner, sid, token).send(occupied=True)
     r = owner.get("/api/v1/org/export")
     assert r.status_code == 200 and "attachment" in r.headers["content-disposition"]
     text = r.text
@@ -107,7 +107,7 @@ def test_export_contains_no_secrets(env):
 def test_delete_org_cascades(env):
     owner = env.register(org="Weg GmbH")
     sid, token = env.station(owner)
-    Device(owner, sid, token).send("A", occupied=True)
+    Device(owner, sid, token).send(occupied=True)
     assert owner.post("/api/v1/org/delete", {"password": PASSWORD, "confirm_name": "Falsch"}).status_code == 422
     assert owner.post("/api/v1/org/delete", {"password": PASSWORD, "confirm_name": "Weg GmbH"}).status_code == 200
     db = env.core.db

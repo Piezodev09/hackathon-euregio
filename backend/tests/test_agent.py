@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import io
 import tarfile
+from pathlib import Path
 
 from conftest import Device
 
@@ -12,7 +13,7 @@ from conftest import Device
 def setup_station(env, plan="school"):
     owner = env.register()
     env.set_plan(owner, plan)
-    r = owner.post("/api/v1/stations", {"name": "Hof", "slots": [{"key": k, "label": f"Platz {k}"} for k in "AB"]})
+    r = owner.post("/api/v1/stations", {"name": "Hof"})
     return owner, r.json()["id"]
 
 
@@ -23,8 +24,11 @@ def enroll(env, owner, sid, **extra):
     return code, r
 
 
+AGENT_VERSION = (Path(__file__).resolve().parents[2] / "pi-gateway" / "VERSION").read_text().strip()
+
+
 def hb(env, token, **body):
-    return env.client().c.post("/api/v1/agent/heartbeat", json={"agent_version": "1.0.0", **body},
+    return env.client().c.post("/api/v1/agent/heartbeat", json={"agent_version": AGENT_VERSION, **body},
                                headers={"Authorization": f"Bearer {token}"})
 
 
@@ -43,14 +47,14 @@ def test_enrollment_code_flow(env):
     r = env.client().c.post("/api/v1/agent/enroll", json={"code": data["code"].replace("-", "").lower(), "hostname": "raspi-hof"})
     assert r.status_code == 200, r.text
     e = r.json()
-    assert e["station_id"] == sid and e["slot_map"] == {"A": "A", "B": "B"} and e["token"].startswith("bsd_")
+    assert e["station_id"] == sid and "slot_map" not in e and e["token"].startswith("bsd_")
     # Einmalig
     again = env.client().c.post("/api/v1/agent/enroll", json={"code": data["code"]})
     assert again.status_code == 400
     devices = owner.get(f"/api/v1/stations/{sid}/devices").json()["devices"]
     assert devices[0]["managed"] and devices[0]["hostname"] == "raspi-hof"
     # Token funktioniert für Messungen dieser Station
-    assert Device(owner, sid, e["token"]).send("A", occupied=True).status_code == 202
+    assert Device(owner, sid, e["token"]).send(occupied=True).status_code == 202
 
 
 def test_enrollment_expires_and_can_be_revoked(env):
@@ -87,10 +91,6 @@ def test_heartbeat_health_config_and_commands(env):
     fleet = owner.get("/api/v1/devices").json()
     d = fleet["devices"][0]
     assert d["online"] and d["health"]["cpu_temp_c"] == 48.5 and d["station_name"] == "Hof"
-    # Neuer Platz -> neue Konfigurationsversion
-    owner.post(f"/api/v1/stations/{sid}/slots", {"key": "C", "label": "Platz C"})
-    resp = hb(env, token).json()
-    assert resp["config_version"] == 2 and "C" in resp["slot_map"]
     # Fernbefehl, genau einmal ausgeliefert
     assert owner.post(f"/api/v1/stations/{sid}/devices/{d['id']}/command", {"command": "restart"}).status_code == 200
     assert hb(env, token).json()["commands"] == ["restart"]
@@ -187,4 +187,24 @@ def test_migration_from_schema_2(tmp_path):
     db = Database(p)
     cols = {r[1] for r in db.all("PRAGMA table_info(device)")}
     assert {"hostname", "prev_token_hash", "last_heartbeat_at"} <= cols
-    assert db.scalar("PRAGMA user_version") == 3
+    assert db.scalar("PRAGMA user_version") == 4
+
+
+def test_migration_to_single_stall(tmp_path):
+    """Schema 3 -> 4: jede Station behält genau einen Stellplatz (den ersten)."""
+    from app.db import SCHEMA, Database
+
+    p = tmp_path / "v3.db"
+    import sqlite3
+
+    con = sqlite3.connect(p)
+    con.executescript(SCHEMA)
+    con.executescript(
+        "INSERT INTO tenant (id, name, created_at) VALUES ('t', 'T', 0);"
+        "INSERT INTO station (id, tenant_id, name, created_at) VALUES ('s', 't', 'S', 0);"
+        "INSERT INTO slot (id, station_id, key, label, position) VALUES ('a', 's', 'X', 'x', 2), ('b', 's', 'Y', 'y', 1);"
+        "PRAGMA user_version = 3;")
+    con.close()
+    db = Database(p)
+    rows = [tuple(r) for r in db.all("SELECT id, key, position FROM slot")]
+    assert rows == [("b", "A", 1)] and db.scalar("PRAGMA user_version") == 4

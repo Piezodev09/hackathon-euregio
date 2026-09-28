@@ -9,38 +9,37 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from gateway import Gateway, GatewayConfig, ParseError, SequenceCounter, Uplink, parse_line  # noqa: E402
 
-SLOTS = {"A": "A", "B": "B", "1": "C"}
-
 
 def cfg(tmp_path, **kw) -> GatewayConfig:
-    base = dict(api_url="http://x", station_id="demo-01", slot_map=SLOTS, token="t" * 20, state_dir=tmp_path)
+    base = dict(api_url="http://x", station_id="demo-01", token="t" * 20, state_dir=tmp_path)
     base.update(kw)
     return GatewayConfig(**base)
 
 
 def test_parse_valid():
-    assert parse_line('{"slot_id":"A","presence":1,"vibration":12,"seq":1042}', SLOTS) == {
-        "slot_id": "A",
+    assert parse_line('{"presence":1,"vibration":12,"seq":1042}') == {
         "occupied": True,
         "vibration_score": 12,
         "sensor_state": "ok",
     }
 
 
-def test_parse_maps_slot_ids():
-    assert parse_line('{"slot_id":"1","presence":0}', SLOTS)["slot_id"] == "C"
+def test_parse_accepts_legacy_slot_a_only():
+    assert parse_line('{"slot_id":"A","presence":0}')["occupied"] is False
+    with pytest.raises(ParseError):
+        parse_line('{"slot_id":"B","presence":0}')
 
 
 def test_parse_sensor_error_is_never_free():
-    m = parse_line('{"slot_id":"A","presence":-1,"vibration":400}', SLOTS)
+    m = parse_line('{"presence":-1,"vibration":400}')
     assert m["occupied"] is None and m["sensor_state"] == "error" and m["vibration_score"] == 0
-    m = parse_line('{"slot_id":"A","presence":0,"state":"error"}', SLOTS)
+    m = parse_line('{"presence":0,"state":"error"}')
     assert m["occupied"] is None
 
 
 def test_parse_info_lines_ignored():
-    assert parse_line('{"type":"hello","fw":"0.1"}', SLOTS) is None
-    assert parse_line("   ", SLOTS) is None
+    assert parse_line('{"type":"hello","fw":"0.1"}') is None
+    assert parse_line("   ") is None
 
 
 @pytest.mark.parametrize(
@@ -49,18 +48,18 @@ def test_parse_info_lines_ignored():
         "garbage",
         "[1,2]",
         '{"slot_id":"Z","presence":1}',
-        '{"slot_id":"A","presence":2}',
-        '{"slot_id":"A","presence":true}',
-        '{"slot_id":"A","presence":1,"vibration":2000}',
-        '{"slot_id":"A","presence":1,"vibration":"x"}',
-        '{"slot_id":"A","presence":1,"state":"weird"}',
-        '{"presence":1}',
-        '{"slot_id":"A","presence":1,"x":"' + "a" * 600 + '"}',
+        '{"presence":2}',
+        '{"presence":true}',
+        '{"presence":1,"vibration":2000}',
+        '{"presence":1,"vibration":"x"}',
+        '{"presence":1,"state":"weird"}',
+        '{"vibration":1}',
+        '{"presence":1,"x":"' + "a" * 600 + '"}',
     ],
 )
 def test_parse_rejects(line):
     with pytest.raises(ParseError):
-        parse_line(line, SLOTS)
+        parse_line(line)
 
 
 def test_sequence_monotonic_across_restart(tmp_path):
@@ -133,26 +132,26 @@ def test_gateway_watchdog_reports_errors_when_arduino_silent(tmp_path):
     api = FakeApi()
     clock = Clock()
     gw = Gateway(cfg(tmp_path), uplink=Uplink(cfg(tmp_path), post=api), clock=clock)
-    gw.handle_line('{"slot_id":"A","presence":1}')
+    gw.handle_line('{"presence":1}')
     gw.watchdog()
     assert len(gw.uplink.buffer) == 1
     clock.t += 16
     gw.watchdog()
     bodies = [q.body for q in gw.uplink.buffer][1:]
-    assert {b["slot_id"] for b in bodies} == {"A", "B", "C"}
-    assert all(b["sensor_state"] == "error" and b["occupied"] is None for b in bodies)
+    assert len(bodies) == 1 and "slot_id" not in bodies[0]
+    assert bodies[0]["sensor_state"] == "error" and bodies[0]["occupied"] is None
     gw.watchdog()  # nicht sofort wiederholen
-    assert len(gw.uplink.buffer) == 4
+    assert len(gw.uplink.buffer) == 2
     clock.t += 10
     gw.watchdog()
-    assert len(gw.uplink.buffer) == 7
+    assert len(gw.uplink.buffer) == 3
 
 
 def test_gateway_adds_station_and_source(tmp_path):
     c = cfg(tmp_path)
     c.source = "simulated"
     gw = Gateway(c, uplink=Uplink(c, post=FakeApi()))
-    gw.handle_line('{"slot_id":"B","presence":0,"vibration":3}')
+    gw.handle_line('{"presence":0,"vibration":3}')
     body = gw.uplink.buffer[0].body
-    assert body["station_id"] == "demo-01" and body["source"] == "simulated" and body["slot_id"] == "B"
+    assert body["station_id"] == "demo-01" and body["source"] == "simulated" and "slot_id" not in body
     assert isinstance(body["sequence"], int)

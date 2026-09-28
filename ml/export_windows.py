@@ -6,7 +6,7 @@ Ablauf beim Aufnehmen:
      30 s stehen lassen, leicht anstoßen, ausparken"), Endzeit notieren.
   2. Diesen Zeitraum mit eindeutiger run-id und Label exportieren:
 
-     python ml/export_windows.py --db backend/bike_station.db --slot A \
+     python ml/export_windows.py --db backend/bike_station.db --station <STATION_ID> \
          --since 2026-10-01T10:02:00 --until 2026-10-01T10:03:30 \
          --label normal --run-id r07-anstossen
 
@@ -35,8 +35,7 @@ def parse_time(s: str) -> float:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--db", required=True)
-    ap.add_argument("--station", default="demo-01")
-    ap.add_argument("--slot", required=True)
+    ap.add_argument("--station", required=True, help="Station-ID aus dem Portal (eine Station = ein Stellplatz)")
     ap.add_argument("--since", required=True, help="ISO-Zeit (lokal) oder Unix-Zeit")
     ap.add_argument("--until", required=True)
     ap.add_argument("--label", required=True, choices=["normal", "anomal"])
@@ -49,8 +48,8 @@ def main() -> None:
     con = sqlite3.connect(f"file:{args.db}?mode=ro", uri=True)
     rows = con.execute(
         "SELECT server_time, occupied, vibration_score, source FROM measurement "
-        "WHERE station_id = ? AND slot_id = ? AND sensor_state = 'ok' AND server_time <= ? ORDER BY server_time",
-        (args.station, args.slot, until),
+        "WHERE station_id = ? AND sensor_state = 'ok' AND server_time <= ? ORDER BY server_time",
+        (args.station, until),
     ).fetchall()
     history = [(t, bool(o), s) for t, o, s, _ in rows]
     sources = {src for t, _, _, src in rows if t >= since}
@@ -60,7 +59,7 @@ def main() -> None:
     for t, feats in trigger_rows(history, params):
         if t < since:
             continue
-        out.append({"run_id": args.run_id, "label": args.label, "source": source, "slot_id": args.slot,
+        out.append({"run_id": args.run_id, "label": args.label, "source": source,
                     "t": round(t - since, 3), **feats})
     if not out:
         print("Keine bewertbaren Messungen (belegt + Vibration > 0) im Zeitraum gefunden.")

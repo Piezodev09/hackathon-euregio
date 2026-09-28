@@ -5,16 +5,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="referrer" content="no-referrer">
   <meta name="robots" content="noindex">
-  <title>Smarte Radstation</title>
+  <title>Smart Bicycle Box</title>
   <link rel="icon" href="/static/img/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/css/fonts.css">
+  <link rel="stylesheet" href="/static/css/tokens.css">
+  <link rel="stylesheet" href="/static/css/components.css">
   <link rel="stylesheet" href="/static/css/display.css">
   <script src="/static/js/display-i18n.js" defer></script>
   <script src="/static/js/display.js" defer></script>
 </head>
-<body>
-  <a class="skip" href="#slots" data-i18n="skip">Zu den Stellplätzen springen</a>
+<body class="sbb-root">
   <header class="top">
-    <h1 id="station-name" data-i18n="title">Smarte Radstation</h1>
+    <div>
+      <h1 id="station-name">Smart Bicycle Box</h1>
+      <p id="location" class="loc"></p>
+    </div>
     <nav aria-label="Sprache / Taal / Language" class="lang">
       <button type="button" data-lang="de" lang="de">DE</button>
       <button type="button" data-lang="nl" lang="nl">NL</button>
@@ -23,28 +28,21 @@
   </header>
 
   <main>
-    <p id="invalid" class="alert" hidden data-i18n="invalidLink">Dieser Anzeige-Link ist ungültig oder deaktiviert.</p>
-    <section class="summary" aria-labelledby="summary-h">
-      <h2 id="summary-h" class="visually-hidden" data-i18n="summaryHeading">Übersicht</h2>
-      <p class="big" id="free-count">–</p>
-      <p class="big" id="recommendation">–</p>
-      <p id="updated">–</p>
-      <p id="connection" role="status">–</p>
-      <p id="simulated" class="badge sim" hidden data-i18n="simulatedData">Achtung: simulierte Daten</p>
-    </section>
-
-    <div id="alerts" class="alerts" role="alert" aria-live="assertive"></div>
-
-    <section aria-labelledby="slots-h">
-      <h2 id="slots-h" data-i18n="slotsHeading">Stellplätze</h2>
-      <ul id="slots" class="slots" tabindex="-1"></ul>
-      <p class="legend" data-i18n="legend"></p>
-    </section>
-
-    <p class="small" data-i18n="aiDisclaimer"></p>
+    <p id="invalid" class="invalid" hidden data-i18n="invalidLink">Dieser Anzeige-Link ist ungültig oder deaktiviert.</p>
+    <div id="status" class="sbb-status" data-state="unknown">
+      <span id="status-icon" aria-hidden="true"></span>
+      <div>
+        <p class="sbb-status__word" id="status-word">STATUS UNBEKANNT</p>
+        <p class="sbb-status__sub" id="status-sub"></p>
+      </div>
+      <span id="simulated" class="sbb-status__corner sbb-tag sbb-tag--demo" hidden data-i18n="simulated">SIMULATION</span>
+    </div>
+    <p id="live" class="sbb-vh" aria-live="polite"></p>
+    <div id="alert" class="alert" role="status"></div>
   </main>
 
-  <footer class="small">
+  <footer>
+    <p><span id="updated">–</span> · <span id="connection">–</span></p>
     <p data-i18n="privacy"></p>
   </footer>
 </body>
