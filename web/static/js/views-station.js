@@ -3,9 +3,10 @@
 import { get, post, patch, put, del, describeError } from "./api.js";
 import { getLang, t } from "./i18n.js";
 import { el, clear, field, toast, confirmDialog, fmtDateTime, fmtTime, copyText, icon, effectiveState, reasonText,
-  stallStatus, stallBadge, fmtAge, fmtCents } from "./ui.js";
+  stallStatus, stallBadge, fmtAge, fmtCents, closedText, remainingMin } from "./ui.js";
 import { state, can, every, go } from "./state.js";
 import { sessionSummary, tariffForm, tariffText } from "./views-parking.js";
+import { onboardingCard, reservationBox, hoursCard, createDemoStation } from "./views-more.js";
 
 let devicesTimer = null;
 const errorCard = (e) => el("div", { class: "alert-box error", role: "alert" }, describeError(e));
@@ -25,15 +26,27 @@ function stallCard(s) {
         live.age_s !== null && live.age_s !== undefined ? el("span", {}, t("st.age", { s: fmtAge(live.age_s) })) : null,
       live.alert ? el("span", { class: "badge warn" }, icon("vib"), t("st.alert")) : null,
       live.maintenance ? el("span", { class: "badge" }, icon("wrench"), t("ss.maintenance")) : null,
+      live.closed ? el("span", { class: "badge" }, icon("lock"), t("st.closed")) : null,
+      live.reservation ? el("span", { class: "badge res" }, icon("reserved"), t("res.left", { m: remainingMin(live.reservation) })) : null,
+      s.demo ? el("span", { class: "badge sim" }, t("ob.demo_badge")) : null,
       live.session ? el("span", { class: "badge ok" }, icon("card"), t("pk.checked_in"), " · ", fmtCents(live.session.amount_cents)) : null,
       live.simulated_data ? el("span", { class: "badge sim" }, t("st.sim")) : null));
 }
 
 // ---------------------------------------------------------------------- Übersicht
+function emptyOverview() {
+  return el("div", { class: "card empty-state" }, icon("logo", "empty-logo"),
+    el("h2", {}, t("ov.empty_title")), el("p", {}, t("ov.empty_text")),
+    can("admin") ? el("div", { class: "btn-row" },
+      state.me.demo_stalls ? el("button", { class: "btn primary", type: "button", onclick: () => createDemoStation() }, icon("play"), t("ob.demo_btn")) : null,
+      el("a", { class: "btn", href: "#/stations/new" }, t("ov.create"))) : null);
+}
+
 export function viewOverview() {
-  const kpis = el("div", { class: "grid cols-4" });
+  const kpis = el("div", { class: "grid cols-4", "data-tour": "kpis" });
   const cards = el("div", { class: "grid cols-3" });
-  const node = el("div", {}, kpis, el("h2", { class: "visually-hidden" }, t("nav.stations")), cards);
+  const onboarding = onboardingCard();
+  const node = el("div", { class: "page-stack" }, onboarding, kpis, el("h2", { class: "visually-hidden" }, t("nav.stations")), cards);
   every(5000, async () => {
     try {
       const [{ stations }, { events }] = await Promise.all([get("/api/v1/stations"), get("/api/v1/events?open_only=true&limit=100")]);
@@ -50,8 +63,7 @@ export function viewOverview() {
         kpi(count("unknown"), t("ov.state_unknown")), kpi(events.length, t("ov.alerts")),
         kpi(stations.filter((s) => s.live?.session).length, t("ov.parked_now")), kpi(today.checkins, t("ov.checkins_today")),
         kpi(today.revenue, t("ov.revenue_today")));
-      clear(cards, stations.length ? stations.map(stallCard) : el("div", { class: "card" }, el("p", {}, t("ov.empty")),
-        can("admin") ? el("a", { class: "btn primary", href: "#/stations/new" }, t("ov.create")) : null));
+      clear(cards, stations.length ? stations.map(stallCard) : emptyOverview());
     } catch (e) { clear(cards, errorCard(e)); }
   });
   return node;
@@ -80,6 +92,9 @@ export function viewNewStation() {
   const form = el("form", { class: "card" }, err, el("p", { class: "muted" }, t("ss.new_hint")),
     field(t("ss.name"), name), field(t("ss.location"), loc),
     el("button", { class: "btn primary", type: "submit" }, t("ss.create")));
+  const demo = state.me.demo_stalls ? el("section", { class: "card ob-demo" }, icon("play"),
+    el("div", {}, el("p", {}, el("strong", {}, t("ob.demo_title"))), el("p", { class: "small" }, t("ob.demo_text"))),
+    el("button", { class: "btn", type: "button", onclick: () => createDemoStation() }, t("ob.demo_btn"))) : null;
   form.addEventListener("submit", async (ev) => {
     ev.preventDefault();
     try {
@@ -87,7 +102,7 @@ export function viewNewStation() {
       go(`/stations/${st.id}/settings`);
     } catch (e) { clear(err, errorCard(e)); }
   });
-  return form;
+  return el("div", { class: "page-stack" }, form, demo);
 }
 
 // ---------------------------------------------------------------------- Live-Ansicht
@@ -143,6 +158,8 @@ function warningItem(kind, title, text, action) {
 export function viewStation(id, setTitle) {
   const statusBox = el("div");
   const sessionBox = el("div");
+  const resBox = el("div");
+  let resSig = "";
   const live = el("p", { class: "visually-hidden", "aria-live": "polite" });
   const measure = el("section", { class: "card", "aria-labelledby": "measure-h" });
   const warnings = el("section", { class: "card", "aria-labelledby": "warn-h" });
@@ -155,7 +172,7 @@ export function viewStation(id, setTitle) {
   let warnSig = "";
 
   const node = el("div", { class: "stall-grid" },
-    el("div", {}, el("section", { "aria-labelledby": "status-h" }, el("h2", { id: "status-h", class: "visually-hidden" }, t("st.current")), statusBox, sessionBox, live), measure, usage),
+    el("div", {}, el("section", { "aria-labelledby": "status-h" }, el("h2", { id: "status-h", class: "visually-hidden" }, t("st.current")), statusBox, sessionBox, resBox, live), measure, usage),
     el("div", {}, warnings, ai, recent));
 
   const render = () => {
@@ -164,8 +181,11 @@ export function viewStation(id, setTitle) {
     const connLost = Date.now() - lastOk > stale * 1000;
     const { state: st, reason } = effectiveState(last, connLost);
     clear(statusBox, last.maintenance ? el("div", { class: "maint-banner", role: "status" }, icon("wrench"), t("st.maintenance")) : null,
+      last.closed ? el("div", { class: "maint-banner closed", role: "status" }, icon("lock"), closedText(last.closed)) : null,
       stallStatus(last, { connLost, simulated: last.simulated_data }));
     clear(sessionBox, sessionSummary(last.session));
+    const rs = JSON.stringify([last.reservation?.id, last.reservation && remainingMin(last.reservation), last.state, !!last.closed, last.maintenance, getLang()]);
+    if (rs !== resSig && !resBox.querySelector("form")) { resSig = rs; clear(resBox, reservationBox(id, last, () => { resSig = ""; poll(); })); }
     if (st !== lastState) {
       lastState = st;
       live.textContent = `${t("st.current")}: ${t("st." + st)}. ${st === "unknown" ? reasonText(reason, stale) : ""}`;
@@ -265,7 +285,8 @@ export function viewStationSettings(id, setTitle) {
     try {
       const st = await get(`/api/v1/stations/${id}`);
       setTitle(`${st.name} – ${t("st.settings")}`);
-      clear(node, general(st), operationCard(st), devicesCard(st), stallViewCard(st), displayCard(st), cameraCard(st), dangerCard(st));
+      clear(node, st.demo ? el("div", { class: "alert-box info" }, t("ob.demo_settings")) : null,
+        general(st), operationCard(st), hoursCard(st, load), devicesCard(st), stallViewCard(st), displayCard(st), cameraCard(st), dangerCard(st));
     } catch (e) { clear(node, errorCard(e)); }
   };
 

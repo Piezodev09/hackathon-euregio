@@ -4,6 +4,7 @@ import { getLang, setLang, t, STRINGS } from "./i18n.js";
 import { el, clear, field, toast, confirmDialog, fmtDateTime, fmtMoney, copyText, passwordMeter } from "./ui.js";
 import { state, can, go } from "./state.js";
 import { licenseCard } from "./views-parking.js";
+import { notificationsCard } from "./views-more.js";
 
 const errorCard = (e) => el("div", { class: "alert-box error", role: "alert" }, describeError(e));
 const th = (...hs) => el("thead", {}, el("tr", {}, hs.map((h) => el("th", { scope: "col" }, h))));
@@ -214,7 +215,8 @@ export function viewSecurity(rerender) {
     location.href = "/";
   });
 
-  clear(node, banner, el("div", { class: "grid cols-2" }, el("div", {}, mfa, sessions), el("div", {}, profile, pwForm, delForm)));
+  clear(node, banner, me.tenant ? notificationsCard() : null,
+    el("div", { class: "grid cols-2" }, el("div", {}, mfa, sessions), el("div", {}, profile, pwForm, delForm)));
   return node;
 }
 
@@ -267,6 +269,8 @@ export function viewOrg() {
 function planFeatures(p) {
   return [t("bill.f_stations", { n: p.max_stations }), t("bill.f_users", { n: p.max_users }),
     t("bill.f_retention", { n: p.retention_days }), p.nfc ? t("feat.nfc") : null, p.parking_billing ? t("feat.parking_billing") : null,
+    p.parking_billing ? t("feat.prepaid") : null, p.reservations ? t("feat.reservations") : null, t("feat.hours"), t("feat.notifications"),
+    p.reports ? t("feat.reports") : null, p.integrations ? t("feat.integrations") : null,
     p.stall_view ? t("feat.stall_view") : null, p.camera ? t("feat.camera") : null, p.ml_enabled ? t("bill.f_ml") : null,
     p.audit_log ? t("bill.f_audit") : null, p.public_display ? t("bill.f_display") : null,
     p.trial_days ? t("bill.f_trial", { n: p.trial_days }) : null].filter(Boolean);

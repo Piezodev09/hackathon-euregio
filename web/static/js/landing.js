@@ -6,6 +6,7 @@ import { planCard } from "./views-admin.js";
 const EXAMPLES = {
   free: { state: "free" },
   occupied: { state: "occupied" },
+  reserved: { state: "reserved", reservation: { until: new Date(Date.now() + 25 * 60000).toISOString() } },
   unknown: { state: "unknown", unknown_reason: "stale", stale_after_s: 30 },
 };
 let example = "free";
@@ -21,7 +22,7 @@ function render() {
     el("button", { class: "btn small", type: "button", "aria-pressed": String(k === example),
       onclick: () => { example = k; render(); document.querySelector(`[data-example="${k}"]`)?.focus(); }, "data-example": k }, t("st." + k))));
   clear(document.getElementById("plans"), plans.map((p) => planCard(p, { featured: p.id === "school",
-    action: el("a", { class: `btn ${p.id === "school" ? "primary" : ""}`, href: "/app#/register" }, t("l.choose")) })));
+    action: el("a", { class: `btn ${p.id === "school" ? "primary" : ""}`, href: `/app#/register?plan=${p.id}` }, t("l.choose")) })));
   renderCalc();
 }
 

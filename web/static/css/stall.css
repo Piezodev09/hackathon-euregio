@@ -25,3 +25,7 @@ form { display: grid; gap: 12px; }
 textarea { font: inherit; font-size: 18px; padding: 10px 12px; border: 2px solid var(--line-strong); border-radius: var(--radius-md);
   background: var(--surface-raised); color: var(--ink); width: 100%; }
 footer { margin-top: 40px; border-top: 1px solid var(--line); padding-top: 12px; }
+.note.closed { border-color: var(--reserved-line); }
+.hours-list { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 0; }
+.hours-list dt { font-weight: 700; }
+.hours-list dd { margin: 0; }

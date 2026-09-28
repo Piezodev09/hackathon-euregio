@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="referrer" content="no-referrer">
-  <meta name="description" content="Smart Bicycle Box: ein vorne offener Fahrradstellplatz mit Sensor, Display und Web-Dashboard – zeigt FREI, BELEGT oder STATUS UNBEKANNT.">
-  <title>Smart Bicycle Box – ein Stellplatz, ein ehrlicher Status</title>
+  <meta name="description" content="Smart Bicycle Box: der Fahrradstellplatz, der ehrlich sagt, ob er frei ist – mit Display, Ein-/Auschecken per Karte, Parkgebühren, Reservierungen, Berichten und Schnittstellen für die Schul-IT. 30 Tage kostenlos testen.">
+  <title>Smart Bicycle Box – der smarte Fahrradstellplatz für Schulen und Gemeinden</title>
   <link rel="icon" href="/static/img/icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/css/fonts.css">
   <link rel="stylesheet" href="/static/css/tokens.css">
@@ -22,13 +22,13 @@
         Smart Bicycle Box</a>
       <nav class="site-nav" aria-label="Hauptnavigation">
         <a class="link" href="#features" data-i18n="l.features">Funktionen</a>
+        <a class="link" href="#audience" data-i18n="l.audience">Für wen</a>
         <a class="link" href="#how" data-i18n="l.how">So funktioniert’s</a>
-        <a class="link" href="#security" data-i18n="l.security">Sicherheit</a>
         <a class="link" href="#pricing" data-i18n="l.pricing">Preise</a>
         <a class="link" href="#faq" data-i18n="l.faq">FAQ</a>
         <span id="lang"></span>
         <a class="btn small" href="/app#/login" data-i18n="l.login">Anmelden</a>
-        <a class="btn small primary" href="/app#/register" data-i18n="l.start">Kostenlos starten</a>
+        <a class="btn small primary" href="/app#/register?plan=school" data-i18n="l.start">Kostenlos testen</a>
       </nav>
     </div>
   </header>
@@ -37,12 +37,14 @@
     <section class="hero">
       <div class="section-inner hero-grid">
         <div>
-          <h1 data-i18n="l.hero_title">Ein Stellplatz. Ein ehrlicher Status.</h1>
+          <p class="eyebrow" data-i18n="l.eyebrow"></p>
+          <h1 data-i18n="l.hero_title"></h1>
           <p class="lead" data-i18n="l.hero_lead"></p>
           <div class="btn-row">
-            <a class="btn primary" href="/app#/register" data-i18n="l.cta">Jetzt kostenlos starten</a>
-            <a class="btn" href="#pricing" data-i18n="l.cta2">Preise ansehen</a>
+            <a class="btn primary" href="/app#/register?plan=school" data-i18n="l.cta">30 Tage kostenlos testen</a>
+            <a class="btn" href="#try" data-i18n="l.cta2">Ohne Hardware ausprobieren</a>
           </div>
+          <p class="microcopy" data-i18n="l.micro"></p>
         </div>
         <div class="card" aria-labelledby="preview-h">
           <h2 id="preview-h" class="label-caps" data-i18n="l.preview">So sieht der Status aus (Beispiel)</h2>
@@ -52,20 +54,62 @@
       </div>
     </section>
 
+    <section class="section values-band" aria-label="Vorteile">
+      <div class="section-inner">
+        <ul class="values">
+          <li><span class="icon" aria-hidden="true"><svg viewBox="0 0 48 48" focusable="false"><path d="M24 5 40 11v12c0 10-7 17-16 20C15 40 8 33 8 23V11Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M17 24l5 5 9-10" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div><strong data-i18n="l.v1_t"></strong><p data-i18n="l.v1"></p></div></li>
+          <li><span class="icon" aria-hidden="true"><svg viewBox="0 0 48 48" focusable="false"><path d="M27 4 10 28h12l-3 16 17-24H24Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/></svg></span><div><strong data-i18n="l.v2_t"></strong><p data-i18n="l.v2"></p></div></li>
+          <li><span class="icon" aria-hidden="true"><svg viewBox="0 0 48 48" focusable="false"><rect x="10" y="21" width="28" height="21" rx="3" fill="none" stroke="currentColor" stroke-width="4"/><path d="M16 21v-5a8 8 0 0 1 16 0v5" fill="none" stroke="currentColor" stroke-width="4"/><circle cx="24" cy="31" r="3" fill="currentColor"/></svg></span><div><strong data-i18n="l.v3_t"></strong><p data-i18n="l.v3"></p></div></li>
+          <li><span class="icon" aria-hidden="true"><svg viewBox="0 0 48 48" focusable="false"><path d="M18 6v10M30 6v10M12 16h24v8a12 12 0 0 1-24 0Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/><path d="M24 36v8" stroke="currentColor" stroke-width="4" stroke-linecap="round"/></svg></span><div><strong data-i18n="l.v4_t"></strong><p data-i18n="l.v4"></p></div></li>
+        </ul>
+      </div>
+    </section>
+
     <section class="section alt" id="features" aria-labelledby="features-h">
       <div class="section-inner">
-        <h2 id="features-h" data-i18n="l.features">Funktionen</h2>
+        <h2 id="features-h" data-i18n="l.features_title">Alles, was ein moderner Fahrradstellplatz braucht</h2>
+        <p class="lead" data-i18n="l.features_lead"></p>
         <div class="grid cols-3">
           <div class="card feature"><h3><span class="icon" aria-hidden="true"><svg viewBox="0 0 48 48" focusable="false"><circle cx="24" cy="24" r="19" fill="none" stroke="currentColor" stroke-width="4"/><path d="M15 25l6 6 12-13" fill="none" stroke="currentColor" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span data-i18n="l.f1_t"></span></h3><p data-i18n="l.f1"></p></div>
-          <div class="card feature"><h3><span class="icon" aria-hidden="true"><svg viewBox="0 0 48 48" focusable="false"><path d="M4 24h7l4-10 6 20 6-24 6 20 4-6h7" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span data-i18n="l.f3_t"></span></h3><p data-i18n="l.f3"></p></div>
-          <div class="card feature"><h3><span class="icon" aria-hidden="true"><svg viewBox="0 0 48 48" focusable="false"><path d="M8 40V8M8 40h34" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><path d="M16 34v-8M24 34V16M32 34v-12" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round"/></svg></span><span data-i18n="l.f4_t"></span></h3><p data-i18n="l.f4"></p></div>
           <div class="card feature"><h3><span class="icon" aria-hidden="true"><svg viewBox="0 0 48 48" focusable="false"><rect x="5" y="11" width="38" height="26" rx="4" fill="none" stroke="currentColor" stroke-width="4"/><path d="M31 20a6 6 0 0 1 0 8M35 17a10 10 0 0 1 0 14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M11 30h12" stroke="currentColor" stroke-width="4" stroke-linecap="round"/></svg></span><span data-i18n="l.f7_t"></span></h3><p data-i18n="l.f7"></p></div>
-          <div class="card feature"><h3><span class="icon" aria-hidden="true"><svg viewBox="0 0 48 48" focusable="false"><path d="M36 12a14 14 0 1 0 0 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><path d="M8 21h20M8 28h18" stroke="currentColor" stroke-width="4" stroke-linecap="round"/></svg></span><span data-i18n="l.f8_t"></span></h3><p data-i18n="l.f8"></p></div>
+          <div class="card feature"><h3><span class="icon" aria-hidden="true"><svg viewBox="0 0 48 48" focusable="false"><rect x="5" y="12" width="38" height="28" rx="4" fill="none" stroke="currentColor" stroke-width="4"/><path d="M5 18h33M31 29h6" stroke="currentColor" stroke-width="4" stroke-linecap="round"/></svg></span><span data-i18n="l.f8_t"></span></h3><p data-i18n="l.f8"></p></div>
+          <div class="card feature"><h3><span class="icon" aria-hidden="true"><svg viewBox="0 0 48 48" focusable="false"><circle cx="24" cy="27" r="16" fill="none" stroke="currentColor" stroke-width="4"/><path d="M24 18v9l6 5" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M18 5h12M24 5v6" stroke="currentColor" stroke-width="4" stroke-linecap="round"/></svg></span><span data-i18n="l.f11_t"></span></h3><p data-i18n="l.f11"></p></div>
+          <div class="card feature"><h3><span class="icon" aria-hidden="true"><svg viewBox="0 0 48 48" focusable="false"><rect x="10" y="21" width="28" height="21" rx="3" fill="none" stroke="currentColor" stroke-width="4"/><path d="M16 21v-5a8 8 0 0 1 16 0v5" fill="none" stroke="currentColor" stroke-width="4"/><circle cx="24" cy="31" r="3" fill="currentColor"/></svg></span><span data-i18n="l.f12_t"></span></h3><p data-i18n="l.f12"></p></div>
+          <div class="card feature"><h3><span class="icon" aria-hidden="true"><svg viewBox="0 0 48 48" focusable="false"><path d="M4 24h7l4-10 6 20 6-24 6 20 4-6h7" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span data-i18n="l.f3_t"></span></h3><p data-i18n="l.f3"></p></div>
+          <div class="card feature"><h3><span class="icon" aria-hidden="true"><svg viewBox="0 0 48 48" focusable="false"><path d="M12 34V22a12 12 0 0 1 24 0v12l4 4H8Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M20 42a4 4 0 0 0 8 0" fill="none" stroke="currentColor" stroke-width="4"/></svg></span><span data-i18n="l.f13_t"></span></h3><p data-i18n="l.f13"></p></div>
+          <div class="card feature"><h3><span class="icon" aria-hidden="true"><svg viewBox="0 0 48 48" focusable="false"><path d="M10 6h20l8 8v28H10Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M17 34v-6M24 34V22M31 34v-9" stroke="currentColor" stroke-width="4" stroke-linecap="round"/></svg></span><span data-i18n="l.f14_t"></span></h3><p data-i18n="l.f14"></p></div>
           <div class="card feature"><h3><span class="icon" aria-hidden="true"><svg viewBox="0 0 48 48" focusable="false"><path d="M6 6h14v14H6zM28 6h14v14H28zM6 28h14v14H6z" fill="none" stroke="currentColor" stroke-width="4"/><path d="M28 28h6v6h-6zM36 36h6v6h-6zM36 28h6M28 40h4" stroke="currentColor" stroke-width="4"/></svg></span><span data-i18n="l.f9_t"></span></h3><p data-i18n="l.f9"></p></div>
-          <div class="card feature"><h3><span class="icon" aria-hidden="true"><svg viewBox="0 0 48 48" focusable="false"><path d="M6 16h8l4-6h12l4 6h8v24H6Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><circle cx="24" cy="27" r="7" fill="none" stroke="currentColor" stroke-width="4"/></svg></span><span data-i18n="l.f10_t"></span></h3><p data-i18n="l.f10"></p></div>
+          <div class="card feature"><h3><span class="icon" aria-hidden="true"><svg viewBox="0 0 48 48" focusable="false"><path d="M18 6v10M30 6v10M12 16h24v8a12 12 0 0 1-24 0Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/><path d="M24 36v8" stroke="currentColor" stroke-width="4" stroke-linecap="round"/></svg></span><span data-i18n="l.f15_t"></span></h3><p data-i18n="l.f15"></p></div>
+          <div class="card feature"><h3><span class="icon" aria-hidden="true"><svg viewBox="0 0 48 48" focusable="false"><rect x="6" y="8" width="36" height="24" rx="3" fill="none" stroke="currentColor" stroke-width="4"/><path d="M18 40h12M24 32v8" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><path d="M16 20l5 5 11-10" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span data-i18n="l.f16_t"></span></h3><p data-i18n="l.f16"></p></div>
           <div class="card feature"><h3><span class="icon" aria-hidden="true"><svg viewBox="0 0 48 48" focusable="false"><circle cx="24" cy="24" r="19" fill="none" stroke="currentColor" stroke-width="4"/><path d="M5 24h38M24 5c6 6 6 32 0 38M24 5c-6 6-6 32 0 38" fill="none" stroke="currentColor" stroke-width="3"/></svg></span><span data-i18n="l.f5_t"></span></h3><p data-i18n="l.f5"></p></div>
-          <div class="card feature"><h3><span class="icon" aria-hidden="true"><svg viewBox="0 0 48 48" focusable="false"><circle cx="18" cy="16" r="7" fill="none" stroke="currentColor" stroke-width="4"/><path d="M5 40c1-8 6-12 13-12s12 4 13 12" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><circle cx="34" cy="18" r="5" fill="none" stroke="currentColor" stroke-width="3"/><path d="M34 28c5 0 8 4 9 10" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg></span><span data-i18n="l.f6_t"></span></h3><p data-i18n="l.f6"></p></div>
         </div>
+      </div>
+    </section>
+
+    <section class="section" id="audience" aria-labelledby="audience-h">
+      <div class="section-inner">
+        <h2 id="audience-h" data-i18n="l.audience_title">Für wen?</h2>
+        <div class="grid cols-3">
+          <div class="card audience-card"><h3><span class="icon" aria-hidden="true"><svg viewBox="0 0 48 48" focusable="false"><path d="M4 18 24 8l20 10-20 10Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M12 22v10c4 4 20 4 24 0V22" fill="none" stroke="currentColor" stroke-width="4"/></svg></span><span data-i18n="l.a_school_t"></span></h3><p data-i18n="l.a_school"></p>
+            <ul class="checklist"><li data-i18n="l.a_school_1"></li><li data-i18n="l.a_school_2"></li><li data-i18n="l.a_school_3"></li></ul></div>
+          <div class="card audience-card"><h3><span class="icon" aria-hidden="true"><svg viewBox="0 0 48 48" focusable="false"><path d="M6 42V18l10-6v30M16 42V8h16v34M32 42V20h10v22M4 42h40" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/></svg></span><span data-i18n="l.a_city_t"></span></h3><p data-i18n="l.a_city"></p>
+            <ul class="checklist"><li data-i18n="l.a_city_1"></li><li data-i18n="l.a_city_2"></li><li data-i18n="l.a_city_3"></li></ul></div>
+          <div class="card audience-card"><h3><span class="icon" aria-hidden="true"><svg viewBox="0 0 48 48" focusable="false"><rect x="8" y="6" width="32" height="36" rx="2" fill="none" stroke="currentColor" stroke-width="4"/><path d="M16 14h4M28 14h4M16 22h4M28 22h4M20 42v-8h8v8" stroke="currentColor" stroke-width="4"/></svg></span><span data-i18n="l.a_company_t"></span></h3><p data-i18n="l.a_company"></p>
+            <ul class="checklist"><li data-i18n="l.a_company_1"></li><li data-i18n="l.a_company_2"></li><li data-i18n="l.a_company_3"></li></ul></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section alt" id="try" aria-labelledby="try-h">
+      <div class="section-inner">
+        <h2 id="try-h" data-i18n="l.try_title">In 2 Minuten ausprobieren – ganz ohne Hardware</h2>
+        <p class="lead" data-i18n="l.try_lead"></p>
+        <ol class="grid cols-3 steps-cards">
+          <li class="card"><span class="step-no" aria-hidden="true">1</span><h3 data-i18n="l.try1_t"></h3><p data-i18n="l.try1"></p></li>
+          <li class="card"><span class="step-no" aria-hidden="true">2</span><h3 data-i18n="l.try2_t"></h3><p data-i18n="l.try2"></p></li>
+          <li class="card"><span class="step-no" aria-hidden="true">3</span><h3 data-i18n="l.try3_t"></h3><p data-i18n="l.try3"></p></li>
+        </ol>
+        <div class="btn-row"><a class="btn primary" href="/app#/register?plan=school" data-i18n="l.try_cta">Jetzt ausprobieren</a></div>
       </div>
     </section>
 
@@ -143,6 +187,9 @@
           <div class="card"><h3 data-i18n="l.op1_t"></h3><p data-i18n="l.op1"></p></div>
           <div class="card"><h3 data-i18n="l.op2_t"></h3><p data-i18n="l.op2"></p></div>
           <div class="card"><h3 data-i18n="l.op3_t"></h3><p data-i18n="l.op3"></p></div>
+          <div class="card"><h3 data-i18n="l.op4_t"></h3><p data-i18n="l.op4"></p></div>
+          <div class="card"><h3 data-i18n="l.op5_t"></h3><p data-i18n="l.op5"></p></div>
+          <div class="card"><h3 data-i18n="l.op6_t"></h3><p data-i18n="l.op6"></p></div>
         </div>
       </div>
     </section>
@@ -157,6 +204,10 @@
           <details><summary data-i18n="l.q4"></summary><p data-i18n="l.a4"></p></details>
           <details><summary data-i18n="l.q5"></summary><p data-i18n="l.a5"></p></details>
           <details><summary data-i18n="l.q6"></summary><p data-i18n="l.a6"></p></details>
+          <details><summary data-i18n="l.q7"></summary><p data-i18n="l.a7"></p></details>
+          <details><summary data-i18n="l.q8"></summary><p data-i18n="l.a8"></p></details>
+          <details><summary data-i18n="l.q9"></summary><p data-i18n="l.a9"></p></details>
+          <details><summary data-i18n="l.q10"></summary><p data-i18n="l.a10"></p></details>
         </div>
       </div>
     </section>
@@ -169,6 +220,7 @@
           <thead><tr><th scope="col" data-i18n="l.stand_part"></th><th scope="col" data-i18n="l.stand_state"></th></tr></thead>
           <tbody>
             <tr><td data-i18n="l.stand1"></td><td><span class="badge ok" data-i18n="l.st_tested"></span></td></tr>
+            <tr><td data-i18n="l.stand6"></td><td><span class="badge ok" data-i18n="l.st_tested"></span></td></tr>
             <tr><td data-i18n="l.stand2"></td><td><span class="badge ok" data-i18n="l.st_sim"></span></td></tr>
             <tr><td data-i18n="l.stand3"></td><td><span class="badge planned" data-i18n="l.st_hw_open"></span></td></tr>
             <tr><td data-i18n="l.stand4"></td><td><span class="badge planned" data-i18n="l.st_hw_open"></span></td></tr>
@@ -183,9 +235,21 @@
         <h2 id="privacy-h" data-i18n="l.privacy">Datenschutz</h2>
         <p>Platzhalter für die Datenschutzerklärung des Betreibers. Verarbeitet werden: Konto­daten der Nutzer (Name, E-Mail, Rolle),
           Sitzungsdaten (IP-Adresse, Browserkennung) zur Absicherung, technische Messdaten des Stellplatzes (Belegung, Erschütterungswert,
-          Zeitpunkt) sowie ein Audit-Log sicherheitsrelevanter Aktionen. Keine Kameras, keine Personenerkennung, keine Tracking- oder
-          Werbe-Cookies. Vor dem produktiven Einsatz durch den Betreiber zu vervollständigen (Verantwortlicher, Rechtsgrundlagen,
+          Zeitpunkt), Parkvorgänge je Karte sowie ein Audit-Log sicherheitsrelevanter Aktionen. Keine Personenerkennung, keine Tracking- oder
+          Werbe-Cookies. Eine Kamera ist optional, standardmäßig aus und nur nach dokumentierter Freigabe nutzbar (Einzelbilder,
+          automatische Löschung). NFC-Karten werden nur als Schlüssel-Hash gespeichert. Vor dem produktiven Einsatz durch den Betreiber zu vervollständigen (Verantwortlicher, Rechtsgrundlagen,
           Aufbewahrungsfristen, Auftragsverarbeitung, Betroffenenrechte).</p>
+      </div>
+    </section>
+    <section class="section cta-band" aria-labelledby="cta-h">
+      <div class="section-inner">
+        <h2 id="cta-h" data-i18n="l.final_title"></h2>
+        <p class="lead" data-i18n="l.final_lead"></p>
+        <div class="btn-row">
+          <a class="btn primary" href="/app#/register?plan=school" data-i18n="l.cta">30 Tage kostenlos testen</a>
+          <a class="btn" href="/app#/login" data-i18n="l.login">Anmelden</a>
+        </div>
+        <p class="microcopy" data-i18n="l.micro"></p>
       </div>
     </section>
   </main>

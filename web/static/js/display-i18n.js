@@ -2,6 +2,11 @@
 // NL/EN vor der Vorführung von einer sprachkundigen Person prüfen lassen.
 window.I18N = {
   de: {
+    reserved: "RESERVIERT", sub_reserved: (m) => `Für eine reservierte Person freigehalten – noch ${m} min.`,
+    closed_hours: "Geschlossen (außerhalb der Öffnungszeiten).", closed_closure: (n) => `Gesperrt: ${n || "Sperrzeit"}.`, opens: (t) => `Öffnet ${t}.`,
+    offline: "OFFLINE – lokale Anzeige: Zustand direkt vom Sensor. Ein-/Auschecken und Reservierungen gerade nicht möglich.",
+    tap_closed: "Geschlossen – Einchecken gerade nicht möglich", tap_reserved: "Stellplatz ist reserviert", tap_insufficient_balance: "Guthaben reicht nicht – bitte aufladen",
+    balance: (p) => `Guthaben ${p}`,
     maintenance: "AUSSER BETRIEB – bitte einen anderen Stellplatz nutzen",
     tap_checked_in: "Eingecheckt ✓", tap_checked_out: (p) => `Ausgecheckt ✓ · ${p}`,
     tap_unknown_card: "Karte unbekannt – bitte bei der Betreuung freischalten lassen", tap_blocked: "Karte gesperrt",
@@ -20,9 +25,14 @@ window.I18N = {
     connLost: (s) => `Verbindung unterbrochen seit ${s} s`,
     simulated: "SIMULATION",
     alert: (t) => `Erschütterung registriert um ${t}. Das ist kein Diebstahlnachweis.`,
-    privacy: "Keine Kamera, keine Personendaten – nur Zustand und Zeit.",
+    privacy: "Keine Personendaten – angezeigt werden nur Zustand und Zeit.",
   },
   nl: {
+    reserved: "GERESERVEERD", sub_reserved: (m) => `Vrijgehouden voor een reservering – nog ${m} min.`,
+    closed_hours: "Gesloten (buiten de openingstijden).", closed_closure: (n) => `Afgesloten: ${n || "sluitingsperiode"}.`, opens: (t) => `Opent ${t}.`,
+    offline: "OFFLINE – lokale weergave: status direct van de sensor. In-/uitchecken en reserveren nu niet mogelijk.",
+    tap_closed: "Gesloten – inchecken nu niet mogelijk", tap_reserved: "Fietsplek is gereserveerd", tap_insufficient_balance: "Onvoldoende tegoed – graag opwaarderen",
+    balance: (p) => `Tegoed ${p}`,
     maintenance: "BUITEN GEBRUIK – gebruik een andere fietsplek",
     tap_checked_in: "Ingecheckt ✓", tap_checked_out: (p) => `Uitgecheckt ✓ · ${p}`,
     tap_unknown_card: "Kaart onbekend – laat hem vrijgeven door de begeleiding", tap_blocked: "Kaart geblokkeerd",
@@ -41,9 +51,14 @@ window.I18N = {
     connLost: (s) => `Verbinding onderbroken sinds ${s} s`,
     simulated: "SIMULATIE",
     alert: (t) => `Trilling geregistreerd om ${t}. Dit is geen bewijs van diefstal.`,
-    privacy: "Geen camera, geen persoonsgegevens – alleen status en tijd.",
+    privacy: "Geen persoonsgegevens – alleen status en tijd worden getoond.",
   },
   en: {
+    reserved: "RESERVED", sub_reserved: (m) => `Held for a reservation – ${m} min left.`,
+    closed_hours: "Closed (outside opening hours).", closed_closure: (n) => `Closed: ${n || "closure period"}.`, opens: (t) => `Opens ${t}.`,
+    offline: "OFFLINE – local display: status straight from the sensor. Check-in/out and reservations are not possible right now.",
+    tap_closed: "Closed – check-in not possible right now", tap_reserved: "This stall is reserved", tap_insufficient_balance: "Insufficient balance – please top up",
+    balance: (p) => `Balance ${p}`,
     maintenance: "OUT OF SERVICE – please use another stall",
     tap_checked_in: "Checked in ✓", tap_checked_out: (p) => `Checked out ✓ · ${p}`,
     tap_unknown_card: "Unknown card – please have it activated by staff", tap_blocked: "Card blocked",
@@ -62,6 +77,6 @@ window.I18N = {
     connLost: (s) => `Connection lost for ${s} s`,
     simulated: "SIMULATION",
     alert: (t) => `Vibration registered at ${t}. This is not proof of theft.`,
-    privacy: "No camera, no personal data – only status and time.",
+    privacy: "No personal data – only status and time are shown.",
   },
 };

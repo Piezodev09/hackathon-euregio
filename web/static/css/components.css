@@ -53,6 +53,7 @@
   background-color: var(--unknown-bg); color: var(--unknown-ink); border-color: var(--unknown-line); border-style: dashed;
   background-image: repeating-linear-gradient(135deg, var(--unknown-stripe) 0 12px, transparent 12px 24px);
 }
+.sbb-status[data-state="reserved"] { background: var(--reserved-bg); color: var(--reserved-ink); border-color: var(--reserved-line); border-style: double; border-width: 8px; }
 @media (max-width: 520px) {
   .sbb-status { grid-template-columns: 1fr; padding: 24px 20px; }
   .sbb-status__icon { width: 64px; height: 64px; }
@@ -73,6 +74,7 @@
 .sbb-badge .sbb-icon { width: 22px; height: 22px; }
 .sbb-badge[data-state="free"] { background: var(--free-bg); color: var(--free-ink); border-color: var(--free-line); }
 .sbb-badge[data-state="occupied"] { background: var(--occupied-bg); color: var(--occupied-ink); border-color: var(--occupied-bg); }
+.sbb-badge[data-state="reserved"] { background: var(--reserved-bg); color: var(--reserved-ink); border-color: var(--reserved-line); border-style: double; border-width: 4px; }
 .sbb-badge[data-state="unknown"] { background-color: var(--unknown-bg); color: var(--unknown-ink); border-color: var(--unknown-line); border-style: dashed; background-image: repeating-linear-gradient(135deg, var(--unknown-stripe) 0 6px, transparent 6px 12px); }
 
 /* ---------- Karte ---------- */

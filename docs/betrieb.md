@@ -37,6 +37,19 @@ sudo /opt/smart-bike-station/deploy/update.sh --tests  # vorher alle Tests
 Schlägt der Health-Check fehl, setzt das Skript automatisch auf den vorherigen Stand zurück und startet neu.
 Datenbank-Migrationen (aktuell Schema 5) laufen beim Start automatisch.
 
+### Wichtige Einstellungen (`backend/config.toml`)
+
+| Einstellung | Standard | Bedeutung |
+|---|---|---|
+| `auth.require_email_verification` | `false` | `false`: nach der Registrierung sofort angemeldet, Bestätigungslink optional. `true`: Anmeldung erst nach Klick auf den Link (ohne Konto-Aufzählung). |
+| `app.demo_stalls` | `true` | „Beispiel-Stellplatz (Simulation)“ in Tour und Portal anbieten; der Server simuliert dessen Daten alle 2 s. |
+| `integrations.webhooks_allow_private` | in development `true`, in production `false` | Webhooks an Adressen im privaten Netz (z. B. Schul-App im LAN). Loopback und Link-Local bleiben immer gesperrt. Umgebungsvariable: `BIKE_WEBHOOKS_ALLOW_PRIVATE`. |
+
+Hintergrundläufe der Plattform: alle 2 s Simulation der Beispiel-Stellplätze; jede Minute abgelaufene Reservierungen
+beenden, Gateways auf „offline“ prüfen (> 5 min ohne Meldung → E-Mail), fällige Berichte versenden (täglich ab 07:00,
+Wochenbericht montags ab 07:00, Europe/Berlin); alle 10 min Aufbewahrungsfristen, Kamerabilder, Stellplatz-Tage.
+E-Mails gehen nur mit `mail.backend = "smtp"` wirklich hinaus (sonst stehen sie im Log).
+
 ## Raspberry Pi (je Station, beim Kunden)
 
 Empfohlen: **Agent-Installation per Kopplungscode** – Portal → Station → Einstellungen → *Gateway

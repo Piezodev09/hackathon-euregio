@@ -161,7 +161,11 @@ def test_install_script_and_bundle(env):
     assert hashlib.sha256(tgz.content).hexdigest() == b.sha256 == tgz.headers["x-content-sha256"]
     with tarfile.open(fileobj=io.BytesIO(tgz.content), mode="r:gz") as tar:
         names = sorted(m.name for m in tar.getmembers())
-        assert names == ["VERSION", "agent.py", "camera.py", "gateway.py", "sim-camera.jpg", "simulator.py"]
+        assert names == sorted(["VERSION", "agent.py", "camera.py", "gateway.py", "sim-camera.jpg", "simulator.py",
+                                # lokale Offline-Anzeige, flach abgelegt (ältere Agents entpacken nur flache Pakete)
+                                "display.html", "display.js", "display-i18n.js", "display.css", "tokens.css",
+                                "components.css", "fonts.css", "AtkinsonHyperlegible-400.woff2", "AtkinsonHyperlegible-700.woff2",
+                                "AtkinsonHyperlegibleMono.woff2", "OFL-AtkinsonHyperlegible.txt", "icon.svg"])
         assert all(m.isfile() and m.mtime == 0 for m in tar.getmembers())
     assert b.sha256 in anon.get("/install/agent.sha256").text
     # Reproduzierbar

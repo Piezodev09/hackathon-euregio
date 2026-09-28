@@ -223,13 +223,13 @@ def _stall_station(request: Request):
 @router.get("/api/v1/public/stall/status", dependencies=[read_limit])
 def public_stall(request: Request):
     """Ansicht für die Person am Stellplatz: Zustand, Preise, Hinweise – ohne Karten- oder Personendaten."""
-    from ..parking import tariff_for
+    from ..parking import prepaid, tariff_for
 
     core = core_of(request)
     st = _stall_station(request)
     plan = get_plan(core.db.scalar("SELECT plan FROM tenant WHERE id = ?", (st["tenant_id"],)))
     body = mon(request).status(st, public=True)
-    body.update(tariff=tariff_for(core, st), nfc=plan.nfc, reports=True)
+    body.update(tariff=tariff_for(core, st), nfc=plan.nfc, reports=True, prepaid=prepaid(core, st["tenant_id"]))
     return body
 
 

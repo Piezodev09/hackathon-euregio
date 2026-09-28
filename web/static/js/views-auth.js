@@ -110,24 +110,40 @@ export function viewLogin(rerender) {
 }
 
 // ---------------------------------------------------------------------- Registrieren
-export function viewRegister(rerender) {
+export function viewRegister(rerender, params) {
   const err = errorBox();
+  const want = params?.get("plan");
+  const plans = [["school", t("auth.plan_school"), t("auth.plan_school_hint")], ["pro", t("auth.plan_pro"), t("auth.plan_pro_hint")],
+    ["free", t("auth.plan_free"), t("auth.plan_free_hint")]];
+  const planPick = el("fieldset", { class: "field plan-pick" }, el("legend", {}, t("auth.plan")),
+    plans.map(([id, label, hint]) => el("label", { class: "choice-card" },
+      el("input", { type: "radio", name: "plan", value: id, checked: id === (["school", "pro", "free"].includes(want) ? want : "school") }),
+      el("span", {}, el("strong", {}, label), el("small", { class: "hint" }, hint)))));
   const pw = input("password", "password", { autocomplete: "new-password", minlength: String(meta.password_min_length), maxlength: "128" });
   const form = submitting(el("form", {},
-    el("p", { class: "muted" }, t("auth.register_lead")), err,
+    el("p", { class: "muted" }, t("auth.register_lead")),
+    el("ul", { class: "benefits small" }, ["auth.b1", "auth.b2", "auth.b3"].map((k) => el("li", {}, icon("ok"), t(k)))), err,
     field(t("auth.org_name"), input("text", "org_name", { maxlength: "100", autocomplete: "organization", autofocus: true })),
     field(t("auth.your_name"), input("text", "name", { maxlength: "100", autocomplete: "name" })),
     field(t("c.email"), input("email", "email", { autocomplete: "email", maxlength: "254" })),
     field(t("c.password"), pw, t("auth.pw_hint", { n: meta.password_min_length })), passwordMeter(pw, meta.password_min_length),
+    planPick,
     el("div", { class: "field" }, el("label", { class: "check" }, el("input", { type: "checkbox", name: "terms", required: true }),
       el("span", {}, t("auth.terms"), " ", el("a", { href: "/#privacy", target: "_blank", rel: "noopener" }, t("l.privacy"))))),
     el("button", { class: "btn primary", type: "submit" }, t("auth.register_btn"))), async (fd) => {
     err.hide();
     try {
-      await post("/api/v1/auth/register", { org_name: fd.get("org_name"), name: fd.get("name"), email: fd.get("email"),
-        password: fd.get("password"), accept_terms: fd.get("terms") === "on", locale: document.documentElement.lang || "de" });
-      go("/check-email");
-    } catch (e) { err.show(describeError(e)); }
+      const r = await post("/api/v1/auth/register", { org_name: fd.get("org_name"), name: fd.get("name"), email: fd.get("email"),
+        password: fd.get("password"), accept_terms: fd.get("terms") === "on", locale: document.documentElement.lang || "de",
+        plan: fd.get("plan") || "school" });
+      if (r && r.csrf_token) {
+        try { sessionStorage.removeItem("returnTo"); } catch (_) {}
+        afterLogin(r);  // sofort angemeldet – die Start-Tour beginnt auf der Übersicht
+      } else go("/check-email");
+    } catch (e) {
+      err.show(describeError(e));
+      if (e.code === "email_in_use") err.append(" ", el("a", { href: "#/login" }, t("auth.login_btn")), " · ", el("a", { href: "#/forgot" }, t("auth.forgot")));
+    }
   });
   return authCard(t("auth.register_title"), el("div", {}, form,
     el("div", { class: "auth-links" }, el("a", { href: "#/login" }, t("auth.have_account")))), rerender);
@@ -144,7 +160,7 @@ export function viewVerify(params, rerender) {
   const body = el("div", {}, el("p", {}, t("c.loading")));
   post("/api/v1/auth/verify-email", { token }).then(() => {
     keepToken("verify", null);
-    clear(body, el("div", { class: "alert-box ok", role: "status" }, t("auth.verify_ok")), el("a", { class: "btn primary", href: "#/login" }, t("auth.login_btn")));
+    clear(body, el("div", { class: "alert-box ok", role: "status" }, t("auth.verify_ok")), el("a", { class: "btn primary", href: "#/" }, t("auth.to_portal")));
   }).catch((e) => clear(body, el("div", { class: "alert-box error", role: "alert" }, describeError(e)), el("a", { class: "btn", href: "#/login" }, t("auth.login_btn"))));
   return authCard(t("auth.verify_title"), body, rerender);
 }

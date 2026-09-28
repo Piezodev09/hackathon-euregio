@@ -84,6 +84,10 @@ als Ziel), OWASP Top 10 und NIST SP 800-63B für Passwörter.
 | Wiederholte/verspätete NFC-Taps | Sequenz je Gerät (Doppelungen verworfen), Taps älter als 60 s verworfen |
 | Missbrauch der Stellplatz-Ansicht / „Problem melden“ | eigenes rotierbares Token, nur Lesen + Meldung, 3 Meldungen je 10 min je IP, max. 300 Zeichen, keine Personendaten |
 | Kamerabilder in falschen Händen | aus per Voreinstellung, Freigabe-Vermerk Pflicht, nur Admins, jeder Abruf im Audit-Log, Dateien `0600`, Löschung nach 1–72 h, `Cache-Control: no-store` |
+| Registrierung ohne E-Mail-Bestätigung (Standard) | bewusste Entscheidung für einen einfachen Start: gleiche Passwortregeln, Ratenbegrenzung (30 Registrierungen/h je IP), vorhandene Adresse → klare Meldung statt Zweitkonto; Bestätigung optional; strenger Modus per `auth.require_email_verification` |
+| Gestohlener API-Schlüssel | nur gehasht gespeichert, Rechte je Schlüssel (lesen/reservieren), kein Zugriff auf Konten/Einstellungen, widerrufbar, „zuletzt genutzt“ sichtbar, Ratenbegrenzung |
+| Webhook als Angriffsweg (SSRF) | Zieladresse wird bei Anlage **und** vor jeder Zustellung aufgelöst und geprüft; Loopback/Link-Local/Multicast immer gesperrt, private Netze nur nach Freigabe; keine Weiterleitungen; https in production; Nachricht signiert (HMAC-SHA256 mit Zeitstempel), Geheimnis AES-GCM-verschlüsselt gespeichert |
+| E-Mail-Flut durch Rütteln | Drosselung je Stellplatz und Art (10 min), Wartungsmodus unterdrückt Warnungen |
 | Bösartiger Bild-Upload | nur Geräte-Token der Station, nur `image/jpeg` mit JPEG-Signatur, max. 2 MB (Limit je Pfad), zufälliger Dateiname |
 
 ## Datenschutz
@@ -91,6 +95,8 @@ als Ziel), OWASP Top 10 und NIST SP 800-63B für Passwörter.
 - Messdaten: Stellplatz, Zustand, Erschütterungswert, Zeit, Quelle. Keine Personenerkennung.
 - **NFC:** gespeichert werden nur der HMAC der Karten-UID, eine frei gewählte Bezeichnung (kein Name nötig),
   Parkvorgänge (Stellplatz, Beginn, Ende, Betrag). Wer welche Karte besitzt, weiß nur die Organisation.
+- **Guthaben:** Buchungen (Aufladung, Gebühr, Korrektur) je Karte mit Zeit, Betrag, Notiz und handelnder Person im Portal.
+- **Reservierungen, Berichte, Webhooks** enthalten nur Kartenbezeichnungen und Stellplatzdaten – keine Namen, keine Karten-UIDs.
 - **Kamera (optional):** standardmäßig **aus**. Einschalten nur mit Tarif-Merkmal und eingetragener Freigabe
   (z. B. „Schulleitung, Datum“). Nur Einzelbilder bei einer Erschütterungswarnung oder auf Anforderung eines Admins,
   keine Videos, keine Speicherung auf dem Pi, Löschung nach 1–72 h (Standard 24 h), Ausschalten löscht sofort alle Bilder.

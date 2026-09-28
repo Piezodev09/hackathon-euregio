@@ -7,11 +7,15 @@
 
   const TOKEN = decodeURIComponent(location.hash.replace(/^#/, "")).trim();
   const params = new URLSearchParams(location.search);
+  // Lokaler Modus: Anzeige wird vom Agent auf dem Raspberry Pi ausgeliefert (http://127.0.0.1:8088/local).
+  // Der Agent liefert den Plattform-Status – oder bei Ausfall den Zustand direkt vom Sensor (gekennzeichnet).
+  const LOCAL = location.pathname === "/local" || params.has("local");
   const NS = 'xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"';
   const ICONS = {
     free: `<svg ${NS}><circle cx="24" cy="24" r="20" fill="none" stroke="currentColor" stroke-width="4"/><path d="M14 25l7 7 13-15" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
     occupied: `<svg ${NS}><circle cx="12" cy="32" r="8" fill="none" stroke="currentColor" stroke-width="3.5"/><circle cx="36" cy="32" r="8" fill="none" stroke="currentColor" stroke-width="3.5"/><path d="M12 32l8-14h11l5 14M20 18l7 14h-15M31 18l-2-6h5M17 13h6" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
     unknown: `<svg ${NS}><circle cx="24" cy="24" r="20" fill="none" stroke="currentColor" stroke-width="4" stroke-dasharray="7 4"/><path d="M18 19a6 6 0 1 1 8.4 5.5c-1.6.8-2.4 2-2.4 3.5v1.5" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><circle cx="24" cy="35.5" r="2.8" fill="currentColor"/></svg>`,
+    reserved: `<svg ${NS}><circle cx="24" cy="27" r="16" fill="none" stroke="currentColor" stroke-width="4"/><path d="M24 18v9l6 5" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M18 5h12M24 5v6" stroke="currentColor" stroke-width="4" stroke-linecap="round"/></svg>`,
     vib: `<svg ${NS}><path d="M4 24h7l4-10 6 20 6-24 6 20 4-6h7" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   };
   const parser = new DOMParser();
@@ -66,9 +70,10 @@
     }));
 
   async function poll() {
-    if (!TOKEN) { invalid = true; render(); return; }
+    if (!TOKEN && !LOCAL) { invalid = true; render(); return; }
     try {
-      const r = await fetch("/api/v1/public/display/status", { cache: "no-store", credentials: "omit", headers: { "X-Display-Token": TOKEN } });
+      const r = LOCAL ? await fetch("/local/status", { cache: "no-store" })
+        : await fetch("/api/v1/public/display/status", { cache: "no-store", credentials: "omit", headers: { "X-Display-Token": TOKEN } });
       if (r.status === 404) { invalid = true; last = null; }
       else if (r.ok) {
         invalid = false;
@@ -101,7 +106,8 @@
       state = last.state;
       reason = last.state === "unknown" ? last.unknown_reason || "no_data" : null;
     }
-    const sub = state === "unknown" ? t("reason_" + reason, staleAfterS) : t("sub_" + state);
+    const mins = last && last.reservation ? Math.max(1, Math.ceil((new Date(last.reservation.until) - Date.now()) / 60000)) : 0;
+    const sub = state === "unknown" ? t("reason_" + reason, staleAfterS) : state === "reserved" ? t("sub_reserved", mins) : t("sub_" + state);
     const box = document.getElementById("status");
     box.dataset.state = state;
     document.getElementById("status-word").textContent = t(state);
@@ -113,13 +119,22 @@
     }
     document.getElementById("simulated").hidden = !(last && last.simulated_data);
     document.getElementById("maint").hidden = !(last && last.maintenance && !connLost);
+    const closed = !connLost && last && last.closed;
+    const closedEl = document.getElementById("closed");
+    closedEl.hidden = !closed;
+    if (closed) {
+      const opens = closed.opens_at ? new Date(closed.opens_at).toLocaleString(lang, { weekday: "short", hour: "2-digit", minute: "2-digit" }) : null;
+      closedEl.textContent = (closed.reason === "closure" ? t("closed_closure", closed.note) : t("closed_hours")) + (opens ? " " + t("opens", opens) : "");
+    }
+    document.getElementById("offline").hidden = !(last && last.offline);
     document.getElementById("camera").hidden = !(last && last.camera_active);
     const eur = (c) => new Intl.NumberFormat(lang, { style: "currency", currency: "EUR" }).format((c || 0) / 100);
     const tap = !connLost && last && last.last_tap;
     const tapEl = document.getElementById("tap");
     tapEl.hidden = !tap || !window.I18N.de["tap_" + tap.result];
     if (tap && !tapEl.hidden) {
-      tapEl.textContent = t("tap_" + tap.result, eur(tap.amount_cents));
+      tapEl.textContent = t("tap_" + tap.result, eur(tap.amount_cents)) +
+        (tap.balance_cents !== null && tap.balance_cents !== undefined ? " · " + t("balance", eur(tap.balance_cents)) : "");
       tapEl.dataset.ok = String(tap.result === "checked_in" || tap.result === "checked_out");
     }
     const ses = !connLost && last && last.session;

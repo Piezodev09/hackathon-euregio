@@ -30,3 +30,5 @@ footer p { margin: 2px 0; }
 .session { font-size: clamp(16px, 2.4vmin, 26px); border-width: 2px; }
 .tap[data-ok="false"] { border-color: var(--warn-line); background: var(--warn-bg); color: var(--warn-ink); }
 #camera { font-weight: 700; color: var(--warn-ink); }
+.maint.closed { border-color: var(--reserved-line); }
+.maint.offline { border-color: var(--warn-line); background: var(--warn-bg); color: var(--warn-ink); }

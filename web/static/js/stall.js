@@ -6,6 +6,13 @@
 
   const I18N = {
     de: {
+      reserved: "RESERVIERT", sub_reserved: "Für eine Reservierung freigehalten – noch {m} min.",
+      closed_hours: "Geschlossen (außerhalb der Öffnungszeiten).", closed_closure: "Gesperrt: {n}.", closure: "Sperrzeit", opens: "Öffnet {t}.",
+      hours: "Öffnungszeiten", always_open: "Immer geöffnet", day_closed: "geschlossen",
+      d_mon: "Mo", d_tue: "Di", d_wed: "Mi", d_thu: "Do", d_fri: "Fr", d_sat: "Sa", d_sun: "So",
+      tap_closed: "Geschlossen – Einchecken gerade nicht möglich.", tap_reserved: "Der Stellplatz ist reserviert.",
+      tap_insufficient_balance: "Guthaben reicht nicht – bitte bei der Betreuung aufladen.", balance: "Guthaben {p}",
+      prepaid_hint: "Die Gebühr wird beim Auschecken vom Guthaben Ihrer Karte abgebucht. Aufladen bei der Betreuung.",
       free: "FREI", occupied: "BELEGT", unknown: "STATUS UNBEKANNT",
       sub_free: "Der Stellplatz ist frei.", sub_occupied: "Ein Fahrrad steht im Stellplatz.",
       r_no_data: "Noch keine Messung empfangen.", r_stale: "Letzte Messung ist zu alt.", r_sensor_error: "Sensor meldet einen Fehler.",
@@ -32,6 +39,13 @@
       privacy: "Keine Kamera-Livebilder, keine Namen. Angezeigt werden nur Zustand, Zeit und Preise.",
     },
     nl: {
+      reserved: "GERESERVEERD", sub_reserved: "Vrijgehouden voor een reservering – nog {m} min.",
+      closed_hours: "Gesloten (buiten de openingstijden).", closed_closure: "Afgesloten: {n}.", closure: "sluitingsperiode", opens: "Opent {t}.",
+      hours: "Openingstijden", always_open: "Altijd open", day_closed: "gesloten",
+      d_mon: "ma", d_tue: "di", d_wed: "wo", d_thu: "do", d_fri: "vr", d_sat: "za", d_sun: "zo",
+      tap_closed: "Gesloten – inchecken nu niet mogelijk.", tap_reserved: "De fietsplek is gereserveerd.",
+      tap_insufficient_balance: "Onvoldoende tegoed – laat uw kaart opwaarderen bij de begeleiding.", balance: "Tegoed {p}",
+      prepaid_hint: "Het bedrag wordt bij het uitchecken van het tegoed van uw kaart afgeschreven. Opwaarderen bij de begeleiding.",
       free: "VRIJ", occupied: "BEZET", unknown: "STATUS ONBEKEND",
       sub_free: "De fietsplek is vrij.", sub_occupied: "Er staat een fiets op de fietsplek.",
       r_no_data: "Nog geen meting ontvangen.", r_stale: "Laatste meting is te oud.", r_sensor_error: "Sensor meldt een fout.",
@@ -58,6 +72,13 @@
       privacy: "Geen live camerabeelden, geen namen. Alleen status, tijd en prijzen worden getoond.",
     },
     en: {
+      reserved: "RESERVED", sub_reserved: "Held for a reservation – {m} min left.",
+      closed_hours: "Closed (outside opening hours).", closed_closure: "Closed: {n}.", closure: "closure period", opens: "Opens {t}.",
+      hours: "Opening hours", always_open: "Always open", day_closed: "closed",
+      d_mon: "Mon", d_tue: "Tue", d_wed: "Wed", d_thu: "Thu", d_fri: "Fri", d_sat: "Sat", d_sun: "Sun",
+      tap_closed: "Closed – check-in not possible right now.", tap_reserved: "This stall is reserved.",
+      tap_insufficient_balance: "Insufficient balance – please top up with staff.", balance: "Balance {p}",
+      prepaid_hint: "The fee is deducted from your card balance when you check out. Top up with staff.",
       free: "FREE", occupied: "OCCUPIED", unknown: "STATUS UNKNOWN",
       sub_free: "The stall is free.", sub_occupied: "A bicycle is in the stall.",
       r_no_data: "No measurement received yet.", r_stale: "Last measurement is too old.", r_sensor_error: "Sensor reports a fault.",
@@ -89,6 +110,7 @@
   const ICONS = {
     free: `<svg ${NS}><circle cx="24" cy="24" r="20" fill="none" stroke="currentColor" stroke-width="4"/><path d="M14 25l7 7 13-15" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
     occupied: `<svg ${NS}><circle cx="12" cy="32" r="8" fill="none" stroke="currentColor" stroke-width="3.5"/><circle cx="36" cy="32" r="8" fill="none" stroke="currentColor" stroke-width="3.5"/><path d="M12 32l8-14h11l5 14M20 18l7 14h-15M31 18l-2-6h5M17 13h6" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    reserved: `<svg ${NS}><circle cx="24" cy="27" r="16" fill="none" stroke="currentColor" stroke-width="4"/><path d="M24 18v9l6 5" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M18 5h12M24 5v6" stroke="currentColor" stroke-width="4" stroke-linecap="round"/></svg>`,
     unknown: `<svg ${NS}><circle cx="24" cy="24" r="20" fill="none" stroke="currentColor" stroke-width="4" stroke-dasharray="7 4"/><path d="M18 19a6 6 0 1 1 8.4 5.5c-1.6.8-2.4 2-2.4 3.5v1.5" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><circle cx="24" cy="35.5" r="2.8" fill="currentColor"/></svg>`,
   };
   const parser = new DOMParser();
@@ -160,7 +182,8 @@
     }
     $("status").dataset.state = state;
     $("word").textContent = t(state);
-    $("sub").textContent = state === "unknown" ? t("r_" + reason) : t("sub_" + state);
+    const mins = last && last.reservation ? Math.max(1, Math.ceil((new Date(last.reservation.until) - Date.now()) / 60000)) : 0;
+    $("sub").textContent = state === "unknown" ? t("r_" + reason) : state === "reserved" ? t("sub_reserved", { m: mins }) : t("sub_" + state);
     if (shown !== state) {
       shown = state;
       $("status-icon").replaceChildren(document.importNode(parser.parseFromString(ICONS[state], "image/svg+xml").documentElement, true));
@@ -169,6 +192,24 @@
     }
     $("sim").hidden = !(last && last.simulated_data);
     $("maint").hidden = !(last && last.maintenance);
+    const closed = !stale && last && last.closed;
+    $("closed").hidden = !closed;
+    if (closed) {
+      const opens = closed.opens_at ? new Date(closed.opens_at).toLocaleString(lang, { weekday: "short", hour: "2-digit", minute: "2-digit" }) : null;
+      $("closed").textContent = (closed.reason === "closure" ? t("closed_closure", { n: closed.note || t("closure") }) : t("closed_hours")) +
+        (opens ? " " + t("opens", { t: opens }) : "");
+    }
+    $("hours-box").hidden = !last;
+    if (last) {
+      const days = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+      $("hours").replaceChildren(...(last.hours ? days.flatMap((d) => {
+        const dt = document.createElement("dt"); dt.textContent = t("d_" + d);
+        const dd = document.createElement("dd");
+        dd.textContent = (last.hours[d] || []).map((r) => `${r[0]}–${r[1]}`).join(", ") || t("day_closed");
+        return [dt, dd];
+      }) : [Object.assign(document.createElement("dd"), { textContent: t("always_open") })]));
+    }
+    $("price-hint").textContent = last && last.prepaid ? t("prepaid_hint") : t("price_hint");
     $("howto").hidden = !(last && last.nfc);
     $("camera").hidden = !(last && last.camera_active);
     $("price").textContent = last ? tariffText(last.tariff) : "–";
@@ -177,7 +218,8 @@
     if (s) $("session").textContent = t("session", { t: time(s.started_at), p: eur(s.amount_cents) });
     const tap = !stale && last && last.last_tap;
     $("tap").hidden = !tap || tap.result === "duplicate" || tap.result === "expired";
-    if (tap) $("tap").textContent = t("tap_" + tap.result, { p: eur(tap.amount_cents) });
+    if (tap) $("tap").textContent = t("tap_" + tap.result, { p: eur(tap.amount_cents) }) +
+      (tap.balance_cents !== null && tap.balance_cents !== undefined ? " · " + t("balance", { p: eur(tap.balance_cents) }) : "");
     const a = !stale && last && last.alert;
     $("alert").hidden = !a;
     if (a) $("alert").textContent = t("alert", { t: time(a.occurred_at) });

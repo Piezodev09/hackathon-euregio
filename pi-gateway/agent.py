@@ -37,6 +37,8 @@ import threading
 import time
 import urllib.error
 import urllib.request
+from datetime import datetime, timezone
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -349,6 +351,124 @@ def simulator_lines(stop: threading.Event):
             yield None
 
 
+# ---------------------------------------------------------------------- Lokale Anzeige (auch ohne Plattform)
+LOCAL_PORT = 8088
+STALE_S = 30
+SERVER_FRESH_S = 10
+# Dateien der Kiosk-Anzeige liegen flach im Agent-Paket (ältere Agents entpacken nur flache Pakete).
+LOCAL_FILES = {"display.html": "text/html; charset=utf-8", "display.js": "text/javascript; charset=utf-8",
+               "display-i18n.js": "text/javascript; charset=utf-8", "display.css": "text/css", "tokens.css": "text/css",
+               "components.css": "text/css", "fonts.css": "text/css", "AtkinsonHyperlegible-400.woff2": "font/woff2",
+               "AtkinsonHyperlegible-700.woff2": "font/woff2", "AtkinsonHyperlegibleMono.woff2": "font/woff2",
+               "icon.svg": "image/svg+xml"}
+
+
+def _iso(ts: float | None) -> str | None:
+    return None if ts is None else datetime.fromtimestamp(ts, tz=timezone.utc).isoformat(timespec="seconds")
+
+
+class LocalDisplay:
+    """Die Kiosk-Anzeige am Pi zeigt http://127.0.0.1:8088/local.
+
+    Normal: Status der Plattform (inkl. Reservierung, Öffnungszeiten, Check-in). Ist die Plattform länger als
+    10 s nicht erreichbar: Zustand direkt vom Sensor – deutlich als OFFLINE gekennzeichnet. Auch hier gilt:
+    keine gültige Messung seit 30 s oder Sensorfehler = STATUS UNBEKANNT, nie „frei“.
+    """
+
+    def __init__(self, agent: "Agent", files_dir: Path = HERE):
+        self.agent = agent
+        # Installiert: Dateien liegen neben agent.py. Entwicklung (Repository): unter web/.
+        web = files_dir.parent / "web"
+        self.search = [files_dir, web, web / "static" / "js", web / "static" / "css", web / "static" / "fonts", web / "static" / "img"]
+        self.api = Api(agent.state["api_url"], agent.state.get("ca_file"), agent.state.get("allow_http", False), timeout=2)
+        self.server_status: dict | None = None
+        self.server_ok_at: float | None = None
+        self._fetched_at = 0.0
+        self._lock = threading.Lock()
+
+    def _refresh(self) -> None:
+        now = time.monotonic()
+        with self._lock:
+            if now - self._fetched_at < 1.5:
+                return
+            self._fetched_at = now
+        try:
+            status, body = self.api.request("GET", "/api/v1/agent/status", token=self.agent.cfg.token)
+            if status == 200 and isinstance(body, dict) and "state" in body:
+                self.server_status, self.server_ok_at = body, time.monotonic()
+        except Exception:  # Netzwerk weg: lokale Daten übernehmen
+            pass
+
+    def status(self) -> dict:
+        self._refresh()
+        if self.server_status is not None and self.server_ok_at is not None and time.monotonic() - self.server_ok_at <= SERVER_FRESH_S:
+            return {**self.server_status, "offline": False}
+        last = self.agent.gw.last_local
+        now_mono = time.monotonic()
+        if last is None:
+            state, reason, wall = "unknown", "no_data", None
+        elif now_mono - last["at"] > STALE_S:
+            state, reason, wall = "unknown", "stale", last["wall"]
+        elif last["sensor_state"] != "ok" or last["occupied"] is None:
+            state, reason, wall = "unknown", "sensor_error", last["wall"]
+        else:
+            state, reason, wall = ("occupied" if last["occupied"] else "free"), None, last["wall"]
+        known = self.server_status or {}
+        return {"station_id": self.agent.state.get("station_id"), "display_name": known.get("display_name") or self.agent.state.get("station_name"),
+                "location": known.get("location", ""), "state": state, "unknown_reason": reason, "last_update": _iso(wall),
+                "age_s": None if last is None else round(now_mono - last["at"], 1), "stale_after_s": STALE_S, "poll_interval_s": 2,
+                "server_time": _iso(time.time()), "alert": None, "session": None, "last_tap": None, "reservation": None, "closed": None,
+                "maintenance": bool(known.get("maintenance")), "camera_active": bool(known.get("camera_active")),
+                "simulated_data": self.agent.cfg.source == "simulated", "offline": True}
+
+    def handler(self):
+        display = self
+
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, *args):  # keine Zugriffslogs
+                pass
+
+            def _send(self, code: int, body: bytes, ctype: str) -> None:
+                self.send_response(code)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self.end_headers()
+                self.wfile.write(body)
+
+            def do_GET(self):  # noqa: N802
+                path = self.path.split("?", 1)[0]
+                if path == "/local/status":
+                    return self._send(200, json.dumps(display.status()).encode(), "application/json")
+                if path in ("/", "/local"):
+                    if path == "/":
+                        self.send_response(302)
+                        self.send_header("Location", "/local")
+                        self.end_headers()
+                        return None
+                    name = "display.html"
+                else:
+                    name = path.rsplit("/", 1)[-1]
+                found = next((d / name for d in display.search if (d / name).is_file()), None) if name in LOCAL_FILES else None
+                if found is None:
+                    return self._send(404, b"not found", "text/plain")
+                return self._send(200, found.read_bytes(), LOCAL_FILES[name])
+
+        return Handler
+
+    def serve(self, stop: threading.Event, port: int = LOCAL_PORT) -> None:
+        try:
+            srv = ThreadingHTTPServer(("127.0.0.1", port), self.handler())
+        except OSError as exc:
+            log.warning("Lokale Anzeige nicht gestartet (Port %s): %s", port, exc)
+            return
+        srv.timeout = 1
+        log.info("Lokale Anzeige: http://127.0.0.1:%s/local", port)
+        while not stop.is_set():
+            srv.handle_request()
+        srv.server_close()
+
+
 # ---------------------------------------------------------------------- Agent
 class Agent:
     def __init__(self, state: State, clock=time.time):
@@ -472,6 +592,9 @@ class Agent:
         signal.signal(signal.SIGINT, lambda *_: self.stop.set())
         threading.Thread(target=self.gw.uplink.run, args=(self.stop,), daemon=True, name="uplink").start()
         threading.Thread(target=self.control_loop, daemon=True, name="control").start()
+        port = int(self.state.get("local_display_port", LOCAL_PORT))
+        if port:
+            threading.Thread(target=LocalDisplay(self).serve, args=(self.stop, port), daemon=True, name="local-display").start()
         cleanup_releases()
         log.info("Agent %s gestartet: Station %s (%s), Quelle %s", VERSION, self.state["station_id"],
                  self.state.get("station_name"), self.state.get("source"))
