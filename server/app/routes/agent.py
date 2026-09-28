@@ -10,7 +10,6 @@ from pydantic import Field
 
 from ..agent_bundle import version_tuple
 from ..core import Ctx, client_ip, core_of, limit, require
-from ..plans import get_plan
 from ..schemas import Name, Strict
 from ..security import hash_token, new_id, new_token
 from ..service import iso
@@ -282,7 +281,7 @@ def heartbeat(body: HeartbeatIn, request: Request, dev=Depends(require_device)):
     latest = bundle(request)
     update = None
     newer = version_tuple(latest.version) > version_tuple(body.agent_version)
-    if newer and (st["auto_update"] or dev["update_requested"]):
+    if newer and body.self_update and (st["auto_update"] or dev["update_requested"]):
         update = {"version": latest.version, "sha256": latest.sha256, "url": f"{core.s.base_url}/install/agent.tar.gz"}
     core.db.execute(
         "UPDATE device SET last_heartbeat_at = ?, health = ?, agent_version = ?, hostname = COALESCE(NULLIF(?, ''), hostname), "
@@ -290,8 +289,12 @@ def heartbeat(body: HeartbeatIn, request: Request, dev=Depends(require_device)):
         "update_requested = CASE WHEN ? THEN 0 ELSE update_requested END WHERE id = ?",
         (now, json.dumps(health), body.agent_version or None, body.hostname, body.os_info, body.source,
          int(not newer), dev["id"]))
+    mon = request.app.state.monitoring
+    if dev["offline_notified"]:
+        mon.gateway_back(dev)
+    # Open movement warnings of this station: the agent shows them locally (e.g. as MQTT/Home Assistant sensors).
     return {"station_id": st["id"], **_agent_config(core, st), "commands": commands, "update": update,
-            "latest_version": latest.version, "server_time": iso(now)}
+            "latest_version": latest.version, "server_time": iso(now), "alerts": mon.open_alert_keys(st["id"])}
 
 
 @router.post("/api/v1/agent/rotate-token")

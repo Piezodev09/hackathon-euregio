@@ -26,6 +26,8 @@ flowchart LR
 | Raspberry Pi | validate lines, map slots, assign sequence numbers, buffer up to 500 messages, upload via HTTPS; if the Arduino is silent for > 15 s report every slot as a sensor error; report the network state back to the Arduino; heartbeat, remote configuration, self-update | `agent/bikeagent/` |
 | Proxmox LXC (or VM / Docker) | FastAPI: accept measurements, derive states, evaluate rule + AI, SQLite, serve portal, kiosk and landing page | `server/`, `web/` |
 | Browser | live occupancy, recommendation, warnings, timestamps, history; customer portal with roles, kiosk display via display link | `web/` |
+| Home Assistant (optional) | entities per space via MQTT discovery – from the Pi agent, the add-on on the HA machine (instead of a Pi) or the agent container | `agent/bikeagent/mqtt.py`, `integrations/home-assistant/` |
+| Other systems (optional) | read-only REST API with API keys; signed webhooks for warnings and gateway outages, delivered in a background thread with retries | `server/app/routes/integrations.py`, `server/app/webhooks.py` |
 
 ## Data flow
 
@@ -39,6 +41,11 @@ Bike is parked
        +-> SQLite: measurement (+ event on sensor fault / warning)
        +-> occupied + vibration: compute features -> rule and AI evaluate
   -> the dashboard polls the status every 2 s
+       +-> new warning / sensor fault -> webhook dispatcher (queue, 3 attempts, SSRF-checked, signed)
+  -> in parallel the agent publishes the raw occupancy to MQTT (LAN, works without the platform)
+
+Maintenance loop (every 60 s): a paired gateway without heartbeat for > 3 min -> exactly one
+"gateway_offline" event (+ webhook); its next heartbeat -> "gateway_online", the warning closes itself.
 ```
 
 ## States

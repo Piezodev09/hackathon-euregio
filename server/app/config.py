@@ -77,6 +77,7 @@ class Settings:
     # landing page / legal
     timezone: str = "Europe/Berlin"            # local time for weekly occupancy patterns
     landing_demo_display_token: str = ""       # overrides the demo station set by "cli demo"
+    addon_repository: str = "https://github.com/piezodev09/hackathon-euregio"  # Home Assistant add-on repository
     operator_name: str = ""
     operator_address: str = ""
     contact_email: str = ""
@@ -244,6 +245,8 @@ def load_settings(config_path: str | os.PathLike | None = None) -> Settings:
         webhook_allow_private=_flag(env("BIKE_WEBHOOK_ALLOW_PRIVATE", sec.get("webhook_allow_private", False))),
         timezone=str(env("BIKE_TIMEZONE", app.get("timezone", "Europe/Berlin"))),
         landing_demo_display_token=str(env("BIKE_LANDING_DEMO_TOKEN", app.get("landing_demo_display_token", ""))),
+        addon_repository=str(env("BIKE_ADDON_REPOSITORY", app.get("addon_repository",
+                                                                  "https://github.com/piezodev09/hackathon-euregio"))),
         operator_name=str(env("BIKE_OPERATOR_NAME", legal.get("operator_name", ""))).strip(),
         operator_address=str(env("BIKE_OPERATOR_ADDRESS", legal.get("address", ""))).strip(),
         contact_email=str(env("BIKE_CONTACT_EMAIL", legal.get("contact_email", ""))).strip(),

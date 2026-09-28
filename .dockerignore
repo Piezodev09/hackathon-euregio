@@ -1,0 +1,12 @@
+.git
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/*.db
+**/*.db-*
+**/*.datakey
+**/.setup-token
+server/.dev-demo.env
+agent/state
+ml/data/*.csv
+node_modules

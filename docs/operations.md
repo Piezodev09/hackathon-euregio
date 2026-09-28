@@ -42,7 +42,7 @@ At the end you get:
 ```
 
 Without Proxmox (VM, bare metal Debian 12): `sudo deploy/install-server.sh` in a checkout.
-Docker is an alternative, see [`deploy/docker/`](../deploy/docker/).
+Docker is an alternative, see [below](#10-docker-instead-of-an-lxc).
 
 ## 2. First steps in the browser
 
@@ -137,3 +137,28 @@ automatically after the plan period (Free 7, School 30, Pro 90 days), the audit 
 
 `scripts/dev.sh` starts platform, demo customer and a simulated agent on one computer
 (HTTP on 127.0.0.1, console mail – development only).
+
+## 10. Docker instead of an LXC
+
+For hosts that already run Docker (NAS, existing server). Same platform, same security defaults:
+
+```bash
+BIKE_PUBLIC_HOSTS=192.168.1.50,bikestation.local docker compose -f deploy/docker/compose.yaml up -d --build
+docker compose -f deploy/docker/compose.yaml logs platform     # CA fingerprint + one-time setup link
+```
+
+| Item | Container |
+|---|---|
+| Image | `deploy/docker/Dockerfile`: Python 3.12 slim, user `bikestation` (uid 10001), demo AI model trained on simulated data at build time (`--build-arg WITH_ML=0` skips the AI) |
+| Data | volume `/data`: `bike_station.db`, `datakey` (**back it up separately**), `tls/` (own CA + server certificate, created with `cryptography` on the first start; renewed when `BIKE_PUBLIC_HOSTS` changes or 30 days before expiry) |
+| Port | container 8443 → host 443 (`BIKE_PUBLIC_PORT` if you map another port) |
+| Configuration | `BIKE_PUBLIC_HOSTS` (IPs/names, first = URL), all other `BIKE_*` variables as in `server.env` (e.g. `BIKE_SIGNUP`, `BIKE_OPERATOR_*`, SMTP); mail backend `none` and LAN webhooks allowed by default |
+| Own certificate | `BIKE_TLS_CERT` / `BIKE_TLS_KEY` (mounted files) instead of the generated CA |
+| CLI | `docker compose -f deploy/docker/compose.yaml exec platform bike-station demo --reset` (same commands as `bike-station` on the LXC) |
+| Health | Docker `HEALTHCHECK` on `/health` |
+| Backup | `docker compose exec platform python -c "import sqlite3; sqlite3.connect('/data/bike_station.db').backup(sqlite3.connect('/data/backup.db'))"`, or stop and copy the volume |
+
+Demo without hardware: create a pairing code in the portal, then
+`BIKE_PAIRING_CODE=XXXXX-XXXXX BIKE_CA_FINGERPRINT='SHA-256 …' docker compose -f deploy/docker/compose.yaml --profile demo up -d agent`
+starts a simulated agent (clearly labelled as simulated) that reaches the platform as `https://platform:8443`.
+Webhook receivers in the same Docker network are reachable because `BIKE_WEBHOOK_ALLOW_PRIVATE=1`.

@@ -19,6 +19,11 @@ log = logging.getLogger(__name__)
 
 # How long an unacknowledged warning is shown.
 ALERT_DISPLAY_S = 300
+# A paired gateway without heartbeat for this long counts as offline (3 missed heartbeats).
+OFFLINE_AFTER_S = 180
+# Event kind -> webhook event type.
+EVENT_TYPE = {"unusual_movement": "alert", "sensor_fault": "sensor_fault", "gateway_offline": "gateway_offline",
+              "gateway_online": "gateway_online"}
 # Demo requests from the landing page are deleted after this time (data minimisation).
 LEAD_RETENTION_S = 180 * 86400
 
@@ -44,6 +49,7 @@ class Monitoring:
     def __init__(self, core: Core):
         self.core = core
         self.db = core.db
+        self.on_event = None  # callback(event dict) for webhooks; set by main.py
         s = core.s
         self.params = DetectorParams(
             window_s=s.window_s, peak_threshold=s.peak_threshold, min_peaks=s.min_peaks, grace_period_s=s.grace_period_s
@@ -114,12 +120,71 @@ class Monitoring:
         )
         return last is not None and t - last < self.core.s.cooldown_s
 
-    def _create_event(self, station, slot, kind, severity, detector, t, source, detail) -> None:
+    def _create_event(self, station, slot, kind, severity, detector, t, source, detail, device=None) -> str:
+        eid = new_id("evt")
         self.db.execute(
-            "INSERT INTO event (id, tenant_id, station_id, slot_id, kind, severity, detector, detail, occurred_at, source) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?)",
-            (new_id("evt"), station["tenant_id"], station["id"], slot["id"], kind, severity, detector, detail, t, source),
+            "INSERT INTO event (id, tenant_id, station_id, slot_id, device_id, kind, severity, detector, detail, occurred_at, source) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (eid, station["tenant_id"], station["id"], slot["id"] if slot else None, device["id"] if device else None,
+             kind, severity, detector, detail, t, source),
         )
+        if severity != "shadow" and self.on_event is not None:
+            try:
+                self.on_event({
+                    "id": eid, "type": EVENT_TYPE.get(kind, kind), "tenant_id": station["tenant_id"], "occurred_at": iso(t),
+                    "station": {"id": station["id"], "name": station["name"]}, "slot": slot["key"] if slot else None,
+                    "severity": severity, "detector": detector, "simulated": source == "simulated",
+                    "device": device["name"] if device else None,
+                })
+            except Exception:  # notifications must never break ingestion
+                log.exception("Event notification failed")
+        return eid
+
+    # ------------------------------------------------------------------ gateways
+    def check_gateways(self) -> dict:
+        """Raise exactly one ``gateway_offline`` event per outage and a ``gateway_online`` info on return.
+
+        A paired gateway counts as offline after OFFLINE_AFTER_S without a heartbeat. Runs every minute.
+        """
+        now = self.core.clock()
+        out = {"offline": 0, "online": 0}
+        rows = self.db.all(
+            "SELECT d.*, t.status AS tenant_status FROM device d JOIN tenant t ON t.id = d.tenant_id "
+            "WHERE d.enrolled_at IS NOT NULL AND d.revoked_at IS NULL AND d.last_heartbeat_at IS NOT NULL "
+            "AND d.offline_notified = 0 AND d.last_heartbeat_at < ? AND t.status = 'active'", (now - OFFLINE_AFTER_S,))
+        for d in rows:
+            st = self.db.one("SELECT * FROM station WHERE id = ?", (d["station_id"],))
+            # Claim the device first so concurrent runs never raise the event twice.
+            if self.db.execute("UPDATE device SET offline_notified = 1 WHERE id = ? AND offline_notified = 0",
+                               (d["id"],)).rowcount != 1:
+                continue
+            source = "simulated" if d["source"] in ("simulator", "stdin") else "live"
+            self._create_event(st, None, "gateway_offline", "warning", None, now, source,
+                               json.dumps({"device": d["name"], "last_heartbeat": iso(d["last_heartbeat_at"])}), device=d)
+            out["offline"] += 1
+        return out
+
+    def gateway_back(self, device) -> None:
+        """Called by the heartbeat of a gateway that was reported offline."""
+        if self.db.execute("UPDATE device SET offline_notified = 0 WHERE id = ? AND offline_notified = 1",
+                           (device["id"],)).rowcount != 1:
+            return
+        now = self.core.clock()
+        # The outage is over: close its warning automatically (shown as "resolved automatically").
+        self.db.execute("UPDATE event SET acknowledged_at = ?, acknowledged_by = 'system' WHERE device_id = ? "
+                        "AND kind = 'gateway_offline' AND acknowledged_at IS NULL", (now, device["id"]))
+        st = self.db.one("SELECT * FROM station WHERE id = ?", (device["station_id"],))
+        source = "simulated" if device["source"] in ("simulator", "stdin") else "live"
+        self._create_event(st, None, "gateway_online", "info", None, now, source,
+                           json.dumps({"device": device["name"]}), device=device)
+
+    def open_alert_keys(self, station_id: str) -> list[str]:
+        """Slot keys with an unacknowledged movement warning (shown for ALERT_DISPLAY_S) - for the agent/MQTT."""
+        rows = self.db.all(
+            "SELECT DISTINCT s.key FROM event e JOIN slot s ON s.id = e.slot_id WHERE e.station_id = ? "
+            "AND e.kind = 'unusual_movement' AND e.severity = 'warning' AND e.acknowledged_at IS NULL AND e.occurred_at >= ? "
+            "ORDER BY s.key", (station_id, self.core.clock() - ALERT_DISPLAY_S))
+        return [r["key"] for r in rows]
 
     def _latest(self, slot_id: str):
         return self.db.one(
@@ -199,8 +264,9 @@ class Monitoring:
     # ------------------------------------------------------------------ events
     def events(self, tenant_id: str, station_id: str | None = None, limit: int = 100,
                include_shadow: bool = False, open_only: bool = False) -> list[dict]:
-        sql = ("SELECT e.*, s.key AS slot_key, st.name AS station_name FROM event e "
-               "LEFT JOIN slot s ON s.id = e.slot_id JOIN station st ON st.id = e.station_id WHERE e.tenant_id = ?")
+        sql = ("SELECT e.*, s.key AS slot_key, st.name AS station_name, d.name AS device_name FROM event e "
+               "LEFT JOIN slot s ON s.id = e.slot_id LEFT JOIN device d ON d.id = e.device_id "
+               "JOIN station st ON st.id = e.station_id WHERE e.tenant_id = ?")
         params: list = [tenant_id]
         if station_id:
             sql += " AND e.station_id = ?"
@@ -217,6 +283,7 @@ class Monitoring:
                 "station_id": r["station_id"],
                 "station_name": r["station_name"],
                 "slot_id": r["slot_key"],
+                "device": r["device_name"],
                 "kind": r["kind"],
                 "severity": r["severity"],
                 "detector": r["detector"],

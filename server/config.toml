@@ -18,6 +18,8 @@ timezone = "Europe/Berlin"
 # Display token of the station shown live on the landing page. Usually set by
 # "python -m app.cli demo --reset"; this value (or BIKE_LANDING_DEMO_TOKEN) overrides it.
 landing_demo_display_token = ""
+# Git URL of the Home Assistant add-on repository shown in the portal (Integrations).
+addon_repository = "https://github.com/piezodev09/hackathon-euregio"
 
 [legal]
 # Shown on /legal/imprint and /legal/privacy. Fill in before going public! (BIKE_OPERATOR_NAME, ...)

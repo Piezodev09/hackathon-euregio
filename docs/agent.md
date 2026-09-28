@@ -98,6 +98,58 @@ Known limitation: the checksum protects integrity relative to the platform. Sign
 offline key (e.g. Ed25519) would be the next step so that even a compromised platform could not
 push updates.
 
+## Home Assistant and MQTT
+
+The agent can additionally publish the station to a local MQTT broker with **Home Assistant MQTT
+discovery**. Occupancy comes straight from the Arduino, so Home Assistant keeps working in the LAN
+even when the platform or the internet is unreachable; movement warnings come from the platform
+(heartbeat response `alerts`) and are mirrored.
+
+| Entity (per station = one device) | Topic (`<base>` = `bikestation/<station id>`) | Values |
+|---|---|---|
+| `binary_sensor` *Space A1* (occupancy) | `<base>/slot/A1/state` | `occupied` / `free` / `unknown` (→ HA *unknown*, never free) |
+| `binary_sensor` *Space A1 unusual movement* (problem) | `<base>/slot/A1/alert` | `ON` / `OFF` |
+| `sensor` *Free spaces* | `<base>/free` | number of free spaces with a valid reading |
+| `binary_sensor` *Arduino connected*, `sensor` *Gateway CPU temperature* (diagnostic) | `<base>/gateway` | JSON `{"arduino", "cpu_temp_c", "platform"}` |
+| availability of all entities | `<base>/availability` | `online` / `offline` (retained, MQTT last will) |
+
+Discovery configs are retained under `homeassistant/<component>/bikestation_<station id>/…/config`
+and re-sent after every reconnect and whenever the spaces change. The heartbeat reports
+`mqtt_connected`, shown as an *MQTT* badge in the portal.
+
+There are three ways to run it:
+
+1. **Raspberry Pi gateway** (this page): pass `--mqtt-host 192.168.1.20 --mqtt-user bikestation`
+   (password in `BIKE_MQTT_PASSWORD`) to `agent.sh`, or enable it later:
+   ```bash
+   sudo apt install -y python3-paho-mqtt
+   sudo BIKE_MQTT_PASSWORD='…' bike-agent mqtt --mqtt-host 192.168.1.20 --mqtt-username bikestation
+   sudo systemctl restart bike-agent            # disable again: sudo bike-agent mqtt --disable
+   ```
+2. **Home Assistant add-on** – the Arduino is plugged into the Home Assistant machine, no Pi needed:
+   [`integrations/home-assistant/`](../integrations/home-assistant/). The add-on takes the broker
+   credentials from the Supervisor (`services: mqtt:want`) and pins the platform CA by fingerprint.
+3. **Docker** – any Linux host with the Arduino on USB (below).
+
+## Docker
+
+`agent/Dockerfile` (Python 3.12 slim, user `bikeagent` uid 10001 in group `dialout`, state in the
+volume `/data`, self-update off – update by pulling/building a new image):
+
+```bash
+docker build -t bike-station-agent agent/
+docker run -d --name bike-agent --restart unless-stopped -v bike-agent:/data \
+  --device /dev/ttyACM0 \
+  -e BIKE_PLATFORM_URL=https://192.168.1.50 -e BIKE_PAIRING_CODE=XXXXX-XXXXX \
+  -e BIKE_CA_FINGERPRINT='SHA-256 81:7F:…' \
+  -e BIKE_MQTT_HOST=192.168.1.20 -e BIKE_MQTT_USERNAME=bikestation -e BIKE_MQTT_PASSWORD='…' \
+  bike-station-agent
+```
+
+The pairing code is used on the first start only (the token is stored in `/data`). Other variables:
+`BIKE_SOURCE=simulator`, `BIKE_SERIAL_PORT`, `BIKE_NAME`, `BIKE_MQTT_PORT`, `BIKE_MQTT_TLS=1`.
+`deploy/docker/compose.yaml` contains the same agent as a demo service next to the platform.
+
 ## Rolling out a new agent version (operator)
 
 1. Change `agent/bikeagent/`, run the tests (`cd agent && python3 -m pytest -q`).
@@ -105,13 +157,17 @@ push updates.
 3. Restart the platform – the package is built at start-up.
 4. Agents with automatic updates update themselves with the next heartbeat; others show
    "update available" and can be updated with one click.
+5. Run `scripts/sync-ha-addon.sh` so the Home Assistant add-on gets the same code and version
+   (a test fails otherwise). Docker images and the add-on are updated by rebuilding, not by self-update.
 
 ## Troubleshooting
 
 | Symptom | Check |
 |---|---|
 | Gateway stays offline | `systemctl status bike-agent`, `journalctl -u bike-agent -f`; network/firewall to the platform (port 443) |
-| "Arduino ✗" | USB cable, `ls /dev/ttyACM* /dev/ttyUSB*`, port in `sudo bike-agent status`; pair again with `--serial-port` |
+| "Arduino ✗" | USB cable, `ls /dev/serial/by-id/ /dev/ttyACM* /dev/ttyUSB*`, port in `sudo bike-agent status`; pair again with `--serial-port` (`auto` prefers the stable `/dev/serial/by-id/…Arduino…` name) |
+| "MQTT ✗" | broker address/port, user and password (`sudo bike-agent status` shows the host, never the password); `journalctl -u bike-agent` shows "MQTT connection refused" with the reason |
+| `CA fingerprint mismatch` | wrong platform address or fingerprint; copy it again (`SHA-256 81:7F:…`, with or without the label and colons) |
 | "token rejected" | device revoked in the portal? Pair again: create a new code, `sudo sh agent.sh --code …` |
 | Pairing fails | code expired/used → create a new one; the Pi's clock does not matter |
 | Update hangs | `sudo bike-agent rollback`, then `sudo systemctl restart bike-agent` |

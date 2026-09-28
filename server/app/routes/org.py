@@ -232,6 +232,8 @@ def export(request: Request, ctx: Ctx = Depends(require("owner"))):
         "measurements": rows("SELECT m.station_id, m.slot_id, m.server_time, m.occupied, m.vibration_score, m.sensor_state, m.source "
                              "FROM measurement m JOIN station st ON st.id = m.station_id WHERE st.tenant_id = ? ORDER BY m.server_time"),
         "audit_log": rows("SELECT at, actor, action, target, ip, detail FROM audit_log WHERE tenant_id = ? ORDER BY at"),
+        "api_keys": rows("SELECT id, name, prefix, created_at, created_by, last_used_at, revoked_at FROM api_key WHERE tenant_id = ?"),
+        "webhooks": rows("SELECT id, name, url, kind, events, enabled, created_at, created_by FROM webhook WHERE tenant_id = ?"),
     }
     core.audit("org_exported", tenant_id=tid, user_id=ctx.user["id"], actor=ctx.actor, ip=ctx.ip)
     return Response(json.dumps(data, ensure_ascii=False, indent=1), media_type="application/json",

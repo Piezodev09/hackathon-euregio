@@ -1,0 +1,6 @@
+# Home Assistant add-on repository (Settings -> Add-ons -> Add-on store -> ⋮ -> Repositories).
+# Home Assistant needs this file at the root of the Git repository; the add-on itself lives in
+# integrations/home-assistant/bike-station-agent/ (see integrations/home-assistant/README.md).
+name: Smart Bike Station
+url: https://github.com/piezodev09/hackathon-euregio
+maintainer: Smart Bike Station team

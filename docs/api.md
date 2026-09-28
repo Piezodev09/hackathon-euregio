@@ -1,7 +1,8 @@
 # API and data format
 
 All paths are below `/api/v1`. Browsers use the session cookie + `X-CSRF-Token` (from `/auth/me`
-or the sign-in response). Gateways use `Authorization: Bearer <device token>`.
+or the sign-in response). Gateways use `Authorization: Bearer <device token>`. Other systems use a
+read-only **API key**: `Authorization: Bearer bsk_…` (see [Integrations](#integrations-integrations)).
 Errors: `{"detail": "<code>"}` or `{"detail": {"code": …}}`; the codes are listed in
 `web/static/js/i18n.js` (`err.*`).
 
@@ -26,7 +27,7 @@ Arduino → Pi (JSON lines): `{"slot_id":"A","presence":1,"vibration":12,"seq":1
 |---|---|---|
 | `GET /install/agent.sh` · `/install/agent.tar.gz` · `/install/agent.sha256` · `/install/ca.crt` | install script (embeds the CA), package, checksums, platform CA | public |
 | `POST /agent/enroll` `{code, hostname, agent_version, os_info, source}` | pairing → `{device_id, token, station_id, slot_map, config_version}` | one-time code |
-| `POST /agent/heartbeat` `{agent_version, serial_connected, buffer_len, cpu_temp_c, …}` | report health → `{slot_map, config_version, commands, update}` | device token |
+| `POST /agent/heartbeat` `{agent_version, serial_connected, buffer_len, cpu_temp_c, self_update, mqtt_connected, …}` | report health → `{slot_map, config_version, commands, update, alerts}` (`alerts`: space keys with an open movement warning, mirrored to MQTT; `update` only when `self_update` is true) | device token |
 | `POST /agent/rotate-token` | new token (old one valid for 15 min) | device token |
 | `POST /stations/{id}/enrollments` · `GET` · `DELETE …/{eid}` | pairing codes (portal) | admin |
 | `POST /stations/{id}/devices/{dev}/command` `{command: restart\|rotate_token\|update}` | remote command | admin |
@@ -80,6 +81,59 @@ server `POST /auth/password/forgot` answers `{"status": "ask_admin"}`.
 | `POST /stations/{id}/display-link` | admin |
 | `GET /events?station_id&open_only&include_shadow` · `POST /events/{id}/ack` | viewer · operator |
 | `GET /public/display/status` · `GET /public/display/qr` (header `X-Display-Token`) | public, read only |
+
+Routes marked *viewer* in this table that only read (`GET /stations`, `/stations/{id}`, `/status`,
+`/occupancy`, `/occupancy/week`, `/events`) also accept an API key.
+
+## Integrations (`/integrations`)
+
+| Method/path | Purpose | Role |
+|---|---|---|
+| `GET /integrations/api-keys` · `POST` `{name}` · `DELETE …/{id}` | read-only API keys (max. 20 active); the key `bsk_…` is returned **once**, stored as SHA-256 hash | admin |
+| `GET /integrations/webhooks` · `POST` `{name, url, kind, events}` · `PATCH …/{id}` `{name, url, events, enabled}` · `DELETE …/{id}` | outgoing webhooks (max. 10); the signing secret `whsec_…` is returned **once**; the URL is returned masked | admin |
+| `POST /integrations/webhooks/{id}/test` | send a test event now → `{ok, result}` (e.g. `HTTP 204`, `https_required`, `TimeoutError`) | admin |
+| `GET /integrations/info` | `api_base`, `platform_url`, `ca_fingerprint`, `addon_repository`, `webhook_allow_private` | viewer |
+
+API keys: rate limit 20 requests/s per key (burst 60); an invalid or revoked key → `401 invalid_api_key`
+(audited as `rejected_api_key`); a suspended organisation → `403 tenant_suspended`.
+
+```bash
+curl --cacert ca.crt -H "Authorization: Bearer bsk_…" https://192.168.1.50/api/v1/stations/st_…/status
+```
+
+### Webhooks
+
+`kind`: `generic` (full JSON, signed), `slack`, `teams` (`{"text": …}`), `discord` (`{"content": …}`).
+`events` (default `alert`, `gateway_offline`):
+
+| Event | When |
+|---|---|
+| `alert` | unusual movement at a space (live data; a suspicion, not proof) |
+| `sensor_fault` | a sensor reports an error – the space shows *unknown* |
+| `gateway_offline` | a paired gateway sent no heartbeat for more than 3 minutes (exactly one event per outage) |
+| `gateway_online` | the gateway is back; the open `gateway_offline` warning is closed automatically |
+
+Generic body and headers:
+
+```http
+POST /hook HTTP/1.1
+Content-Type: application/json
+User-Agent: SmartBikeStation-Webhook/1.0
+X-BikeStation-Event: gateway_offline
+X-BikeStation-Delivery: evt_liEnUSF3vPeCe6ip
+X-BikeStation-Signature: t=1790610906,v1=e64f7d96…
+
+{"id": "evt_liEnUSF3vPeCe6ip", "type": "gateway_offline", "occurred_at": "2026-09-28T15:55:06+00:00",
+ "station": {"id": "st_…", "name": "Schoolyard"}, "slot": null, "severity": "warning", "detector": null,
+ "simulated": false, "device": "raspi-yard",
+ "text": "Gateway offline at Schoolyard: no contact for more than 3 minutes (raspi-yard). Spaces show as unknown."}
+```
+
+Signature: `v1 = hex(HMAC-SHA256(secret, "<t>." + raw body))`. Receivers compare in constant time and
+reject timestamps older than 5 minutes (reference: `verify_signature` in `server/app/webhooks.py`).
+Delivery: 5 s timeout, no redirects, 3 attempts (after 2 s and 10 s); `last_status`/`last_error` are
+shown in the portal. Targets are checked on save and before every delivery (see
+[security-privacy.md](security-privacy.md#webhooks-and-api-keys)).
 
 ## Platform operator (`/platform`, platform admin with 2FA)
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
-from ..core import Ctx, client_ip, core_of, limit, require
+from ..core import Ctx, client_ip, core_of, limit, require, require_reader
 from ..plans import get_plan
 from ..schemas import DeviceIn, MeasurementBatchIn, MeasurementIn, SlotIn, SlotPatch, StationIn, StationPatch
 from ..qr import qr_data_uri
@@ -45,7 +45,7 @@ def _station_out(core, st, m: Monitoring | None = None) -> dict:
 
 # ---------------------------------------------------------------------- stations
 @router.get("/api/v1/stations")
-def list_stations(request: Request, ctx: Ctx = Depends(require("viewer"))):
+def list_stations(request: Request, ctx: Ctx = Depends(require_reader())):
     core = core_of(request)
     rows = core.db.all("SELECT * FROM station WHERE tenant_id = ? ORDER BY created_at", (ctx.tenant_id,))
     return {"stations": [_station_out(core, r, mon(request)) for r in rows]}
@@ -74,7 +74,7 @@ def create_station(body: StationIn, request: Request, ctx: Ctx = Depends(require
 
 
 @router.get("/api/v1/stations/{station_id}")
-def get_station(station_id: str, request: Request, ctx: Ctx = Depends(require("viewer"))):
+def get_station(station_id: str, request: Request, ctx: Ctx = Depends(require_reader())):
     core = core_of(request)
     st = _station(core, ctx, station_id)
     out = _station_out(core, st)
@@ -161,28 +161,28 @@ def delete_slot(station_id: str, slot_id: str, request: Request, ctx: Ctx = Depe
 
 # ---------------------------------------------------------------------- live data
 @router.get("/api/v1/stations/{station_id}/status")
-def station_status(station_id: str, request: Request, ctx: Ctx = Depends(require("viewer"))):
+def station_status(station_id: str, request: Request, ctx: Ctx = Depends(require_reader())):
     core = core_of(request)
     return mon(request).status(_station(core, ctx, station_id))
 
 
 @router.get("/api/v1/stations/{station_id}/occupancy")
 def station_occupancy(station_id: str, request: Request, hours: int = Query(24, ge=1, le=168),
-                      ctx: Ctx = Depends(require("viewer"))):
+                      ctx: Ctx = Depends(require_reader())):
     core = core_of(request)
     return mon(request).occupancy_summary(_station(core, ctx, station_id), hours)
 
 
 @router.get("/api/v1/stations/{station_id}/occupancy/week")
 def station_occupancy_week(station_id: str, request: Request, days: int = Query(7, ge=1, le=28),
-                           ctx: Ctx = Depends(require("viewer"))):
+                           ctx: Ctx = Depends(require_reader())):
     core = core_of(request)
     return mon(request).occupancy_week(_station(core, ctx, station_id), days)
 
 
 @router.get("/api/v1/events")
 def list_events(request: Request, station_id: str | None = Query(None, max_length=64), limit: int = Query(100, ge=1, le=500),
-                include_shadow: bool = False, open_only: bool = False, ctx: Ctx = Depends(require("viewer"))):
+                include_shadow: bool = False, open_only: bool = False, ctx: Ctx = Depends(require_reader())):
     return {"events": mon(request).events(ctx.tenant_id, station_id, limit, include_shadow, open_only)}
 
 

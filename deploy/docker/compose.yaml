@@ -1,0 +1,47 @@
+# Smart Bike Station with Docker Compose (alternative to the Proxmox LXC).
+#   BIKE_PUBLIC_HOSTS=192.168.1.50,bikestation.local docker compose -f deploy/docker/compose.yaml up -d --build
+#   docker compose -f deploy/docker/compose.yaml logs platform    # CA fingerprint + one-time setup link
+# Demo without hardware (simulated agent, clearly labelled):
+#   docker compose -f deploy/docker/compose.yaml --profile demo up -d   (needs BIKE_PAIRING_CODE from the portal)
+name: bike-station
+services:
+  platform:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    image: bike-station-platform
+    restart: unless-stopped
+    ports:
+      - "${BIKE_PUBLIC_PORT:-443}:8443"
+    environment:
+      BIKE_PUBLIC_HOSTS: ${BIKE_PUBLIC_HOSTS:-localhost}
+      BIKE_PUBLIC_PORT: ${BIKE_PUBLIC_PORT:-443}
+      BIKE_EXTRA_HOSTS: platform          # name of this service for the demo agent
+      BIKE_MAIL_BACKEND: ${BIKE_MAIL_BACKEND:-none}
+      BIKE_OPERATOR_NAME: ${BIKE_OPERATOR_NAME:-}
+      BIKE_OPERATOR_ADDRESS: ${BIKE_OPERATOR_ADDRESS:-}
+      BIKE_CONTACT_EMAIL: ${BIKE_CONTACT_EMAIL:-}
+    volumes:
+      - platform-data:/data
+
+  agent:
+    profiles: ["demo"]
+    build:
+      context: ../../agent
+    image: bike-station-agent
+    restart: unless-stopped
+    depends_on: [platform]
+    environment:
+      BIKE_PLATFORM_URL: https://platform:8443
+      BIKE_PAIRING_CODE: ${BIKE_PAIRING_CODE:-}
+      BIKE_CA_FINGERPRINT: ${BIKE_CA_FINGERPRINT:-}
+      BIKE_SOURCE: simulator
+      BIKE_NAME: Docker demo agent
+    volumes:
+      - agent-data:/data
+    # With a real Arduino instead of the simulator:
+    # devices: ["/dev/ttyACM0:/dev/ttyACM0"]
+
+volumes:
+  platform-data:
+  agent-data:

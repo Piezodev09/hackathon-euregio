@@ -20,8 +20,9 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from .config import Settings, load_settings
 from .core import Core
 from .demo import DemoFeeder
+from .webhooks import Dispatcher
 from .agent_bundle import AgentBundle, ca_fingerprint
-from .routes import agent, auth, org, platform, public, stations
+from .routes import agent, auth, integrations, org, platform, public, stations
 from .service import Monitoring
 
 log = logging.getLogger("bike_station")
@@ -73,15 +74,25 @@ def create_app(settings: Settings | None = None, clock: Callable[[], float] = ti
     core = Core(settings, clock=clock)
     monitoring = Monitoring(core)
 
+    dispatcher = Dispatcher(core)
+    monitoring.on_event = dispatcher.publish
+
     async def maintenance_loop():
+        """Every minute: gateway offline check. Every hour: retention (data minimisation)."""
+        minute = 0
         while True:
             try:
-                d = monitoring.purge()
-                if any(d.values()):
-                    log.info("Retention: deleted %s", d)
+                g = await asyncio.to_thread(monitoring.check_gateways)
+                if g["offline"]:
+                    log.warning("Gateways offline: %d", g["offline"])
+                if minute % 60 == 0:
+                    d = await asyncio.to_thread(monitoring.purge)
+                    if any(d.values()):
+                        log.info("Retention: deleted %s", d)
             except Exception:
                 log.exception("Maintenance run failed")
-            await asyncio.sleep(3600)
+            minute += 1
+            await asyncio.sleep(60)
 
     feeder = DemoFeeder(core, monitoring)
 
@@ -99,12 +110,14 @@ def create_app(settings: Settings | None = None, clock: Callable[[], float] = ti
         yield
         for task in tasks:
             task.cancel()
+        dispatcher.stop()
         core.db.close()
 
     app = FastAPI(title=f"{settings.product_name} API", version="1.0.0", lifespan=lifespan,
                   docs_url=None, redoc_url=None, openapi_url=None)  # no public API docs / debug output
     app.state.core = core
     app.state.monitoring = monitoring
+    app.state.webhooks = dispatcher
     ca_pem = settings.ca_file.read_text() if settings.ca_file else ""
     app.state.ca_pem = ca_pem
     app.state.ca_fingerprint = ca_fingerprint(ca_pem) if ca_pem else None
@@ -165,7 +178,7 @@ def create_app(settings: Settings | None = None, clock: Callable[[], float] = ti
         return JSONResponse({"detail": "internal_error"}, 500)
 
     # ------------------------------------------------------------------ routers
-    for r in (auth.router, org.router, stations.router, agent.router, platform.router, public.router):
+    for r in (auth.router, org.router, stations.router, agent.router, platform.router, public.router, integrations.router):
         app.include_router(r)
 
     @app.get("/health", include_in_schema=False)

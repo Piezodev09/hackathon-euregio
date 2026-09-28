@@ -1,0 +1,8 @@
+# Built locally by the Supervisor (no prebuilt image). Same base as agent/Dockerfile.
+build_from:
+  aarch64: arm64v8/python:3.12-slim
+  amd64: amd64/python:3.12-slim
+  armv7: arm32v7/python:3.12-slim
+labels:
+  org.opencontainers.image.title: Smart Bike Station agent
+  org.opencontainers.image.source: https://github.com/piezodev09/hackathon-euregio

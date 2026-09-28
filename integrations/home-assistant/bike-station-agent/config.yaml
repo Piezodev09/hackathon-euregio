@@ -1,0 +1,34 @@
+# Home Assistant add-on: runs the Smart Bike Station agent on the Home Assistant machine.
+# The Arduino is plugged into Home Assistant via USB; spaces appear as MQTT entities and on the platform.
+# Code in bikeagent/ is a copy of agent/bikeagent - update it with scripts/sync-ha-addon.sh, never by hand.
+name: Smart Bike Station agent
+version: "1.0.0"
+slug: bike_station_agent
+description: Bike spaces from the station's Arduino in Home Assistant (MQTT) and on your Smart Bike Station platform
+url: https://github.com/piezodev09/hackathon-euregio/tree/main/integrations/home-assistant/bike-station-agent
+arch:
+  - aarch64
+  - amd64
+  - armv7
+startup: application
+boot: auto
+uart: true
+usb: true
+services:
+  - mqtt:want
+options:
+  platform_url: ""
+  pairing_code: ""
+  ca_fingerprint: ""
+  source: serial
+  serial_port: auto
+  device_name: Home Assistant
+  mqtt: true
+schema:
+  platform_url: match(^(https://\S+)?$)
+  pairing_code: password?
+  ca_fingerprint: str?
+  source: list(serial|simulator)
+  serial_port: str
+  device_name: str?
+  mqtt: bool

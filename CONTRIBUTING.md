@@ -18,7 +18,7 @@ Shell scripts must pass `sh -n` / `bash -n` and [ShellCheck](https://www.shellch
 (`pip install shellcheck-py`):
 
 ```bash
-shellcheck scripts/*.sh deploy/*.sh deploy/proxmox/*.sh
+shellcheck scripts/*.sh deploy/*.sh deploy/proxmox/*.sh deploy/docker/*.sh agent/*.sh integrations/home-assistant/*/run.sh
 bash deploy/proxmox/selftest.sh     # create-lxc.sh against fake Proxmox commands
 ```
 
@@ -30,6 +30,15 @@ shellcheck -s sh /tmp/agent.sh
 ```
 
 Run everything locally without hardware: `scripts/dev.sh` (see README).
+
+Docker images (from the repository root):
+
+```bash
+docker build -t bike-station-agent agent/
+docker build -f deploy/docker/Dockerfile -t bike-station-platform .
+# Home Assistant builds the add-on itself; to try it:
+docker build --build-arg BUILD_FROM=python:3.12-slim -t bike-station-ha-addon integrations/home-assistant/bike-station-agent
+```
 
 ## Conventions
 
@@ -51,13 +60,14 @@ tokens: text and filled buttons use `--primary` (#2563EB, 5.2:1), form controls 
 (≥ 3:1). Check pages with axe-core (0 serious/critical findings, light and dark mode).
 
 The social preview `web/static/img/og.png` is rendered from `scripts/og/og.html`:
-`node scripts/render-og.mjs` (needs Playwright).
+`node scripts/render-og.mjs` (needs Playwright). The Home Assistant add-on icon/logo come from
+`web/static/img/icon.svg`: `node scripts/render-ha-addon-images.mjs`.
 
 ## Versions
 
 | What | Where | When to bump |
 |---|---|---|
-| Agent | `agent/VERSION` | every change in `agent/bikeagent/` that should reach the Pis; agents with automatic updates install it with their next heartbeat |
+| Agent | `agent/VERSION` | every change in `agent/bikeagent/` that should reach the Pis; agents with automatic updates install it with their next heartbeat. Then run `scripts/sync-ha-addon.sh` (copies the code into the Home Assistant add-on and sets its version; `agent/tests/test_homeassistant.py` fails while they differ) |
 | Database schema | `SCHEMA_VERSION` in `server/app/db.py` | every schema change; add an idempotent `_migrate_<n>_to_<n+1>` step and a migration test |
 
 ## Translations

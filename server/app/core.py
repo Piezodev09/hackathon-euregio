@@ -292,6 +292,63 @@ def require(min_role: str | None = "viewer", *, platform: bool = False, allow_mf
     return dep
 
 
+@dataclass
+class KeyCtx:
+    """Request context of a read-only API key (integrations such as dashboards or Home Assistant REST)."""
+
+    tenant: sqlite3.Row
+    key_id: str
+    prefix: str
+    ip: str
+    role: str = "viewer"
+    user: None = None
+
+    @property
+    def tenant_id(self) -> str:
+        return self.tenant["id"]
+
+    @property
+    def actor(self) -> str:
+        return f"api-key:{self.prefix}"
+
+
+API_KEY_PREFIX = "bsk_"
+
+
+def load_key_ctx(request: Request, key: str) -> KeyCtx:
+    core = core_of(request)
+    ip = client_ip(request)
+    if not core.read_limiter.allow(f"k:{key[:12]}"):
+        raise HTTPException(429, "rate_limited", headers={"Retry-After": "5"})
+    row = None
+    if 20 <= len(key) <= 200:
+        row = core.db.one("SELECT k.*, t.status AS tenant_status FROM api_key k JOIN tenant t ON t.id = k.tenant_id "
+                          "WHERE k.key_hash = ? AND k.revoked_at IS NULL", (hash_token(key),))
+    if row is None:
+        core.audit("rejected_api_key", ip=ip, detail={"path": request.url.path})
+        raise HTTPException(401, "invalid_api_key", headers={"WWW-Authenticate": "Bearer"})
+    if row["tenant_status"] != "active":
+        raise HTTPException(403, "tenant_suspended")
+    now = core.clock()
+    if row["last_used_at"] is None or now - row["last_used_at"] > 60 or row["last_ip"] != ip:
+        core.db.execute("UPDATE api_key SET last_used_at = ?, last_ip = ? WHERE id = ?", (now, ip, row["id"]))
+    tenant = core.db.one("SELECT * FROM tenant WHERE id = ?", (row["tenant_id"],))
+    return KeyCtx(tenant, row["id"], row["prefix"], ip)
+
+
+def require_reader():
+    """Read access: a signed-in user (any role) OR ``Authorization: Bearer bsk_…`` (API key of the tenant)."""
+    session_dep = require("viewer")
+
+    def dep(request: Request):
+        auth = request.headers.get("authorization", "")
+        if auth[:7].lower() == "bearer " and auth[7:].strip().startswith(API_KEY_PREFIX):
+            return load_key_ctx(request, auth[7:].strip())
+        return session_dep(request)
+
+    return dep
+
+
 def limit(limiter_name: str, key_prefix: str = ""):
     def dep(request: Request) -> None:
         core = core_of(request)

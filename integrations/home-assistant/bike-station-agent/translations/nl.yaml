@@ -1,0 +1,22 @@
+configuration:
+  platform_url:
+    name: Platform-URL
+    description: Adres van je Smart Bike Station-platform, bijv. https://192.168.1.50 (moet met https:// beginnen).
+  pairing_code:
+    name: Koppelcode
+    description: Eenmalige code uit het portaal (Station → Instellingen → Gateway instellen). Alleen nodig bij de eerste start; een nieuwe code koppelt opnieuw.
+  ca_fingerprint:
+    name: CA-vingerafdruk
+    description: Alleen voor een zelf gehost platform met een eigen certificaatautoriteit. Kopieer de SHA-256-vingerafdruk uit het portaal of de uitvoer van het installatiescript.
+  source:
+    name: Gegevensbron
+    description: "serial: Arduino via USB aangesloten. simulator: gesimuleerde metingen voor een demo (duidelijk als gesimuleerd gemarkeerd)."
+  serial_port:
+    name: Seriële poort
+    description: "auto vindt de Arduino (bij voorkeur /dev/serial/by-id/...). Of vul een pad in, bijv. /dev/ttyACM0."
+  device_name:
+    name: Apparaatnaam
+    description: Naam van deze gateway in het portaal.
+  mqtt:
+    name: Home Assistant-entiteiten via MQTT
+    description: Publiceer plaatsen, vrije plaatsen, waarschuwingen en gateway-status via MQTT-discovery. Vereist een MQTT-broker (Mosquitto-add-on).

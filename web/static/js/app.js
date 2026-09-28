@@ -6,6 +6,7 @@ import { state, can, clearTimers, go } from "./state.js";
 import * as A from "./views-auth.js";
 import * as S from "./views-station.js";
 import * as M from "./views-admin.js";
+import { viewIntegrations } from "./views-integrations.js";
 
 const root = document.getElementById("root");
 const PUBLIC = new Set(["login", "register", "check-email", "pending", "verify", "forgot", "reset", "invite", "setup"]);
@@ -21,7 +22,8 @@ function navItems() {
   const items = [];
   if (me.tenant) {
     items.push(["section", t("nav.s_monitor")], ["/", t("nav.overview"), "◉"], ["/events", t("nav.events"), "⚠"]);
-    items.push(["section", t("nav.s_admin")], ["/stations", t("nav.stations"), "▦"], ["/devices", t("nav.devices"), "⌁"], ["/team", t("nav.team"), "☺"]);
+    items.push(["section", t("nav.s_admin")], ["/stations", t("nav.stations"), "▦"], ["/devices", t("nav.devices"), "⌁"],
+      ["/integrations", t("nav.integrations"), "⇄"], ["/team", t("nav.team"), "☺"]);
     if (can("admin")) items.push(["/org", t("nav.org"), "⌂"], ["/audit", t("nav.audit"), "≡"]);
     items.push(["/billing", t("nav.billing"), "€"]);
   }
@@ -128,6 +130,7 @@ export async function route() {
     if (can("admin")) actions = el("a", { class: "btn primary", href: "#/stations/new" }, "+ " + t("ov.new_station"));
   } else if (name === "events") { title = t("ev.title"); view = S.viewEvents(); }
   else if (name === "devices") { title = t("nav.devices"); view = S.viewDevices(); }
+  else if (name === "integrations") { title = t("int.title"); view = viewIntegrations(); }
   else if (name === "team") { title = t("tm.title"); view = M.viewTeam(); }
   else if (name === "security") { title = t("sec.title"); view = M.viewSecurity(rerender); }
   else if (name === "org") { title = t("org.title"); view = can("admin") ? M.viewOrg() : deny(); }

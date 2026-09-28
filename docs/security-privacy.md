@@ -47,6 +47,23 @@ NIST SP 800-63B for passwords.
 - Plan limits (stations, spaces, users, features) are enforced on the server.
 - Platform admins are separate from tenants and need 2FA.
 
+### Webhooks and API keys
+- **API keys** (`bsk_…`, 256 bit) are **read-only** by construction: only `GET` routes accept them
+  (stations, status, occupancy, events); every write route requires a signed-in user with CSRF token.
+  Stored as SHA-256 hash, shown once, scoped to one organisation, revocable, `last_used_at`/IP
+  recorded, rate-limited per key; failed attempts are audited (`rejected_api_key`).
+- **Webhook targets (SSRF protection)**: the host is resolved on save *and* before every delivery;
+  the connection goes to exactly the checked IP (no DNS rebinding between check and use). Link-local
+  (incl. cloud metadata `169.254.169.254`), multicast, unspecified and `0.0.0.0/8` are always refused;
+  loopback/private/reserved only with `BIKE_WEBHOOK_ALLOW_PRIVATE=1` (default only for self-hosting
+  in a LAN, e.g. to reach Home Assistant). `http://` is accepted only for such private targets.
+- No redirects are followed, 5 s timeout, at most 1 KB of the response is read and never shown.
+- **Signature** `X-BikeStation-Signature: t=…,v1=HMAC-SHA256(secret, "t.body")` with a per-webhook
+  secret (`whsec_…`, shown once, stored AES-GCM-encrypted with the data key, bound to the webhook ID).
+- Chat webhook URLs contain credentials: the API returns them masked (`https://hooks.slack.com/services/T000/B…`),
+  the audit log never records them; only the owner's data export contains the full URL.
+- Payloads contain no personal data: station, space, event type, time, gateway name.
+
 ### Transport, headers, input
 | Measure | Implementation |
 |---|---|
@@ -84,6 +101,9 @@ NIST SP 800-63B for passwords.
 | Guessed pairing code | 50 bit, 30 min, single use, rate limit per IP |
 | Database leak | passwords with scrypt, tokens hashed, 2FA secrets AES-GCM |
 | Abuse of display links | read only, limited data, rotatable, rate limit |
+| Webhook used to scan the internal network (SSRF) | resolve + pin IP, private ranges blocked by default, no redirects, response not shown, tests `test_integrations.py` |
+| Leaked API key | read only, one organisation, revocable, hash only, rate limit, last use visible |
+| Forged webhook call to a receiver | HMAC signature with timestamp (replay window 5 min) |
 | Misinterpretation of a warning | factual wording, no reference to persons |
 
 ## Privacy

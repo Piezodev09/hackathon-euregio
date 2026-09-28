@@ -18,7 +18,7 @@ def setup_station(env, plan="school"):
 
 def enroll(env, owner, sid, **extra):
     code = owner.post(f"/api/v1/stations/{sid}/enrollments", {"name": "Pi yard"}).json()["code"]
-    r = env.client().c.post("/api/v1/agent/enroll", json={"code": code, "hostname": "raspi-hof", "agent_version": "0.9.0",
+    r = env.client().c.post("/api/v1/agent/enroll", json={"code": code, "hostname": "raspi-yard", "agent_version": "0.9.0",
                                                           "os_info": "Raspberry Pi OS", **extra})
     return code, r
 
@@ -40,7 +40,7 @@ def test_enrollment_code_flow(env):
     # the code is stored only as a hash
     assert env.core.db.scalar("SELECT COUNT(*) FROM enrollment WHERE code_hash = ?", (data["code"],)) == 0
     # lower case / without hyphen is accepted
-    r = env.client().c.post("/api/v1/agent/enroll", json={"code": data["code"].replace("-", "").lower(), "hostname": "raspi-hof"})
+    r = env.client().c.post("/api/v1/agent/enroll", json={"code": data["code"].replace("-", "").lower(), "hostname": "raspi-yard"})
     assert r.status_code == 200, r.text
     e = r.json()
     assert e["station_id"] == sid and e["slot_map"] == {"A": "A", "B": "B"} and e["token"].startswith("bsd_")
@@ -48,7 +48,7 @@ def test_enrollment_code_flow(env):
     again = env.client().c.post("/api/v1/agent/enroll", json={"code": data["code"]})
     assert again.status_code == 400
     devices = owner.get(f"/api/v1/stations/{sid}/devices").json()["devices"]
-    assert devices[0]["managed"] and devices[0]["hostname"] == "raspi-hof"
+    assert devices[0]["managed"] and devices[0]["hostname"] == "raspi-yard"
     # the token works for measurements of this station
     assert Device(owner, sid, e["token"]).send("A", occupied=True).status_code == 202
 

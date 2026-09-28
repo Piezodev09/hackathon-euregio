@@ -18,7 +18,7 @@ import time
 
 from .config import load_settings
 from .core import Core
-from .security import hash_password, hash_token, new_id, new_token, password_problems
+from .security import hash_password, hash_token, new_id, password_problems
 from .service import Monitoring
 
 

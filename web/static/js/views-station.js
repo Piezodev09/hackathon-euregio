@@ -148,14 +148,15 @@ function eventsTable(events, reload, { showStation = true } = {}) {
       .filter(Boolean).map((h) => el("th", { scope: "col" }, h)))),
     el("tbody", {}, events.map((e) => {
       let ack = "–";
-      if (e.acknowledged_at) ack = `${fmtDateTime(e.acknowledged_at)} · ${e.acknowledged_by || ""}`;
+      if (e.acknowledged_at) ack = `${fmtDateTime(e.acknowledged_at)} · ${e.acknowledged_by === "system" ? t("ev.auto_resolved") : e.acknowledged_by || ""}`;
       else if (e.severity === "warning" && can("operator")) {
         ack = el("button", { class: "btn small", type: "button", onclick: async () => {
           try { await post(`/api/v1/events/${e.id}/ack`); reload(); } catch (err) { toast(describeError(err), "error"); }
         } }, t("ev.ack_btn"));
       }
       return el("tr", { class: e.severity },
-        el("td", {}, fmtDateTime(e.occurred_at)), showStation ? el("td", {}, e.station_name) : null, el("td", {}, e.slot_id),
+        el("td", {}, fmtDateTime(e.occurred_at)), showStation ? el("td", {}, e.station_name) : null,
+        el("td", {}, e.slot_id || (e.device ? el("span", { class: "small muted" }, "⌁ " + e.device) : "–")),
         el("td", {}, t("ev.k_" + e.kind), e.simulated ? el("span", { class: "badge sim" }, " " + t("c.simulated")) : null),
         el("td", {}, e.detector ? t("ev.d_" + e.detector) + (e.severity === "shadow" ? " " + t("ev.shadow") : "") : "–"),
         el("td", {}, ack));
@@ -331,7 +332,12 @@ export function viewStationSettings(id, setTitle) {
             el("p", { class: "mono small" }, "SHA-256 ", r.install.ca_fingerprint)) : null,
           c.oneliner ? el("details", {}, el("summary", {}, t("ag.oneliner")), el("p", { class: "small muted" }, t("ag.oneliner_hint")),
             cmdRow("", c.oneliner)) : null,
-          el("p", { class: "small muted" }, t("ag.simulator_hint"), " ", el("code", { class: "mono" }, "--source simulator"))));
+          el("p", { class: "small muted" }, t("ag.simulator_hint"), " ", el("code", { class: "mono" }, "--source simulator")),
+          el("details", {}, el("summary", {}, t("ag.alt_title")), el("p", { class: "small" }, t("ag.alt_hint")),
+            cmdRow("platform_url / BIKE_PLATFORM_URL", r.install.platform_url),
+            cmdRow("pairing_code / BIKE_PAIRING_CODE", r.code),
+            r.install.ca_fingerprint ? cmdRow("ca_fingerprint / BIKE_CA_FINGERPRINT", `SHA-256 ${r.install.ca_fingerprint}`) : null,
+            el("p", { class: "small" }, el("a", { href: "#/integrations" }, t("ag.alt_link"))))));
         loadAll();
       } catch (e) { toast(describeError(e), "error"); }
     } }, "+ " + t("ag.setup"));
@@ -445,6 +451,9 @@ export function healthSummary(d) {
   const parts = [];
   if (h.serial_connected !== undefined && h.serial_connected !== null) {
     parts.push(el("span", { class: h.serial_connected ? "badge ok" : "badge err" }, (h.serial_connected ? "✓ " : "✗ ") + t("ag.arduino")));
+  }
+  if (h.mqtt_connected !== undefined && h.mqtt_connected !== null) {
+    parts.push(el("span", { class: h.mqtt_connected ? "badge ok" : "badge err" }, (h.mqtt_connected ? "✓ " : "✗ ") + "MQTT"));
   }
   if (d.source === "simulator") parts.push(el("span", { class: "badge sim" }, t("c.simulated")));
   const facts = [];

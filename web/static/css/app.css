@@ -93,7 +93,7 @@ h1 { font-size: var(--fs-30); } h2 { font-size: var(--fs-24); } h3 { font-size: 
 p { margin: 0 0 var(--sp-3); }
 .muted { color: var(--muted); }
 .small { font-size: var(--fs-14); }
-.mono { font-family: var(--font-mono); word-break: break-all; }
+.mono { font-family: var(--font-mono); overflow-wrap: break-word; }  /* break long tokens only where needed */
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .skip { position: absolute; left: -9999px; }
 .skip:focus { left: var(--sp-4); top: var(--sp-2); z-index: 100; background: var(--surface); padding: var(--sp-2) var(--sp-3); border-radius: var(--radius-sm); }
@@ -118,7 +118,7 @@ p { margin: 0 0 var(--sp-3); }
 label { display: block; font-weight: 600; margin: 0 0 var(--sp-1); }
 .field { margin-bottom: var(--sp-4); }
 .hint { font-size: var(--fs-14); color: var(--muted); margin-top: var(--sp-1); }
-input[type=text], input[type=email], input[type=password], input[type=number], select, textarea {
+input[type=text], input[type=email], input[type=password], input[type=number], input[type=url], select, textarea {
   width: 100%; font: inherit; padding: var(--sp-2) var(--sp-3); min-height: var(--control-h); border-radius: var(--radius-sm);
   border: 1px solid var(--control-border); background: var(--surface); color: var(--fg);
 }
@@ -147,7 +147,7 @@ input[aria-invalid=true], textarea[aria-invalid=true] { border-color: var(--dang
 .badge.err { background: var(--occ-bg); color: var(--occ-fg); border-color: var(--occ-bd); }
 .badge.sim { background: var(--warn-bg); color: var(--warn-fg); border: 1px dashed var(--warn-bd); }
 
-.table-wrap { overflow-x: auto; }
+.table-wrap { overflow-x: auto; position: relative; }  /* also contains absolutely positioned (visually hidden) children */
 table { border-collapse: collapse; width: 100%; }
 th, td { text-align: left; padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--border); vertical-align: middle; }
 th { font-size: var(--fs-12); color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
@@ -241,8 +241,19 @@ dialog::backdrop { background: rgba(0,0,0,.45); backdrop-filter: blur(2px); }
 .enroll-code { font-family: var(--font-mono); font-size: var(--fs-30); font-weight: 600; letter-spacing: .12em; margin: var(--sp-1) 0; }
 .steps { padding-left: 1.3em; }
 .steps li { margin-bottom: var(--sp-3); }
-.cmd { display: block; flex: 1 1 320px; white-space: pre-wrap; word-break: break-all; }
+.cmd { display: block; flex: 1 1 320px; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 details.advanced { margin-top: var(--sp-5); border-top: 1px solid var(--border); padding-top: var(--sp-3); }
+pre.cmd { margin: 0; font-size: var(--fs-14); }
+
+/* ---------- integrations ---------- */
+fieldset { border: 0; padding: 0; margin: 0 0 var(--sp-4); min-width: 0; }
+legend { font-weight: 600; margin-bottom: var(--sp-2); padding: 0; }
+.grid.tight { gap: var(--sp-2) var(--sp-4); }
+.form-inline { align-items: flex-end; }
+.form-inline .field { flex: 1 1 18rem; margin-bottom: 0; }
+.subsection { margin-top: var(--sp-5); border-top: 1px solid var(--border); padding-top: var(--sp-4); }
+.url-cell { max-width: 32ch; overflow-wrap: anywhere; }
+.wrap-any { overflow-wrap: anywhere; }         /* long paths may break so narrow tables need no scrolling */
 details summary { cursor: pointer; font-weight: 600; }
 .pre { white-space: pre-wrap; max-width: 40ch; }
 
