@@ -208,3 +208,47 @@ def test_migration_to_single_stall(tmp_path):
     db = Database(p)
     rows = [tuple(r) for r in db.all("SELECT id, key, position FROM slot")]
     assert rows == [("b", "A", 1)] and db.scalar("PRAGMA user_version") == 4
+
+
+def test_pinned_install_commands_for_self_signed_cert(env, tmp_path):
+    """Selbst signiertes Zertifikat: Portal liefert Befehle mit angeheftetem Schlüssel (curl --pinnedpubkey)."""
+    import datetime
+    import ipaddress
+
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.x509.oid import NameOID
+
+    from app.agent_bundle import AgentBundle
+    from app.tlsinfo import TlsInfo
+
+    key = ec.generate_private_key(ec.SECP256R1())
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "192.168.0.114")])
+    now = datetime.datetime(2026, 1, 1)
+    cert = (x509.CertificateBuilder().subject_name(name).issuer_name(name).public_key(key.public_key())
+            .serial_number(1).not_valid_before(now).not_valid_after(now + datetime.timedelta(days=10))
+            .add_extension(x509.SubjectAlternativeName([x509.IPAddress(ipaddress.ip_address("192.168.0.114"))]), False)
+            .sign(key, hashes.SHA256()))
+    path = tmp_path / "server.crt"
+    path.write_bytes(cert.public_bytes(serialization.Encoding.PEM))
+    tls = TlsInfo.load(path)
+    assert tls.pin.startswith("sha256//") and tls.self_signed and "192.168.0.114" in tls.names
+    assert TlsInfo.load(tmp_path / "missing.crt") is None
+
+    env.app.state.tls = tls
+    env.app.state.agent_bundle = AgentBundle.build("http://testserver", pin=tls.pin)
+    owner, sid = setup_station(env)
+    r = owner.post(f"/api/v1/stations/{sid}/enrollments", {"name": "Pi"}).json()["install"]
+    assert r["tls"]["pin"] == tls.pin and r["tls"]["fingerprint"] == tls.fingerprint
+    assert f"--pinnedpubkey '{tls.pin}'" in r["commands"]["fetch_cert"]
+    assert "--cacert bike-ca.crt" in r["commands"]["download"]
+    assert r["commands"]["install"].endswith("--ca-file bike-ca.crt")
+    assert f"--pinnedpubkey '{tls.pin}'" in r["commands"]["oneliner"]
+    crt = env.client().get("/install/server.crt")
+    assert crt.status_code == 200 and crt.content == path.read_bytes()
+    assert f'PIN="{tls.pin}"'.encode() in env.client().get("/install/agent.sh").content
+
+
+def test_no_cert_endpoint_without_tls(env):
+    assert env.client().get("/install/server.crt").status_code == 404

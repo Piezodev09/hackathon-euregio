@@ -174,6 +174,8 @@ export const STRINGS = {
     "st.usage_sim": "Enthält simulierte Daten.",
     "ss.new_hint": "Jeder Stellplatz ist ein einzelner, vorne offener Fahrradstellplatz mit eigenem Gateway (Raspberry Pi).",
     "l.preview_sim": "BEISPIEL",
+    "ag.step_cert": "Plattform-Zertifikat laden – nur wenn der Schlüssel exakt passt (angeheftet):",
+    "ag.tls_hint": "Die Plattform nutzt ein eigenes Zertifikat. Fingerabdruck (SHA-256) zum Vergleich:",
   },
 
   nl: {
@@ -341,6 +343,8 @@ export const STRINGS = {
     "st.usage_sim": "Bevat gesimuleerde gegevens.",
     "ss.new_hint": "Elke fietsplek is één aan de voorkant open fietsplek met een eigen gateway (Raspberry Pi).",
     "l.preview_sim": "VOORBEELD",
+    "ag.step_cert": "Platformcertificaat laden – alleen als de sleutel exact overeenkomt (vastgepind):",
+    "ag.tls_hint": "Het platform gebruikt een eigen certificaat. Vingerafdruk (SHA-256) ter controle:",
   },
 
   en: {
@@ -503,6 +507,8 @@ export const STRINGS = {
     "st.usage_sim": "Contains simulated data.",
     "ss.new_hint": "Each stall is a single bike stall, open at the front, with its own gateway (Raspberry Pi).",
     "l.preview_sim": "EXAMPLE",
+    "ag.step_cert": "Download the platform certificate – only if the key matches exactly (pinned):",
+    "ag.tls_hint": "The platform uses its own certificate. Fingerprint (SHA-256) for comparison:",
   },
 };
 

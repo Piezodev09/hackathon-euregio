@@ -64,6 +64,7 @@ class Settings:
     trust_proxy: bool = False
     # paths / secrets
     db_path: Path = BACKEND_DIR / "bike_station.db"
+    tls_cert_file: Path | None = None  # Zertifikat der Plattform (für Pinning bei der Gateway-Einrichtung)
     data_key: bytes = field(default=b"", repr=False)
 
     @property
@@ -106,6 +107,11 @@ def _data_key(environment: str, db_path: Path) -> bytes:
     except OSError:
         log.warning("Flüchtiger Entwicklungs-Datenschlüssel – 2FA übersteht keinen Neustart")
     return key
+
+
+def _tls_cert_file(tls: dict) -> Path | None:
+    p = os.environ.get("BIKE_TLS_CERT_FILE", tls.get("cert_file", "/etc/bike-station/tls/server.crt"))
+    return Path(p) if p else None
 
 
 def load_settings(config_path: str | os.PathLike | None = None) -> Settings:
@@ -176,6 +182,7 @@ def load_settings(config_path: str | os.PathLike | None = None) -> Settings:
         auth_per_minute=int(sec.get("auth_per_minute", 10)),
         trust_proxy=os.environ.get("BIKE_TRUST_PROXY", str(sec.get("trust_proxy", False))).lower() in ("1", "true"),
         db_path=db_path,
+        tls_cert_file=_tls_cert_file(cfg.get("tls", {})),
         data_key=_data_key(environment, db_path),
     )
     validate(s)

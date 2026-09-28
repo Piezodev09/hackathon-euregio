@@ -15,6 +15,18 @@
 
 Kunden registrieren sich danach selbst unter `https://<host>/app#/register`.
 
+### Zertifikat (selbst signiert, mit IP-Adresse)
+
+`deploy/install-vm.sh` erzeugt mit `deploy/make-cert.sh` ein Zertifikat für Hostname und alle IPs der VM.
+Eigene Adresse ergänzen oder erneuern:
+
+```bash
+sudo /opt/smart-bike-station/deploy/make-cert.sh --force 192.168.0.114
+sudo systemctl restart bike-api
+```
+
+Das Portal zeigt beim Einrichten eines Gateways Pin und Fingerabdruck; der Pi vertraut genau diesem Zertifikat.
+
 ## Raspberry Pi (je Station, beim Kunden)
 
 Empfohlen: **Agent-Installation per Kopplungscode** – Portal → Station → Einstellungen → *Gateway

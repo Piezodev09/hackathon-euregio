@@ -21,13 +21,10 @@ if [ ! -f /etc/bike-station/api.env ]; then
   echo "und den Datenschlüssel zusätzlich sicher offline sichern (ohne ihn sind 2FA-Geheimnisse verloren)."
 fi
 
-if [ ! -f /etc/bike-station/tls/server.key ]; then
-  echo "Kein Zertifikat gefunden – selbst signiertes Demo-Zertifikat wird erzeugt."
-  echo "Für den Schulbetrieb ein vertrauenswürdiges Zertifikat der IT verwenden!"
-  openssl req -x509 -newkey rsa:2048 -nodes -days 30 \
-    -keyout /etc/bike-station/tls/server.key -out /etc/bike-station/tls/server.crt \
-    -subj "/CN=$(hostname -f)" -addext "subjectAltName=DNS:$(hostname -f),DNS:$(hostname)"
-fi
+# Selbst signiertes Zertifikat mit Hostname UND IP-Adressen (für Pis, die per IP verbinden).
+# Eigene IP/Namen ergänzen: sudo deploy/make-cert.sh --force 192.168.0.114 bike.schule.lan
+# Für den Schulbetrieb besser ein Zertifikat der IT nach /etc/bike-station/tls/server.{crt,key} legen.
+bash "$APP/deploy/make-cert.sh" "$@"
 chgrp bikestation /etc/bike-station /etc/bike-station/tls /etc/bike-station/tls/server.key /etc/bike-station/api.env
 chmod 640 /etc/bike-station/tls/server.key /etc/bike-station/api.env
 
@@ -35,6 +32,7 @@ install -m 644 "$APP/deploy/systemd/bike-api.service" /etc/systemd/system/
 install -m 644 "$APP/deploy/nftables.conf.example" /etc/nftables.conf.bike-example
 systemctl daemon-reload
 systemctl enable --now bike-api
+echo "Zertifikat: $(openssl x509 -in /etc/bike-station/tls/server.crt -noout -fingerprint -sha256)"
 echo "Fertig. Firewall-Beispiel: /etc/nftables.conf.bike-example (anpassen, dann aktivieren)."
 echo "Plattform-Admin anlegen:"
 echo "  cd $APP/backend && sudo -u bikestation env \$(cat /etc/bike-station/api.env | xargs) $APP/venv/bin/python -m app.cli create-platform-admin --email ops@example.org"

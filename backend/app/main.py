@@ -20,6 +20,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from .config import Settings, load_settings
 from .core import Core
 from .agent_bundle import AgentBundle
+from .tlsinfo import TlsInfo
 from .routes import agent, auth, org, platform, stations
 from .service import Monitoring
 
@@ -93,7 +94,8 @@ def create_app(settings: Settings | None = None, clock: Callable[[], float] = ti
                   docs_url=None, redoc_url=None, openapi_url=None)  # keine öffentliche API-Doku/Debug-Ausgabe
     app.state.core = core
     app.state.monitoring = monitoring
-    app.state.agent_bundle = AgentBundle.build(settings.base_url)
+    app.state.tls = TlsInfo.load(settings.tls_cert_file) if settings.base_url.startswith("https://") else None
+    app.state.agent_bundle = AgentBundle.build(settings.base_url, pin=app.state.tls.pin if app.state.tls else "")
     log.info("Agent-Paket %s bereit (sha256 %s)", app.state.agent_bundle.version, app.state.agent_bundle.sha256[:12])
 
     # ------------------------------------------------------------------ Middlewares
