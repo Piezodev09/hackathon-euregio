@@ -1,0 +1,24 @@
+#!/usr/sbin/nft -f
+# Firewall der Debian-VM – "nur was nötig ist" (Plan 6). Netze an die Realität anpassen!
+flush ruleset
+
+define DEMO_NET  = 192.168.50.0/24   # Netz von Pi und Anzeige-Browsern
+define ADMIN_NET = 192.168.60.0/28   # freigegebene Management-Zugänge
+
+table inet filter {
+  chain input {
+    type filter hook input priority 0; policy drop;
+    iif lo accept
+    ct state established,related accept
+    ct state invalid drop
+    ip protocol icmp accept
+    ip6 nexthdr icmpv6 accept
+
+    # API + Dashboard (HTTPS) nur aus dem Demo-Netz
+    ip saddr $DEMO_NET tcp dport 8443 accept
+    # SSH nur für berechtigte Admins
+    ip saddr $ADMIN_NET tcp dport 22 accept
+  }
+  chain forward { type filter hook forward priority 0; policy drop; }
+  chain output  { type filter hook output priority 0; policy accept; }
+}

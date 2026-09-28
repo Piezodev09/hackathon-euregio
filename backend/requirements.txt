@@ -1,0 +1,5 @@
+fastapi>=0.110,<1
+uvicorn>=0.27
+# Nur für die KI-Funktion (Modell laden). Ohne diese Pakete läuft alles außer der KI.
+scikit-learn>=1.3
+joblib>=1.3

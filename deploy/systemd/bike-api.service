@@ -1,0 +1,33 @@
+# Debian-VM auf Proxmox: API + Dashboard + KI
+# Installation: siehe docs/betrieb.md
+[Unit]
+Description=Smarte Radstation - API und Dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=bikestation
+Group=bikestation
+WorkingDirectory=/opt/smart-bike-station/backend
+# Tokens NICHT hier eintragen, sondern in /etc/bike-station/api.env (Rechte 640)
+EnvironmentFile=/etc/bike-station/api.env
+ExecStart=/opt/smart-bike-station/venv/bin/uvicorn app.main:_app_factory --factory \
+    --host 0.0.0.0 --port 8443 \
+    --ssl-keyfile /etc/bike-station/tls/server.key \
+    --ssl-certfile /etc/bike-station/tls/server.crt \
+    --no-server-header
+Restart=on-failure
+RestartSec=3
+
+# Härtung
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/bike-station
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

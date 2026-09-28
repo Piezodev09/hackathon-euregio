@@ -1,0 +1,22 @@
+# Lokale Entwicklung: Simulator -> Gateway -> API auf demselben Rechner (ohne TLS).
+# Nur für Entwicklung! Im Netz HTTPS verwenden (config.example.toml).
+state_dir = "state"
+
+[api]
+url = "http://127.0.0.1:8000"
+timeout_s = 3
+
+[station]
+id = "demo-01"
+[station.slot_map]
+A = "A"
+B = "B"
+C = "C"
+
+[timing]
+arduino_timeout_s = 15
+heartbeat_s = 10
+
+[buffer]
+max_messages = 500
+batch_size = 50

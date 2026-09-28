@@ -1,0 +1,63 @@
+# Konfiguration der Smarten Radstation (Backend).
+# Alle Zeitwerte sind Planungsannahmen aus dem Projektplan (Abschnitt 5.3)
+# und werden im Test an die echte Hardware angepasst.
+# KEINE Geheimnisse in diese Datei! Tokens kommen aus Umgebungsvariablen
+# (siehe deploy/api.env.example).
+
+[station]
+id = "demo-01"
+display_name = "Smarte Radstation – Demo"
+
+# Reihenfolge = Position vom Eingang aus. Die Empfehlung nimmt den
+# ersten freien Platz in dieser Reihenfolge (transparente Regel, keine KI).
+[[station.slots]]
+id = "A"
+label = "Platz A"
+position = 1
+
+[[station.slots]]
+id = "B"
+label = "Platz B"
+position = 2
+
+[[station.slots]]
+id = "C"
+label = "Platz C"
+position = 3
+
+[timing]
+# Ohne verlässliche Meldung seit so vielen Sekunden gilt ein Platz als "unbekannt".
+stale_after_s = 30
+# Empfohlenes Abfrageintervall der Oberfläche.
+ui_poll_interval_s = 2
+
+[anomaly]
+# Welche Methode erzeugt die SICHTBARE Warnung: "rule" oder "ml".
+# Go/No-Go (Plan 8.2): Wenn die KI mehr Probleme macht als die Regel, bleibt "rule".
+alert_source = "rule"
+# Zeitfenster für Merkmale (Sekunden).
+window_s = 10
+# Ab diesem vibration_score zählt eine Meldung als deutlicher Ausschlag.
+peak_threshold = 300
+# Mindestanzahl deutlicher Ausschläge im Fenster für die Regel.
+min_peaks = 3
+# Schonzeit nach Belegungswechsel (Einstellen/Ausparken), in Sekunden.
+grace_period_s = 15
+# Nach einer Warnung für diesen Platz so lange keine neue Warnung.
+cooldown_s = 30
+# Pfad zum trainierten Modell (relativ zu diesem Verzeichnis). Fehlt es,
+# ist die KI "nicht verfügbar" – Belegung funktioniert trotzdem.
+model_path = "../ml/models/vibration_iforest.joblib"
+
+[retention]
+# Rohmesswerte älter als so viele Stunden werden beim Start und stündlich gelöscht.
+# Für die Demo kurz halten (Datensparsamkeit, Plan 7.3).
+measurements_max_age_h = 72
+
+[security]
+# Ratenbegrenzung für schreibende Endpunkte (Anfragen pro Sekunde, Burst).
+write_rate_per_s = 20
+write_burst = 60
+# Ratenbegrenzung für lesende Endpunkte pro Client-IP.
+read_rate_per_s = 10
+read_burst = 40

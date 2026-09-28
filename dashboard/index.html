@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Smarte Radstation</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/i18n.js" defer></script>
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#slots" data-i18n="skip">Zu den Stellplätzen springen</a>
+  <header class="top">
+    <h1 data-i18n="title">Smarte Radstation</h1>
+    <nav aria-label="Sprache / Taal / Language" class="lang">
+      <button type="button" data-lang="de" lang="de">DE</button>
+      <button type="button" data-lang="nl" lang="nl">NL</button>
+      <button type="button" data-lang="en" lang="en">EN</button>
+    </nav>
+  </header>
+
+  <main>
+    <section class="summary" aria-labelledby="summary-h">
+      <h2 id="summary-h" class="visually-hidden" data-i18n="summaryHeading">Übersicht</h2>
+      <p class="big" id="free-count">–</p>
+      <p class="big" id="recommendation">–</p>
+      <p id="updated">–</p>
+      <p id="connection" role="status">–</p>
+      <p id="simulated" class="badge sim" hidden data-i18n="simulatedData">Achtung: simulierte Daten</p>
+    </section>
+
+    <div id="alerts" class="alerts" role="alert" aria-live="assertive"></div>
+
+    <section aria-labelledby="slots-h">
+      <h2 id="slots-h" data-i18n="slotsHeading">Stellplätze</h2>
+      <ul id="slots" class="slots" tabindex="-1"></ul>
+      <p class="legend" data-i18n="legend">Zustände: ✓ frei · ■ belegt · ? unbekannt (keine verlässlichen Daten – nie als frei gezählt)</p>
+    </section>
+
+    <section aria-labelledby="usage-h">
+      <h2 id="usage-h" data-i18n="usageHeading">Auslastung nach Uhrzeit</h2>
+      <p id="usage-text"></p>
+      <div class="table-wrap">
+        <table id="heatmap" class="heatmap">
+          <caption class="visually-hidden" data-i18n="usageCaption">Anteil der belegten Zeit je Stunde und Platz</caption>
+          <thead></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <p id="usage-source" class="small"></p>
+    </section>
+
+    <section aria-labelledby="ai-h">
+      <h2 id="ai-h" data-i18n="aiHeading">Bewegungserkennung</h2>
+      <p id="ai-status"></p>
+      <p class="small" data-i18n="aiDisclaimer">Eine Meldung bedeutet nur: An diesem Platz wurde eine ungewöhnliche Erschütterung gemessen. Sie ist kein Diebstahlnachweis und sagt nichts über Personen aus.</p>
+    </section>
+
+    <details class="admin">
+      <summary data-i18n="adminHeading">Verwaltung (nur berechtigte Personen)</summary>
+      <form id="admin-form" autocomplete="off">
+        <label for="admin-token" data-i18n="adminToken">Admin-Token</label>
+        <input id="admin-token" type="password" autocomplete="off" spellcheck="false">
+        <button type="submit" data-i18n="adminLoad">Meldungen laden</button>
+        <button type="button" id="admin-logout" data-i18n="adminLogout">Abmelden</button>
+      </form>
+      <p id="admin-msg" role="status"></p>
+      <div class="table-wrap">
+        <table id="events" class="events" hidden>
+          <thead>
+            <tr>
+              <th data-i18n="colTime">Zeit</th>
+              <th data-i18n="colSlot">Platz</th>
+              <th data-i18n="colKind">Art</th>
+              <th data-i18n="colDetector">Verfahren</th>
+              <th data-i18n="colAck">Quittiert</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </details>
+  </main>
+
+  <footer class="small">
+    <p data-i18n="privacy">Keine Kameras, keine Namen, keine Personenerkennung. Gespeichert werden nur Platz, technischer Zustand und Zeitpunkt.</p>
+  </footer>
+</body>
+</html>
