@@ -48,6 +48,9 @@ class Api:
     def patch(self, url, json=None, headers=None):
         return self.c.patch(url, json=json, headers=self._h(headers))
 
+    def put(self, url, json=None, headers=None):
+        return self.c.put(url, json=json, headers=self._h(headers))
+
     def delete(self, url, headers=None):
         return self.c.delete(url, headers=self._h(headers))
 
@@ -99,8 +102,8 @@ class Env:
         tid = api.me().json()["tenant"]["id"]
         self.core.db.execute("UPDATE tenant SET plan = ? WHERE id = ?", (plan, tid))
 
-    def station(self, api: Api, keys="ABC", name="Station 1"):
-        r = api.post("/api/v1/stations", {"name": name, "slots": [{"key": k, "label": f"Platz {k}"} for k in keys]})
+    def station(self, api: Api, name="Stellplatz 1"):
+        r = api.post("/api/v1/stations", {"name": name})
         assert r.status_code == 201, r.text
         sid = r.json()["id"]
         r = api.post(f"/api/v1/stations/{sid}/devices", {"name": "Pi"})
@@ -138,9 +141,9 @@ class Device:
         self.token = token
         self.seq = 0
 
-    def send(self, slot="A", occupied=True, vib=0, state="ok", token=..., station=None, **extra):
+    def send(self, occupied=True, vib=0, state="ok", token=..., station=None, **extra):
         self.seq += 1
-        body = {"station_id": station or self.sid, "slot_id": slot, "sequence": self.seq, "occupied": occupied,
+        body = {"station_id": station or self.sid, "sequence": self.seq, "occupied": occupied,
                 "vibration_score": vib, "sensor_state": state, **extra}
         tok = self.token if token is ... else token
         headers = {"Authorization": f"Bearer {tok}"} if tok else {}

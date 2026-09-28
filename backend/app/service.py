@@ -1,4 +1,4 @@
-"""Fachlogik je Station: Messungen annehmen, Zustände ableiten, Warnungen, Auslastung, Aufbewahrung."""
+"""Fachlogik je Station (= ein Stellplatz): Messungen annehmen, Zustand ableiten, Warnungen, Auslastung, Aufbewahrung."""
 
 from __future__ import annotations
 
@@ -18,6 +18,8 @@ log = logging.getLogger(__name__)
 
 # Wie lange eine nicht quittierte Warnung angezeigt wird.
 ALERT_DISPLAY_S = 300
+# Interne Kennung des einen Stellplatzes einer Station.
+STALL_KEY = "A"
 
 
 def iso(ts: float | None) -> str | None:
@@ -46,8 +48,15 @@ class Monitoring:
             window_s=s.window_s, peak_threshold=s.peak_threshold, min_peaks=s.min_peaks, grace_period_s=s.grace_period_s
         )
 
-    def slots(self, station_id: str) -> list[sqlite3.Row]:
-        return self.db.all("SELECT * FROM slot WHERE station_id = ? ORDER BY position, key", (station_id,))
+    def stall(self, station_id: str) -> sqlite3.Row:
+        """Der eine Stellplatz der Station (wird beim Anlegen der Station erzeugt)."""
+        row = self.db.one("SELECT * FROM slot WHERE station_id = ? ORDER BY position LIMIT 1", (station_id,))
+        if row is None:
+            row_id = new_id("sl")
+            self.db.execute("INSERT INTO slot (id, station_id, key, label, position) VALUES (?,?,?,?,1)",
+                            (row_id, station_id, STALL_KEY, "Stellplatz"))
+            row = self.db.one("SELECT * FROM slot WHERE id = ?", (row_id,))
+        return row
 
     def _ml_allowed(self, station: sqlite3.Row) -> bool:
         tenant = self.db.one("SELECT plan FROM tenant WHERE id = ?", (station["tenant_id"],))
@@ -55,9 +64,9 @@ class Monitoring:
 
     # ------------------------------------------------------------------ ingest
     def ingest(self, station: sqlite3.Row, m: MeasurementIn) -> IngestResult:
-        slot = self.db.one("SELECT * FROM slot WHERE station_id = ? AND key = ?", (station["id"], m.slot_id))
-        if slot is None:
+        if m.slot_id is not None and m.slot_id != STALL_KEY:
             raise UnknownSlotError("unknown_slot")
+        slot = self.stall(station["id"])
         now = self.core.clock()
         age_s = m.age_ms / 1000.0
         t = now - age_s  # Server-Zeitstempel; gepufferte Nachrichten melden ihr Alter
@@ -125,45 +134,30 @@ class Monitoring:
 
     # ------------------------------------------------------------------ status
     def status(self, station: sqlite3.Row, public: bool = False) -> dict:
+        """Zustand des Stellplatzes. "free"/"occupied" nur aus einer gültigen, aktuellen Messung – sonst "unknown"."""
         now = self.core.clock()
         stale = self.core.s.stale_after_s
-        out_slots = []
-        any_simulated = False
-        for sl in self.slots(station["id"]):
-            m = self._latest(sl["id"])
-            if m is None:
-                state, reason, last = "unknown", "no_data", None
-            elif now - m["server_time"] > stale:
-                state, reason, last = "unknown", "stale", m["server_time"]
-            elif m["sensor_state"] != "ok" or m["occupied"] is None:
-                state, reason, last = "unknown", "sensor_error", m["server_time"]
-            else:
-                state = "occupied" if m["occupied"] else "free"
-                reason, last = None, m["server_time"]
-            if m is not None and m["source"] == "simulated" and state != "unknown":
-                any_simulated = True
-            alert = self.db.one(
-                "SELECT id, occurred_at, detector, source FROM event WHERE slot_id = ? AND kind = 'unusual_movement' "
-                "AND severity = 'warning' AND acknowledged_at IS NULL AND occurred_at >= ? ORDER BY occurred_at DESC LIMIT 1",
-                (sl["id"], now - ALERT_DISPLAY_S),
-            )
-            entry = {
-                "slot_id": sl["key"],
-                "label": sl["label"],
-                "position": sl["position"],
-                "state": state,
-                "unknown_reason": reason,
-                "last_update": iso(last),
-                "age_s": None if last is None else round(now - last, 1),
-                "alert": None
-                if not alert
-                else {"kind": "unusual_movement", "occurred_at": iso(alert["occurred_at"]), "simulated": alert["source"] == "simulated"},
-            }
-            if alert and not public:
-                entry["alert"].update({"id": alert["id"], "detector": alert["detector"]})
-            out_slots.append(entry)
-
-        free = [s for s in out_slots if s["state"] == "free"]
+        sl = self.stall(station["id"])
+        m = self._latest(sl["id"])
+        if m is None:
+            state, reason, last = "unknown", "no_data", None
+        elif now - m["server_time"] > stale or m["server_time"] > now + 5:
+            state, reason, last = "unknown", "stale", m["server_time"]
+        elif m["sensor_state"] != "ok" or m["occupied"] is None:
+            state, reason, last = "unknown", "sensor_error", m["server_time"]
+        else:
+            state = "occupied" if m["occupied"] else "free"
+            reason, last = None, m["server_time"]
+        alert = self.db.one(
+            "SELECT id, occurred_at, detector, source FROM event WHERE slot_id = ? AND kind = 'unusual_movement' "
+            "AND severity = 'warning' AND acknowledged_at IS NULL AND occurred_at >= ? ORDER BY occurred_at DESC LIMIT 1",
+            (sl["id"], now - ALERT_DISPLAY_S),
+        )
+        alert_out = None
+        if alert:
+            alert_out = {"kind": "unusual_movement", "occurred_at": iso(alert["occurred_at"]), "simulated": alert["source"] == "simulated"}
+            if not public:
+                alert_out.update({"id": alert["id"], "detector": alert["detector"]})
         body = {
             "station_id": station["id"],
             "display_name": station["name"],
@@ -171,15 +165,23 @@ class Monitoring:
             "server_time": iso(now),
             "stale_after_s": stale,
             "poll_interval_s": self.core.s.ui_poll_interval_s,
-            "free_count": len(free),
-            "known_count": sum(1 for s in out_slots if s["state"] != "unknown"),
-            "total": len(out_slots),
-            # Transparente Regel: erster freier Platz in Positionsreihenfolge (keine KI).
-            "recommendation": free[0]["slot_id"] if free else None,
-            "recommendation_rule": "first_free_by_position",
-            "slots": out_slots,
-            "simulated_data": any_simulated,
+            "state": state,
+            "unknown_reason": reason,
+            "last_update": iso(last),
+            "age_s": None if last is None else round(now - last, 1),
+            "alert": alert_out,
+            # Kennzeichnung für die Oberfläche: die letzte Messung stammt aus dem Simulator.
+            "simulated_data": m is not None and m["source"] == "simulated",
+            "maintenance": bool(station["maintenance"]),
+            "camera_active": bool(station["camera_enabled"]),
+            "session": None,
+            "last_tap": None,
         }
+        parking = getattr(self, "parking", None)
+        if parking is not None:
+            s = parking.open_session(station["id"])
+            body["session"] = parking.session_out(s, public=public) if s else None
+            body["last_tap"] = parking.last_tap(station["id"])
         if not public:
             ml_allowed = self._ml_allowed(station)
             body["ai"] = {
@@ -196,8 +198,8 @@ class Monitoring:
     # ------------------------------------------------------------------ events
     def events(self, tenant_id: str, station_id: str | None = None, limit: int = 100,
                include_shadow: bool = False, open_only: bool = False) -> list[dict]:
-        sql = ("SELECT e.*, s.key AS slot_key, st.name AS station_name FROM event e "
-               "JOIN slot s ON s.id = e.slot_id JOIN station st ON st.id = e.station_id WHERE e.tenant_id = ?")
+        sql = ("SELECT e.*, st.name AS station_name FROM event e "
+               "JOIN station st ON st.id = e.station_id WHERE e.tenant_id = ?")
         params: list = [tenant_id]
         if station_id:
             sql += " AND e.station_id = ?"
@@ -213,7 +215,6 @@ class Monitoring:
                 "id": r["id"],
                 "station_id": r["station_id"],
                 "station_name": r["station_name"],
-                "slot_id": r["slot_key"],
                 "kind": r["kind"],
                 "severity": r["severity"],
                 "detector": r["detector"],
@@ -240,46 +241,38 @@ class Monitoring:
 
     # ------------------------------------------------------------------ Auslastung
     def occupancy_summary(self, station: sqlite3.Row, hours: int = 24) -> dict:
-        """Zeitgewichtete Belegung je Stunde und Platz. Lücken zählen nicht als "frei"."""
+        """Zeitgewichteter Anteil "belegt" je Stunde. Lücken und unbekannte Zeiten zählen nicht als "frei"."""
         now = self.core.clock()
         stale = self.core.s.stale_after_s
         start = (int(now // 3600) - hours + 1) * 3600
-        slots = self.slots(station["id"])
-        buckets = {start + i * 3600: {sl["key"]: [0.0, 0.0] for sl in slots} for i in range(hours)}
+        buckets = {start + i * 3600: [0.0, 0.0] for i in range(hours)}  # [belegt, bekannt] in Sekunden
         simulated = live = False
-        n = 0
-        for sl in slots:
-            rows = self.db.all(
-                "SELECT server_time, occupied, sensor_state, source FROM measurement "
-                "WHERE slot_id = ? AND server_time >= ? ORDER BY server_time",
-                (sl["id"], start - stale),
-            )
-            n += len(rows)
-            for i, r in enumerate(rows):
-                if r["sensor_state"] != "ok" or r["occupied"] is None:
-                    continue
-                if r["source"] == "simulated":
-                    simulated = True
-                else:
-                    live = True
-                seg_start = max(r["server_time"], start)
-                nxt = rows[i + 1]["server_time"] if i + 1 < len(rows) else now
-                seg_end = min(nxt, r["server_time"] + stale, now)
-                while seg_start < seg_end:
-                    b = int(seg_start // 3600) * 3600
-                    part_end = min(seg_end, b + 3600)
-                    if b in buckets:
-                        acc = buckets[b][sl["key"]]
-                        acc[1] += part_end - seg_start
-                        if r["occupied"]:
-                            acc[0] += part_end - seg_start
-                    seg_start = part_end
-        out = []
-        for b, per_slot in buckets.items():
-            vals = {k: (round(o / t, 3) if t > 0 else None) for k, (o, t) in per_slot.items()}
-            known = [v for v in vals.values() if v is not None]
-            out.append({"hour_start": iso(b), "occupancy": vals, "avg_occupied_slots": round(sum(known), 2) if known else None})
-        return {"station_id": station["id"], "hours": hours, "buckets": out, "measurement_count": n,
+        rows = self.db.all(
+            "SELECT server_time, occupied, sensor_state, source FROM measurement "
+            "WHERE slot_id = ? AND server_time >= ? ORDER BY server_time",
+            (self.stall(station["id"])["id"], start - stale),
+        )
+        for i, r in enumerate(rows):
+            if r["sensor_state"] != "ok" or r["occupied"] is None:
+                continue
+            if r["source"] == "simulated":
+                simulated = True
+            else:
+                live = True
+            seg_start = max(r["server_time"], start)
+            nxt = rows[i + 1]["server_time"] if i + 1 < len(rows) else now
+            seg_end = min(nxt, r["server_time"] + stale, now)
+            while seg_start < seg_end:
+                b = int(seg_start // 3600) * 3600
+                part_end = min(seg_end, b + 3600)
+                if b in buckets:
+                    buckets[b][1] += part_end - seg_start
+                    if r["occupied"]:
+                        buckets[b][0] += part_end - seg_start
+                seg_start = part_end
+        out = [{"hour_start": iso(b), "occupancy": round(o / t, 3) if t > 0 else None, "known_s": round(t)}
+               for b, (o, t) in buckets.items()]
+        return {"station_id": station["id"], "hours": hours, "buckets": out, "measurement_count": len(rows),
                 "contains_simulated": simulated, "contains_live": live}
 
     # ------------------------------------------------------------------ Aufbewahrung

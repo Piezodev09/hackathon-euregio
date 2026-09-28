@@ -64,6 +64,7 @@ class Settings:
     trust_proxy: bool = False
     # paths / secrets
     db_path: Path = BACKEND_DIR / "bike_station.db"
+    tls_cert_file: Path | None = None  # Zertifikat der Plattform (für Pinning bei der Gateway-Einrichtung)
     data_key: bytes = field(default=b"", repr=False)
 
     @property
@@ -108,6 +109,11 @@ def _data_key(environment: str, db_path: Path) -> bytes:
     return key
 
 
+def _tls_cert_file(tls: dict) -> Path | None:
+    p = os.environ.get("BIKE_TLS_CERT_FILE", tls.get("cert_file", "/etc/bike-station/tls/server.crt"))
+    return Path(p) if p else None
+
+
 def load_settings(config_path: str | os.PathLike | None = None) -> Settings:
     path = Path(config_path or os.environ.get("BIKE_CONFIG", BACKEND_DIR / "config.toml"))
     with open(path, "rb") as f:
@@ -142,7 +148,7 @@ def load_settings(config_path: str | os.PathLike | None = None) -> Settings:
         base_url=base_url,
         allowed_hosts=allowed_hosts,
         signup_enabled=bool(app.get("signup_enabled", True)),
-        product_name=str(app.get("product_name", "Smarte Radstation")),
+        product_name=str(app.get("product_name", "Smart Bicycle Box")),
         session_idle_s=float(auth.get("session_idle_minutes", 60)) * 60,
         session_absolute_s=float(auth.get("session_absolute_hours", 12)) * 3600,
         lockout_threshold=int(auth.get("lockout_threshold", 5)),
@@ -176,6 +182,7 @@ def load_settings(config_path: str | os.PathLike | None = None) -> Settings:
         auth_per_minute=int(sec.get("auth_per_minute", 10)),
         trust_proxy=os.environ.get("BIKE_TRUST_PROXY", str(sec.get("trust_proxy", False))).lower() in ("1", "true"),
         db_path=db_path,
+        tls_cert_file=_tls_cert_file(cfg.get("tls", {})),
         data_key=_data_key(environment, db_path),
     )
     validate(s)

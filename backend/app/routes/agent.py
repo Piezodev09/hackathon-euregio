@@ -43,19 +43,35 @@ def bundle(request: Request):
 
 
 def install_info(request: Request) -> dict:
+    """Befehle für die Einrichtung. Bei eigenem (selbst signiertem) Zertifikat wird dessen Schlüssel angeheftet:
+    `curl --pinnedpubkey` lädt das Zertifikat nur, wenn der Schlüssel exakt passt; danach prüft curl normal."""
     core = core_of(request)
     b = bundle(request)
-    url = f"{core.s.base_url}/install/agent.sh"
-    return {
+    base = core.s.base_url
+    url = f"{base}/install/agent.sh"
+    tls = getattr(request.app.state, "tls", None)
+    info = {
         "version": b.version,
         "script_url": url,
         "script_sha256": b.script_sha256,
         "bundle_sha256": b.sha256,
+        "tls": None,
         "commands": {
             "download": f"curl -fsSLO {url}",
             "verify": f"echo '{b.script_sha256}  agent.sh' | sha256sum -c -",
         },
+        "ca_arg": "",
     }
+    if tls is not None:
+        info["tls"] = {"pin": tls.pin, "fingerprint": tls.fingerprint, "names": list(tls.names), "not_after": tls.not_after,
+                       "self_signed": tls.self_signed}
+        info["commands"] = {
+            "fetch_cert": f"curl -fsSk --pinnedpubkey '{tls.pin}' -o bike-ca.crt {base}/install/server.crt",
+            "download": f"curl -fsSLO --cacert bike-ca.crt {url}",
+            "verify": f"echo '{b.script_sha256}  agent.sh' | sha256sum -c -",
+        }
+        info["ca_arg"] = " --ca-file bike-ca.crt"
+    return info
 
 
 def device_out(core, d, latest: str) -> dict:
@@ -81,6 +97,16 @@ def install_script(request: Request):
     return Response(b.script, media_type="text/x-shellscript; charset=utf-8",
                     headers={"Content-Disposition": 'inline; filename="agent.sh"', "X-Content-SHA256": b.script_sha256,
                              "Cache-Control": "no-store"})
+
+
+@router.get("/install/server.crt", include_in_schema=False)
+def install_cert(request: Request):
+    """Öffentliches Zertifikat der Plattform (kein Geheimnis). Wird per Pin geprüft abgeholt."""
+    tls = getattr(request.app.state, "tls", None)
+    if tls is None:
+        raise HTTPException(404, "not_found")
+    return Response(tls.pem, media_type="application/x-pem-file",
+                    headers={"Content-Disposition": 'attachment; filename="bike-ca.crt"', "Cache-Control": "no-store"})
 
 
 @router.get("/install/agent.tar.gz", include_in_schema=False)
@@ -117,8 +143,12 @@ def create_enrollment(station_id: str, body: EnrollmentIn, request: Request, ctx
         (eid, ctx.tenant_id, st["id"], hash_token(code), body.name, ctx.actor, now, now + CODE_LIFETIME_S))
     core.audit("enrollment_created", tenant_id=ctx.tenant_id, user_id=ctx.user["id"], actor=ctx.actor, ip=ctx.ip, target=st["id"])
     info = install_info(request)
-    info["commands"]["install"] = f"sudo sh agent.sh --code {code}"
-    info["commands"]["oneliner"] = f"curl -fsSL {info['script_url']} | sudo sh -s -- --code {code}"
+    info["commands"]["install"] = f"sudo sh agent.sh --code {code}{info['ca_arg']}"
+    if info["tls"]:
+        info["commands"]["oneliner"] = (f"curl -fsSLk --pinnedpubkey '{info['tls']['pin']}' {info['script_url']}"
+                                        f" | sudo sh -s -- --code {code}")
+    else:
+        info["commands"]["oneliner"] = f"curl -fsSL {info['script_url']} | sudo sh -s -- --code {code}"
     return {"id": eid, "code": code, "expires_at": iso(now + CODE_LIFETIME_S), "install": info}
 
 
@@ -225,9 +255,7 @@ def enroll(body: EnrollIn, request: Request):
 
 
 def _agent_config(core, st) -> dict:
-    slots = core.db.all("SELECT key FROM slot WHERE station_id = ? ORDER BY position, key", (st["id"],))
-    return {"config_version": st["config_version"], "slot_map": {s["key"]: s["key"] for s in slots},
-            "heartbeat_s": HEARTBEAT_S}
+    return {"config_version": st["config_version"], "heartbeat_s": HEARTBEAT_S}
 
 
 class HeartbeatIn(Strict):

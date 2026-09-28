@@ -92,7 +92,7 @@ def main() -> None:
     for i, (label, kind) in enumerate(plan):
         run_id = f"sim-{i:04d}-{kind}"
         for t, feats in trigger_rows(timeline(kind, rng), params):
-            rows.append({"run_id": run_id, "label": label, "source": "simulated", "slot_id": "A", "t": round(t, 3), **feats})
+            rows.append({"run_id": run_id, "label": label, "source": "simulated", "t": round(t, 3), **feats})
     write_rows(out, rows)
     print(f"{len(plan)} SIMULIERTE Läufe, {len(rows)} Merkmalsfenster -> {out}")
 

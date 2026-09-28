@@ -132,7 +132,7 @@ def test_confirm_update_removes_marker(tmp_path):
 def enrolled_state(tmp_path) -> A.State:
     s = A.State(tmp_path)
     s.data = {"api_url": "http://127.0.0.1:1", "device_id": "dev_1", "token": "bsd_alt", "token_issued_at": 0,
-              "station_id": "st_1", "slot_map": {"A": "A"}, "config_version": 1, "source": "simulator"}
+              "station_id": "st_1", "config_version": 1, "source": "simulator"}
     s.save()
     return s
 
@@ -151,9 +151,7 @@ def test_agent_applies_config_commands_and_rotates(tmp_path):
     s = enrolled_state(tmp_path)
     ag = A.Agent(s, clock=lambda: 1000.0)
     ag.api = RecordingApi({"/api/v1/agent/rotate-token": (200, {"token": "bsd_neu"})})
-    ag.apply({"config_version": 2, "slot_map": {"A": "A", "B": "B"}, "commands": ["rotate_token", "restart", "evil"]})
-    assert ag.cfg.slot_map == {"A": "A", "B": "B"}  # gleiches Dict wie beim Parsen
-    assert ag.gw.cfg.slot_map is ag.cfg.slot_map
+    ag.apply({"config_version": 2, "commands": ["rotate_token", "restart", "evil"]})
     saved = json.loads(s.path.read_text())
     assert saved["config_version"] == 2 and saved["token"] == "bsd_neu"
     assert ag.cfg.token == "bsd_neu" and ag.stop.is_set() and ag.exit_code == A.EXIT_RESTART
@@ -163,10 +161,29 @@ def test_agent_rotates_old_token_automatically(tmp_path):
     s = enrolled_state(tmp_path)
     ag = A.Agent(s, clock=lambda: A.TOKEN_MAX_AGE_S + 10)
     ag.api = RecordingApi({"/api/v1/agent/rotate-token": (200, {"token": "bsd_frisch"})})
-    ag.apply({"config_version": 1, "slot_map": {"A": "A"}, "commands": []})
+    ag.apply({"config_version": 1, "commands": []})
     assert ag.cfg.token == "bsd_frisch"
 
 
 def test_simulator_source_marks_data_simulated(tmp_path):
     ag = A.Agent(enrolled_state(tmp_path))
     assert ag.cfg.source == "simulated"
+
+
+def test_simulator_single_stall_lines():
+    import io
+
+    from simulator import Simulator
+
+    from gateway import parse_line
+
+    out = io.StringIO()
+    sim = Simulator(heartbeat_s=10, out=out)
+    sim.emit()
+    sim.command("p")
+    sim.command("e")
+    sim.command("n 04aabbccdd")
+    lines = [parse_line(x) for x in out.getvalue().splitlines()]
+    assert [m.get("occupied") for m in lines[:3]] == [False, True, None]
+    assert lines[2]["sensor_state"] == "error"
+    assert lines[3] == {"kind": "nfc", "uid": "04AABBCCDD"}

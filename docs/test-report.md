@@ -5,30 +5,28 @@ wiederholen. T08/T14 nur kontrolliert und nach Absprache mit der IT.
 
 ## Automatisierte Tests (ohne Hardware)
 
-| Test | Automatisiert in | Stand 28.09. |
+| Test | Automatisiert in | Stand |
 |---|---|---|
-| T01 leerer Platz / T02 belegt | `backend/tests/test_api.py::test_T01_T02_free_and_occupied` | bestanden |
-| T03 Empfehlung | `test_T03_recommendation_is_first_free_by_position` | bestanden |
-| T05 Warnung | `test_T05_unusual_movement_creates_alert_after_grace` | bestanden |
-| T06 normales Parken (Schonzeit) | `test_T06_parking_within_grace_period_no_alert`, `test_single_bump_no_alert` | bestanden |
-| T07 Sensorausfall | `test_T07_sensor_error_is_unknown`, Gateway-Watchdog-Test | bestanden |
-| T08 Netzunterbrechung | `test_stale_data_becomes_unknown`, Gateway-Puffertests, `test_old_buffered_data_does_not_trigger_alert` | bestanden |
-| T09 API-Schutz | `test_T09_write_without_token_rejected_and_logged` | bestanden |
-| T10 Leserecht | `test_T10_read_view_cannot_do_admin` | bestanden |
+| T01 leerer Stellplatz / T02 belegt | `backend/tests/test_api.py::test_T01_T02_free_and_occupied` | bestanden |
+| Keine Daten = unbekannt, nie frei | `test_no_data_is_unknown_never_free`, `test_future_timestamp_is_unknown` | bestanden |
+| Genau ein Stellplatz je Station | `test_station_is_exactly_one_stall`, `test_migration_to_single_stall` | bestanden |
+| T05/T06 Warnung, Schonzeit | `test_T05_T06_alert_after_grace_but_not_while_parking`, `test_single_bump_no_alert_and_old_buffered_data_ignored` | bestanden |
+| T07 Sensorausfall / veraltet | `test_T07_sensor_error_and_stale_are_unknown`, Gateway-Watchdog-Test | bestanden |
+| T09 API-Schutz | `test_T09_device_write_without_or_with_bad_token_rejected_and_logged` | bestanden |
+| T10 Rollen | `test_roles`, `test_cooldown_ack_and_roles` | bestanden |
 | T13 Verlauf | `test_T13_summary_time_weighted_and_labels_simulated` | bestanden |
 | Doppelungen | `test_duplicate_sequence_is_ignored`, `test_batch_endpoint` | bestanden |
 
-Zusätzlich Ende-zu-Ende mit Simulator (Simulator → Gateway → API → Browser, 28.09.):
-Belegung, Empfehlung, Warnung beim Rütteln (Regel + KI-Schatten), Sensorfehler → „unbekannt“,
-Simulator gestoppt → nach 30 s alle Plätze „unbekannt – Daten veraltet“, Quittieren im Browser,
-Sprachen DE/NL/EN, schmale Ansicht (390 px). Alles mit **simulierten** Daten.
+Zusätzlich Ende-zu-Ende mit Simulator (Agent mit Simulator → API → Browser): Anzeige FREI/BELEGT,
+„SIMULATION“-Kennzeichnung in Portal und Kiosk-Anzeige, Sprachen DE/NL/EN, schmale Ansicht (390 px)
+ohne Querscrollen, Hell/Dunkel. Alles mit **simulierten** Daten.
 
 ### Agent-Installation (Ende-zu-Ende, 28.09., ohne echten Pi)
 
 Kopplungscode im Portal erzeugt → exakt die angezeigten Befehle ausgeführt (Download, `sha256sum -c`
 → OK, `agent.sh --code … --no-systemd --source simulator`) → Gerät gekoppelt, Zustandsdatei `0600`,
 gleicher Code zweites Mal abgelehnt → Agent gestartet, im Portal *online* mit Zustandsdaten →
-Platz D im Portal ergänzt → Agent übernimmt Konfiguration 2 ohne Neustart → *Token erneuern* →
+*Token erneuern* →
 Rotation ohne Unterbrechung → *Neu starten* → Agent beendet sich mit Code 3 (systemd startet neu) →
 Plattform mit Agent-Version 1.0.1 → Agent lädt Update, prüft SHA-256, schaltet um, startet neu,
 meldet 1.0.1 und bestätigt das Update. **Offen:** Test auf echtem Raspberry Pi mit systemd und Arduino.
@@ -37,11 +35,11 @@ meldet 1.0.1 und bestätigt das Update. **Offen:** Test auf echtem Raspberry Pi 
 
 | ID | Durchführung | Bestanden, wenn … | Datum | Version | Wdh. | Beobachtung | Ergebnis | Bearbeiter |
 |---|---|---|---|---|---|---|---|---|
-| T01 | Demo-Objekt entfernen | Platz nach Stabilisierung frei | | | | | offen | |
-| T02 | Objekt einstellen | LED/Text und Dashboard belegt | | | | | offen | |
-| T03 | mind. ein Platz frei | tatsächlich freier Platz empfohlen | | | | | offen | |
+| T01 | Demo-Objekt entfernen | Stellplatz nach Stabilisierung FREI | | | | | offen | |
+| T02 | Objekt einstellen | Display und Dashboard BELEGT | | | | | offen | |
+| T03 | Arduino/Pi trennen | Display und Dashboard STATUS UNBEKANNT (nie FREI) | | | | | offen | |
 | T04 | mehrfach einstellen/entfernen | kein dauerhaftes Springen | | | | | offen | |
-| T05 | kontrollierte Erschütterung | Warnung mit Platz/Zeit; Zeit bis Anzeige: ___ s | | | | | offen | |
+| T05 | kontrollierte Erschütterung | Warnung mit Zeit; Zeit bis Anzeige: ___ s | | | | | offen | |
 | T06 | regulär einstellen/entfernen | Fehlalarme gezählt: ___ von ___ | | | | | offen | |
 | T07 | Sensorverbindung trennen | unbekannt/Fehler, nie falsches frei | | | | | offen | |
 | T08 | Pi–VM trennen | Fehler sichtbar; danach Synchronisation | | | | | offen | |

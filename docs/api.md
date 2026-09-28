@@ -9,23 +9,23 @@ Fehler: `{"detail": "<code>"}` oder `{"detail": {"code": …}}`; Codes siehe `we
 `POST /measurements` bzw. `POST /measurements/batch` (`{"measurements": […]}`, max. 200)
 
 ```json
-{"station_id": "st_…", "slot_id": "A", "sequence": 1727517600123, "occupied": true,
+{"station_id": "st_…", "sequence": 1727517600123, "occupied": true,
  "vibration_score": 12, "sensor_state": "ok", "source": "live", "age_ms": 0}
 ```
 
-- `station_id` muss zur Station des Geräte-Tokens passen (sonst `403 station_mismatch`).
-- `slot_id` ist die Platzkennung (`key`) wie im Arduino. Doppelte `sequence` → `duplicate`.
-- `age_ms`: Pufferalter; nachgesendete Daten lösen keinen Live-Alarm aus.
+- Eine Station ist genau ein Stellplatz. `station_id` muss zur Station des Geräte-Tokens passen (sonst `403 station_mismatch`).
+- `slot_id` entfällt; ältere Gateways dürfen noch `"slot_id": "A"` senden, alles andere → `422 unknown_slot`.
+- Doppelte `sequence` → `duplicate`. `age_ms`: Pufferalter; nachgesendete Daten lösen keinen Live-Alarm aus.
 
-Arduino → Pi (JSON-Zeilen): `{"slot_id":"A","presence":1,"vibration":12,"seq":1042,"state":"ok"}`.
+Arduino → Pi (JSON-Zeilen): `{"presence":1,"vibration":12,"seq":1042,"state":"ok"}`.
 
 ## Agent (Raspberry Pi) – siehe auch [agent.md](agent.md)
 
 | Methode/Pfad | Zweck | Auth |
 |---|---|---|
 | `GET /install/agent.sh` · `/install/agent.tar.gz` · `/install/agent.sha256` | Installationsskript, Paket, Prüfsummen | öffentlich |
-| `POST /agent/enroll` `{code, hostname, agent_version, os_info, source}` | Kopplung → `{device_id, token, station_id, slot_map, config_version}` | Einmal-Code |
-| `POST /agent/heartbeat` `{agent_version, serial_connected, buffer_len, cpu_temp_c, …}` | Zustand melden → `{slot_map, config_version, commands, update}` | Geräte-Token |
+| `POST /agent/enroll` `{code, hostname, agent_version, os_info, source}` | Kopplung → `{device_id, token, station_id, config_version}` | Einmal-Code |
+| `POST /agent/heartbeat` `{agent_version, serial_connected, buffer_len, cpu_temp_c, …}` | Zustand melden → `{config_version, commands, update}` | Geräte-Token |
 | `POST /agent/rotate-token` | neues Token (altes 15 min gültig) | Geräte-Token |
 | `POST /stations/{id}/enrollments` · `GET` · `DELETE …/{eid}` | Kopplungscodes (Portal) | Admin |
 | `POST /stations/{id}/devices/{dev}/command` `{command: restart\|rotate_token\|update}` | Fernbefehl | Admin |
@@ -60,13 +60,12 @@ Arduino → Pi (JSON-Zeilen): `{"slot_id":"A","presence":1,"vibration":12,"seq":
 | `GET /org/audit` | Admin (Tarif mit Audit-Log) |
 | `GET /org/export` · `POST /org/delete` | Inhaber |
 
-## Stationen und Betrieb
+## Stellplätze (Stationen) und Betrieb
 
 | Methode/Pfad | Rolle |
 |---|---|
-| `GET /stations` (mit Live-Kurzstatus) · `POST /stations` | Lesend · Admin |
+| `GET /stations` (mit Live-Kurzstatus) · `POST /stations` `{name, location}` | Lesend · Admin |
 | `GET/PATCH/DELETE /stations/{id}` | Lesend · Admin |
-| `POST /stations/{id}/slots` · `PATCH/DELETE /stations/{id}/slots/{slot}` | Admin |
 | `GET /stations/{id}/status` · `GET /stations/{id}/occupancy?hours=24` | Lesend |
 | `GET/POST /stations/{id}/devices` · `DELETE /stations/{id}/devices/{dev}` | Admin |
 | `POST /stations/{id}/display-link` | Admin |
@@ -84,16 +83,21 @@ Arduino → Pi (JSON-Zeilen): `{"slot_id":"A","presence":1,"vibration":12,"seq":
 ## Statusantwort (gekürzt)
 
 ```json
-{"free_count": 1, "known_count": 3, "total": 3, "recommendation": "B",
- "slots": [{"slot_id": "A", "label": "Platz A", "state": "occupied", "unknown_reason": null,
-            "alert": {"kind": "unusual_movement", "occurred_at": "…", "id": "evt_…", "detector": "rule"}}],
+{"station_id": "st_…", "display_name": "Stellplatz Schulhof", "location": "Haupteingang",
+ "state": "occupied", "unknown_reason": null, "last_update": "…", "age_s": 1.4,
+ "stale_after_s": 30, "poll_interval_s": 2,
+ "alert": {"kind": "unusual_movement", "occurred_at": "…", "id": "evt_…", "detector": "rule", "simulated": false},
  "simulated_data": false,
  "ai": {"visible_detector": "rule", "plan_allows_ml": true, "model_available": true}}
 ```
 
 `state`: `free` / `occupied` / `unknown` (`unknown_reason`: `no_data`, `stale`, `sensor_error`).
+Die öffentliche Anzeige erhält dieselbe Antwort ohne `ai` und ohne Ereignis-ID.
 
-## Datenmodell (SQLite, Schema-Version 3, Migration von 2 automatisch)
+`GET /stations/{id}/occupancy?hours=24` liefert je Stunde `occupancy` (Anteil belegt an der Zeit mit
+gültiger Messung, `null` ohne Daten) und `known_s`.
 
-`tenant` → `user`, `station` → `slot`, `device`, `measurement`, `event`; dazu `session`, `auth_token`
+## Datenmodell (SQLite, Schema-Version 4, Migration von 2 und 3 automatisch)
+
+`tenant` → `user`, `station` → `slot` (genau ein Eintrag = der Stellplatz; Migration 3→4 entfernt überzählige Plätze), `device`, `measurement`, `event`; dazu `session`, `auth_token`
 (Einmal-Tokens), `recovery_code`, `enrollment` (Kopplungscodes), `audit_log`. Löschen eines Mandanten entfernt alles per Kaskade.

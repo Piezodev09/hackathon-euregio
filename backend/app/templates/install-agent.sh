@@ -1,10 +1,11 @@
 #!/bin/sh
-# Installiert den Agenten der Smarten Radstation auf einem Raspberry Pi (Raspberry Pi OS / Debian).
+# Installiert den Agenten der Smart Bicycle Box auf einem Raspberry Pi (Raspberry Pi OS / Debian).
 #
-# Empfohlen (Skript vorher prüfen):
-#   curl -fsSLO __BASE_URL__/install/agent.sh
+# Empfohlen (Skript vorher prüfen) – die genauen Befehle zeigt das Portal beim Einrichten an:
+#   curl -fsSk --pinnedpubkey 'sha256//…' -o bike-ca.crt __BASE_URL__/install/server.crt   # nur bei eigenem Zertifikat
+#   curl -fsSLO --cacert bike-ca.crt __BASE_URL__/install/agent.sh
 #   sha256sum agent.sh            # mit der Prüfsumme im Portal vergleichen
-#   sudo sh agent.sh --code XXXXX-XXXXX
+#   sudo sh agent.sh --code XXXXX-XXXXX --ca-file bike-ca.crt
 #
 # Das Skript lädt das Agent-Paket (Version __VERSION__) von der Plattform, prüft dessen SHA-256,
 # legt einen eingeschränkten Systembenutzer an, koppelt das Gerät per Einmal-Code mit der Station
@@ -14,6 +15,8 @@ set -eu
 BASE_URL="__BASE_URL__"
 VERSION="__VERSION__"
 SHA256="__SHA256__"
+# Schlüssel-Pin des Plattform-Zertifikats (leer = öffentlich vertrauenswürdiges Zertifikat).
+PIN="__PIN__"
 
 CODE="${BIKE_ENROLL_CODE:-}"
 SOURCE="serial"
@@ -33,7 +36,8 @@ Aufruf: sudo sh agent.sh --code XXXXX-XXXXX [Optionen]
   --code CODE          Kopplungscode aus dem Portal (alternativ Umgebungsvariable BIKE_ENROLL_CODE)
   --source serial|simulator   Datenquelle (Standard: serial = Arduino per USB)
   --serial-port PFAD   z. B. /dev/ttyACM0 (Standard: automatisch erkennen)
-  --ca-file DATEI      eigenes CA-Zertifikat der Plattform (selbst signiert)
+  --ca-file DATEI      Zertifikat der Plattform (selbst signiert); ohne Angabe wird es per Pin geholt
+  --pin sha256//…      Schlüssel-Pin des Plattform-Zertifikats (Standard: im Skript hinterlegt)
   --name NAME          Gerätename (Standard: Hostname)
   --prefix DIR         Installationsverzeichnis (Standard: $PREFIX)
   --etc-dir DIR        Konfigurationsverzeichnis (Standard: $ETC_DIR)
@@ -49,6 +53,7 @@ while [ $# -gt 0 ]; do
     --source) SOURCE="$2"; shift 2 ;;
     --serial-port) SERIAL_PORT="$2"; shift 2 ;;
     --ca-file) CA_FILE="$2"; shift 2 ;;
+    --pin) PIN="$2"; shift 2 ;;
     --name) NAME="$2"; shift 2 ;;
     --prefix) PREFIX="$2"; shift 2 ;;
     --etc-dir) ETC_DIR="$2"; shift 2 ;;
@@ -108,6 +113,16 @@ fi
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT INT TERM
 
+if [ -z "$CA_FILE" ] && [ -n "$PIN" ]; then
+  case "$BASE_URL" in https://*)
+    command -v curl >/dev/null 2>&1 || die "Für das angeheftete Zertifikat wird curl benötigt."
+    say "Plattform-Zertifikat per Pin prüfen und laden"
+    curl -fsSk --pinnedpubkey "$PIN" -o "$TMP/bike-ca.crt" "$BASE_URL/install/server.crt" \
+      || die "Zertifikat passt nicht zum Pin ($PIN) – falscher Server? Abbruch."
+    CA_FILE="$TMP/bike-ca.crt" ;;
+  esac
+fi
+
 say "Agent $VERSION herunterladen"
 URL="$BASE_URL/install/agent.tar.gz"
 if command -v curl >/dev/null 2>&1; then
@@ -160,7 +175,7 @@ if [ "$NO_SYSTEMD" -eq 0 ]; then
   say "Dienst einrichten"
   cat > /etc/systemd/system/bike-agent.service <<UNIT
 [Unit]
-Description=Smarte Radstation - Agent (Gateway)
+Description=Smart Bicycle Box - Agent (Gateway)
 After=network-online.target
 Wants=network-online.target
 

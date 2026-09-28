@@ -30,7 +30,7 @@ class AgentBundle:
     script_sha256: str
 
     @classmethod
-    def build(cls, base_url: str, agent_dir: Path = AGENT_DIR) -> "AgentBundle":
+    def build(cls, base_url: str, agent_dir: Path = AGENT_DIR, pin: str = "") -> "AgentBundle":
         version = (agent_dir / "VERSION").read_text().strip()
         raw = io.BytesIO()
         # Reproduzierbar: feste Reihenfolge, Zeitstempel 0, keine Besitzer -> gleiche Prüfsumme bei gleichem Inhalt.
@@ -51,6 +51,7 @@ class AgentBundle:
             .replace("__BASE_URL__", base_url)
             .replace("__VERSION__", version)
             .replace("__SHA256__", sha)
+            .replace("__PIN__", pin)
             .encode()
         )
         return cls(version, data, sha, script, hashlib.sha256(script).hexdigest())

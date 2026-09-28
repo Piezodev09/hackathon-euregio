@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Agent der Smarten Radstation für den Raspberry Pi.
+"""Agent der Smart Bicycle Box für den Raspberry Pi.
 
 Baut auf dem Gateway (gateway.py) auf und ergänzt die Geräteverwaltung aus der Cloud:
   * Kopplung per Einmal-Code aus dem Portal (kein manuelles Kopieren von Tokens)
@@ -188,7 +188,6 @@ def enroll(state: State, url: str, code: str, source: str, serial_port: str, ca_
         "token_issued_at": time.time(),
         "station_id": body["station_id"],
         "station_name": body.get("station_name"),
-        "slot_map": body["slot_map"],
         "config_version": body["config_version"],
         "heartbeat_s": body.get("heartbeat_s", 60),
         "source": source,
@@ -315,13 +314,12 @@ class QueueWriter:
         pass
 
 
-def simulator_lines(slot_keys: list[str], stop: threading.Event):
+def simulator_lines(stop: threading.Event):
     from simulator import Simulator
 
     q: queue.Queue = queue.Queue()
-    sim = Simulator(slot_keys, heartbeat_s=10, out=QueueWriter(q))
-    for s in sim.slots.values():
-        sim.emit(s)
+    sim = Simulator(heartbeat_s=10, out=QueueWriter(q))
+    sim.emit()
 
     def loop():
         next_auto = time.monotonic() + 20
@@ -352,7 +350,7 @@ class Agent:
         s = state.data
         self.api = Api(s["api_url"], s.get("ca_file"), s.get("allow_http", False))
         self.cfg = GatewayConfig(
-            api_url=s["api_url"], station_id=s["station_id"], slot_map=dict(s["slot_map"]), token=s["token"],
+            api_url=s["api_url"], station_id=s["station_id"], token=s["token"],
             serial_port=s.get("serial_port", "/dev/ttyACM0"), ca_file=s.get("ca_file"),
             state_dir=state.dir, source="simulated" if s.get("source") == "simulator" else "live",
         )
@@ -382,12 +380,9 @@ class Agent:
 
     def apply(self, resp: dict) -> None:
         if resp.get("config_version", 0) != self.state.get("config_version"):
-            new_map = {str(k): str(v) for k, v in resp["slot_map"].items()}
-            self.cfg.slot_map.clear()
-            self.cfg.slot_map.update(new_map)  # parse_line nutzt dasselbe Dict -> sofort wirksam
-            self.state.data.update(slot_map=new_map, config_version=resp["config_version"])
+            self.state.data.update(config_version=resp["config_version"])
             self.state.save()
-            log.info("Neue Konfiguration %s: Plätze %s", resp["config_version"], ", ".join(new_map))
+            log.info("Neue Konfiguration %s", resp["config_version"])
         for cmd in resp.get("commands", []):
             if cmd == "restart":
                 log.warning("Neustart auf Anforderung aus dem Portal")
@@ -444,7 +439,7 @@ class Agent:
         log.info("Agent %s gestartet: Station %s (%s), Quelle %s", VERSION, self.state["station_id"],
                  self.state.get("station_name"), self.state.get("source"))
         if self.state.get("source") == "simulator":
-            source = simulator_lines(list(self.cfg.slot_map), self.stop)
+            source = simulator_lines(self.stop)
         else:
             source = serial_lines(self.cfg, self.gw, self.stop)
         for line in source:
@@ -461,7 +456,7 @@ class Agent:
 
 # ---------------------------------------------------------------------- CLI
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description="Agent der Smarten Radstation")
+    ap = argparse.ArgumentParser(description="Agent der Smart Bicycle Box")
     ap.add_argument("--state-dir", default=os.environ.get("BIKE_AGENT_STATE", "/var/lib/bike-agent"))
     ap.add_argument("-v", "--verbose", action="store_true")
     sub = ap.add_subparsers(dest="cmd", required=True)

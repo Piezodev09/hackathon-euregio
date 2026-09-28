@@ -10,8 +10,10 @@
 |---|---|---|---|---|---|
 | Arduino (+ USB-Kabel) | | | | | |
 | Raspberry Pi (+ Netzteil, SD) | | | | | |
-| Präsenzsensor | | | digital / Ultraschall | | |
-| Vibrationssensor | | | digital (Ein/Aus) / analog | | |
+| Präsenzsensor (Vorschlag: ToF-Distanzsensor, Budget: Ultraschall) | | | I2C / Ultraschall / digital | | |
+| Erschütterungssensor | | | digital (Ein/Aus) / analog | | |
+| NFC-Leser (geplant) | | | I2C / SPI / UART | | |
+| Display für den Kopfträger (Vorschlag 13–15,6″) | | | HDMI am Pi | | |
 | LEDs (+ Vorwiderstände) | | | | | |
 | Steckbrett / Klemmen / Leitungen | | | | | |
 | Monitor / Tablet für Anzeige | | | | | |
@@ -21,7 +23,7 @@
 
 ## Sensorwahl im Sketch
 
-In `arduino/smart_bike_station/smart_bike_station.ino`:
+In `arduino/smart_bicycle_box/smart_bicycle_box.ino`:
 
 - `PRESENCE_TYPE`: `PRESENCE_ULTRASONIC` (z. B. HC-SR04, Schwelle `OCCUPIED_BELOW_CM`)
   oder `PRESENCE_DIGITAL` (IR-Hindernissensor/Kontakt, `DIGITAL_ACTIVE_LOW`).
@@ -32,29 +34,43 @@ In `arduino/smart_bike_station/smart_bike_station.ino`:
 
 ## Pinbelegung (geprüft eintragen)
 
-| Platz | Präsenz (Echo/Signal) | Trigger | Vibration | LED grün | LED rot |
+| Präsenz (Echo/Signal) | Trigger | Erschütterung | LED grün | LED rot | Netz-LED |
 |---|---|---|---|---|---|
-| A | | | | | |
-| B | | | | | |
-| C | | | | | |
+| | | | | | |
 
 Beim Arduino Uno sind D0/D1 durch USB-Seriell belegt – nicht verwenden.
 
-## Lokale Anzeige am Platz
+## Aufbau des Stellplatzes (Vorschlag – Maße erst nach dem Messen festlegen)
 
-| Zustand | LED grün | LED rot | Beschriftung am Platz |
+Skizzen: `design/smart-bicycle-box-prototyp.html`, Abschnitt „Stellplatz-Konzept“.
+
+| Nr. | Teil | Position (Vorschlag) |
+|---|---|---|
+| – | Rahmen | zwei Seitenwände + Rückwand, vorne offen; ca. 80 × 200 × 150 cm (B × T × H), lichte Höhe ca. 125 cm |
+| 1 | Display | im Kopfträger oben vorne, mittig; über HDMI am Pi (Kiosk-Anzeige) |
+| 2 | Präsenzsensor | innen an der linken Wand, ca. 40 cm hoch, misst quer zur gegenüberliegenden Wand |
+| 3 | NFC-Leser (geplant) | außen rechts vorne, ca. 100 cm hoch, hinter max. 3 mm Kunststoff, nicht hinter Metall |
+| 4 | Erschütterungssensor | an der Radhalteschiene |
+| 5 | Elektronikgehäuse IP54 | außen rechts hinten oben: Arduino, Pi, geprüftes Netzteil |
+| 6 | Kabelkanal | Oberkante rechte Wand → Kopfträger → Innenkante linke Wand; Bodenkabel unter der Schiene |
+| 7 | Radhalteschiene | an der Rückwand, sorgt für definierte Position |
+| 8 | Kamera | **nicht genehmigt** – nur nach Freigabe durch Schulleitung und Datenschutz |
+
+## Lokale Anzeige
+
+| Zustand | Display | LED grün | LED rot |
 |---|---|---|---|
-| frei | an | aus | „frei / vrij / available“ + Symbol |
-| belegt | aus | an | „belegt / bezet / occupied“ |
-| unbekannt | aus | blinkt | „Störung – bitte Anzeige beachten“ |
+| frei | „FREI“ + Häkchen, heller grüner Grund | an | aus |
+| belegt | „BELEGT“ + Fahrrad, dunkelroter Grund | aus | an |
+| unbekannt | „STATUS UNBEKANNT“ + Fragezeichen, grau schraffiert | aus | blinkt |
 
-Farbe nie allein: Beschriftung am Platz anbringen (Plan 9.2).
+Farbe nie allein: Das Display zeigt immer Wort und Symbol. LEDs sind nur eine Zusatzanzeige.
 
 ## Kalibrierung
 
-1. Leerer Platz, Demo-Objekt, echtes Fahrrad: Abstandswerte notieren → `OCCUPIED_BELOW_CM`.
+1. Leerer Stellplatz, Demo-Objekt, echte Fahrräder (dünne Rahmen, Carbon, Kinderrad): Abstandswerte notieren → `OCCUPIED_BELOW_CM` (Vorschlag 60 cm bei ca. 75 cm Innenbreite).
 2. Sonnenlicht/Position prüfen (IR), Fahrradformen (Rahmen, Reifen) prüfen.
-3. Vibration: normales Einstellen, Anstoßen, Nachbarplatz, Rütteln – Werte im Log
+3. Erschütterung: normales Einstellen, Anstoßen, Anlehnen, Wind, Rütteln – Werte im Log
    (`journalctl -u bike-gateway -f` bzw. Seriellmonitor) → `peak_threshold`, `min_peaks`.
 
 ## Mechanik

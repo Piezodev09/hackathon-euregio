@@ -1,4 +1,4 @@
-# Konfiguration der Plattform "Smarte Radstation" (nicht geheime Werte).
+# Konfiguration der Plattform "Smart Bicycle Box" (nicht geheime Werte).
 # Geheimnisse (Datenschlüssel, SMTP-Passwort) kommen AUSSCHLIESSLICH aus Umgebungsvariablen,
 # siehe deploy/api.env.example.
 
@@ -11,7 +11,7 @@ base_url = "http://127.0.0.1:8000"
 allowed_hosts = ["127.0.0.1", "localhost"]
 # Selbstregistrierung neuer Kunden erlauben.
 signup_enabled = true
-product_name = "Smarte Radstation"
+product_name = "Smart Bicycle Box"
 
 [auth]
 # Session: Leerlauf-Timeout und absolute Höchstdauer.
@@ -33,7 +33,7 @@ invite_token_hours = 72
 [mail]
 # "console" (Entwicklung: Mails im Log) oder "smtp".
 backend = "console"
-from = "Smarte Radstation <no-reply@example.org>"
+from = "Smart Bicycle Box <no-reply@example.org>"
 smtp_host = ""
 smtp_port = 587
 smtp_user = ""

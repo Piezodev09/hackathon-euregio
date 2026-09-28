@@ -1,46 +1,49 @@
 # Architektur
 
-Konkreter Vorschlag nach Projektplan Kapitel 3 – an die tatsächlich vorhandenen Geräte anpassen.
+Ein vorne offener Einzelstellplatz. Konkreter Vorschlag – an die tatsächlich vorhandenen Geräte anpassen.
+Der visuelle Entwurf (Stellplatz-Skizzen, Dashboard, Diagramm) liegt in `design/`.
 
 ## Plattformen und Aufgaben
 
-| Plattform | Aufgabe | Code |
-|---|---|---|
-| Arduino | Sensoren lesen, Belegung 2 s entprellen, LEDs setzen, JSON-Zeilen über USB-Seriell senden (bei Änderung, bei Vibration max. alle 0,5 s, Heartbeat alle 10 s) | `arduino/smart_bike_station/` |
-| Raspberry Pi | Zeilen prüfen, Platz zuordnen, Sequenznummer vergeben, bis zu 500 Nachrichten puffern, per HTTPS senden; schweigt der Arduino > 15 s, alle Plätze als Sensorfehler melden; Netzstatus an Arduino zurück | `pi-gateway/gateway.py` |
-| Debian-VM auf Proxmox | FastAPI: Messungen annehmen, Zustände ableiten, Regel + KI auswerten, SQLite, Dashboard ausliefern | `backend/`, `web/` |
-| Browser | Live-Belegung, Empfehlung, Warnungen, Zeitstempel, Verlauf; Kundenportal mit Rollen, Kiosk-Anzeige per Anzeige-Link | `web/` |
+| Plattform | Aufgabe | Code | Stand |
+|---|---|---|---|
+| Sensoren | Präsenz (quer über den Stellplatz), Erschütterung (an der Radhalteschiene); NFC seitlich vorgesehen | – | geplant |
+| Arduino | Sensoren lesen, Belegung 2 s entprellen, LEDs setzen, JSON-Zeilen über USB-Seriell senden (bei Änderung, bei Erschütterung max. alle 0,5 s, Heartbeat alle 10 s) | `arduino/smart_bicycle_box/` | Code vorhanden, nicht auf Hardware getestet |
+| Raspberry Pi | Zeilen prüfen, Sequenznummer vergeben, bis zu 500 Nachrichten puffern, per HTTPS senden; schweigt der Arduino > 15 s, Stellplatz als Sensorfehler melden; Display lokal (Kiosk-Anzeige) | `pi-gateway/` | Code vorhanden, nicht auf echtem Pi getestet |
+| Edge-VM (Proxmox) | Eingang aus dem Schulnetz, TLS-Terminierung/Weiterleitung zur App-VM | `deploy/` (Beispiele) | VM eingerichtet, Dienst nicht installiert |
+| App-VM (Proxmox, abgeschirmt) | FastAPI: Messungen annehmen, Zustand ableiten, Regel + KI auswerten, SQLite, Portal ausliefern | `backend/`, `web/` | VM eingerichtet, Anwendung nicht installiert |
+| Browser | Portal, Kiosk-Anzeige | `web/` | mit Simulator geprüft |
 
 ## Datenfluss
 
 ```
 Fahrrad einstellen
-  -> Sensor misst Abstand/Präsenz
-  -> Arduino entprellt (2 s) und meldet {"slot_id","presence","vibration","seq","state"}
-  -> Pi prüft Format/Plausibilität, ordnet Stellplatz zu, vergibt Sequenznummer
+  -> Präsenzsensor misst quer über den Stellplatz
+  -> Arduino entprellt (2 s) und meldet {"presence","vibration","seq","state"}
+  -> Pi prüft Format/Plausibilität, vergibt Sequenznummer
        +-> API nicht erreichbar? -> puffern (begrenzt), später mit age_ms nachsenden
   -> API prüft Geräte-Token + Eingaben, setzt Server-Zeitstempel
        +-> SQLite: measurement (+ event bei Sensorfehler/Warnung)
-       +-> belegt + Vibration: Merkmale berechnen -> Regel und KI bewerten
-  -> Dashboard fragt alle 2 s den Status ab
+       +-> belegt + Erschütterung: Merkmale berechnen -> Regel und KI bewerten
+  -> Portal und Display fragen alle 2 s den Status ab
 ```
 
 ## Zustände
 
 ```
 [FREI] <-- Fahrrad erkannt / entfernt --> [BELEGT]
-  | Messung unplausibel / Sensorausfall / keine Daten seit 30 s
+  | Messung unplausibel / Sensorausfall / keine Daten seit 30 s / Verbindungsabbruch
   v
-[UNBEKANNT] -- gültige Messungen --> neuer Zustand
-[BELEGT] -- auffällige Vibration --> Warnereignis (Platz bleibt BELEGT)
+[STATUS UNBEKANNT] -- gültige Messungen --> neuer Zustand
+[BELEGT] -- auffällige Erschütterung --> Warnereignis (Zustand bleibt BELEGT)
 ```
 
-Ein Alarm ist kein Belegungszustand. „Unbekannt“ wird an drei Stellen erzwungen:
+Eine Warnung ist kein Belegungszustand. STATUS UNBEKANNT wird an vier Stellen erzwungen:
 
 1. **Arduino**: nach dem Start und nach 5 ungültigen Messungen in Folge `presence=-1`.
-2. **Gateway**: kommt vom Arduino nichts mehr, meldet es `sensor_state="error"` für alle Plätze.
-3. **API**: letzte Meldung älter als `stale_after_s` (30 s) → `unknown/stale`.
-4. **Browser**: letzte erfolgreiche Antwort älter als 30 s → alle Plätze `unknown/connection`.
+2. **Gateway**: kommt vom Arduino nichts mehr, meldet es `sensor_state="error"`.
+3. **API**: letzte Meldung älter als `stale_after_s` (30 s) oder in der Zukunft → `unknown/stale`.
+4. **Browser**: letzte erfolgreiche Antwort älter als 30 s → `unknown/connection`.
 
 ## Zeitwerte (Planungsannahmen, in Konfiguration)
 
@@ -50,12 +53,11 @@ Ein Alarm ist kein Belegungszustand. „Unbekannt“ wird an drei Stellen erzwun
 | Heartbeat | 10 s | `HEARTBEAT_MS` im Sketch, `timing.heartbeat_s` im Gateway |
 | Arduino-Timeout | 15 s | `timing.arduino_timeout_s` im Gateway |
 | „unbekannt/veraltet“ | 30 s | `timing.stale_after_s` in `backend/config.toml` |
-| Dashboard-Abfrage | 2 s | `timing.ui_poll_interval_s` |
+| Abfrage Portal/Display | 2 s | `timing.ui_poll_interval_s` |
 | Schonzeit nach Belegungswechsel | 15 s | `anomaly.grace_period_s` |
 
 ## Warum so einfach?
 
-Kein Message-Broker, kein Kubernetes, eine Datenbankdatei, Polling statt WebSockets:
-weniger Integrations- und Fehleraufwand bei wenigen Demo-Plätzen (Plan 3.2).
-Gateway nutzt nur die Python-Standardbibliothek + pyserial, damit die Installation auch
-in Netzen mit Proxy/eingeschränktem Internet klappt.
+Kein Message-Broker, kein Kubernetes, eine Datenbankdatei, Polling statt WebSockets: weniger
+Integrations- und Fehleraufwand für einen Demo-Stellplatz. Das Gateway nutzt nur die
+Python-Standardbibliothek + pyserial.

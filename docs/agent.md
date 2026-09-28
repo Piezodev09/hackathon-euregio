@@ -19,13 +19,16 @@ Agent ◄──── Heartbeat (60 s): Konfiguration, Befehle, Updates ──�
 Voraussetzungen: Raspberry Pi mit **Raspberry Pi OS Bookworm** oder neuer (Python ≥ 3.11), Netzwerk,
 Arduino mit dem Sketch aus `arduino/` per USB.
 
-1. Portal → **Stationen** → Station → **Einstellungen** → **Gateway einrichten**.
-2. Auf dem Pi die drei angezeigten Befehle ausführen:
+1. Portal → **Stellplätze** → Stellplatz → **Einstellungen** → **Gateway einrichten**.
+2. Auf dem Pi die angezeigten Befehle ausführen. Bei selbst signiertem Plattform-Zertifikat (Standard auf der VM):
    ```bash
-   curl -fsSLO https://<plattform>/install/agent.sh
+   curl -fsSk --pinnedpubkey 'sha256//<pin>' -o bike-ca.crt https://<plattform>/install/server.crt
+   curl -fsSLO --cacert bike-ca.crt https://<plattform>/install/agent.sh
    echo '<prüfsumme>  agent.sh' | sha256sum -c -     # muss "OK" ausgeben
-   sudo sh agent.sh --code XXXXX-XXXXX
+   sudo sh agent.sh --code XXXXX-XXXXX --ca-file bike-ca.crt
    ```
+   Der erste Befehl lädt das Zertifikat nur, wenn dessen Schlüssel exakt zum Pin passt (sonst Fehler 90).
+   Der Pin steht im Portal; zum Gegencheck zeigt das Portal auch den SHA-256-Fingerabdruck.
 3. Nach etwa einer Minute steht das Gateway im Portal auf **online**.
 
 Optionen des Skripts: `--source simulator` (ohne Arduino testen), `--serial-port /dev/ttyUSB0`,
@@ -59,7 +62,7 @@ Das Skript ist wiederholbar; eine Neuinstallation mit neuem Code koppelt das Ger
   *Aktualisieren*. Es gibt bewusst **keine** Möglichkeit, beliebige Befehle auszuführen.
 - **Sperren**: Token sofort ungültig, Gerät kann keine Daten mehr senden.
 - **Updates automatisch einspielen** (je Station, Standard: an).
-- **Konfiguration**: Neue oder entfernte Stellplätze gelangen mit dem nächsten Heartbeat zum Agenten.
+- **Konfiguration**: Der Agent meldet seine Konfigurationsversion; Änderungen gelangen mit dem nächsten Heartbeat zum Agenten. Jede Station ist genau ein Stellplatz – eine Platzzuordnung gibt es nicht mehr.
 
 ## Sicherheit
 
@@ -93,6 +96,9 @@ damit selbst eine kompromittierte Plattform keine Updates einschleusen kann.
 | Gateway bleibt offline | `systemctl status bike-agent`, `journalctl -u bike-agent -f`; Netz/Firewall zur Plattform (Port 443) |
 | „Arduino ✗“ | USB-Kabel, `ls /dev/ttyACM* /dev/ttyUSB*`, Port in `bike-agent status`; neu koppeln mit `--serial-port` |
 | „Token abgelehnt“ | Gerät im Portal gesperrt? Neu koppeln: neuen Code erzeugen, `sudo sh agent.sh --code …` |
+| `curl: (60) … self-signed certificate` | Alten Befehl ohne Zertifikat benutzt → die Befehle aus dem Portal (mit `--pinnedpubkey`) verwenden |
+| `curl: (60) … no alternative certificate subject name matches` bzw. Python `IP address mismatch` | Zertifikat enthält die IP nicht → auf der VM `sudo deploy/make-cert.sh --force 192.168.0.114 && sudo systemctl restart bike-api`, dann neue Befehle aus dem Portal |
+| `curl: (90) public key does not match pinned public key` | Pin passt nicht (falscher Server oder Zertifikat erneuert) → Befehle im Portal neu anzeigen lassen |
 | Kopplung schlägt fehl | Code abgelaufen/benutzt → neuen Code erzeugen; Uhrzeit des Pi ist unkritisch |
 | Update hängt | `bike-agent rollback`, dann `sudo systemctl restart bike-agent` |
 

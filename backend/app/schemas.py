@@ -43,7 +43,8 @@ class Strict(BaseModel):
 # ---------------------------------------------------------------------- Telemetrie (Gateway)
 class MeasurementIn(Strict):
     station_id: str = Field(pattern=ID_PATTERN)
-    slot_id: str = Field(pattern=SLOT_KEY_PATTERN)  # Platzkennung ("A")
+    # Veraltet: eine Station hat genau einen Stellplatz. Wird nur noch für alte Gateways akzeptiert ("A").
+    slot_id: str | None = Field(default=None, pattern=SLOT_KEY_PATTERN)
     # Vom Gateway vergeben, monoton steigend; verhindert Doppelungen bei Wiederholung.
     sequence: int = Field(ge=0, le=2**62)
     # None nur zusammen mit sensor_state="error".
@@ -154,20 +155,16 @@ class DeleteOrgIn(Strict):
 
 
 # ---------------------------------------------------------------------- Stationen
-class SlotIn(Strict):
-    key: str = Field(pattern=SLOT_KEY_PATTERN)
-    label: Name
-
-
-class SlotPatch(Strict):
-    label: Name | None = None
-    position: int | None = Field(default=None, ge=1, le=10_000)
-
-
 class StationIn(Strict):
     name: Name
     location: ShortText = ""
-    slots: list[SlotIn] = Field(default_factory=list, max_length=200)
+
+
+class TariffIn(Strict):
+    mode: Literal["free", "flat", "per_hour", "per_day"]
+    price_cents: int = Field(ge=0, le=100_000)
+    free_minutes: int = Field(default=0, ge=0, le=24 * 60)
+    daily_cap_cents: int | None = Field(default=None, ge=0, le=100_000)
 
 
 class StationPatch(Strict):
@@ -176,6 +173,8 @@ class StationPatch(Strict):
     alert_source: Literal["rule", "ml"] | None = None
     display_enabled: bool | None = None
     auto_update: bool | None = None
+    stall_view_enabled: bool | None = None
+    maintenance: bool | None = None
 
 
 class DeviceIn(Strict):
@@ -186,3 +185,54 @@ class DeviceIn(Strict):
 class TenantPatch(Strict):
     status: Literal["active", "suspended"] | None = None
     plan: Annotated[str, Field(pattern=r"^[a-z]{1,20}$")] | None = None
+
+
+# ---------------------------------------------------------------------- NFC / Parken / Abrechnung
+NfcUid = Annotated[str, Field(min_length=8, max_length=40, pattern=r"^[0-9A-Fa-f:\- ]+$")]
+
+
+class TapIn(Strict):
+    station_id: str = Field(pattern=ID_PATTERN)
+    sequence: int = Field(ge=0, le=2**62)
+    uid: NfcUid
+    age_ms: int = Field(default=0, ge=0, le=86_400_000)
+    source: Literal["live", "simulated"] = "live"
+
+
+class CardIn(Strict):
+    uid: NfcUid
+    label: Name
+
+
+class CardPatch(Strict):
+    label: Name | None = None
+    status: Literal["active", "blocked"] | None = None
+
+
+class StationTariffIn(Strict):
+    tariff: TariffIn | None  # None = Tarif der Organisation
+
+
+class PaidIn(Strict):
+    paid: bool
+
+
+class LicenseIn(Strict):
+    valid_until: Annotated[str, Field(pattern=r"^\d{4}-\d{2}-\d{2}$")] | None = None
+    price_per_stall_day_cents: int | None = Field(default=None, ge=0, le=100_000)
+    base_month_cents: int | None = Field(default=None, ge=0, le=10_000_000)
+    notes: ShortText = ""
+
+
+class InvoiceIn(Strict):
+    tenant_id: str = Field(pattern=ID_PATTERN)
+    month: Annotated[str, Field(pattern=r"^\d{4}-\d{2}$")]
+
+
+class InvoicePatch(Strict):
+    status: Literal["open", "paid", "void"]
+
+
+class ReportIn(Strict):
+    category: Literal["damaged", "blocked", "wrong_status", "other"]
+    text: Annotated[str, Field(max_length=300), AfterValidator(_text)] = ""

@@ -4,17 +4,22 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="referrer" content="no-referrer">
-  <meta name="description" content="Smarte Radstation: Echtzeit-Belegung von Fahrradstellplätzen, Platzempfehlung und Bewegungsmeldungen als Cloud-Dienst für Schulen, Unternehmen und Kommunen.">
-  <title>Smarte Radstation – freie Fahrradplätze auf einen Blick</title>
+  <meta name="description" content="Smart Bicycle Box: ein vorne offener Fahrradstellplatz mit Sensor, Display und Web-Dashboard – zeigt FREI, BELEGT oder STATUS UNBEKANNT.">
+  <title>Smart Bicycle Box – ein Stellplatz, ein ehrlicher Status</title>
   <link rel="icon" href="/static/img/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/css/fonts.css">
+  <link rel="stylesheet" href="/static/css/tokens.css">
+  <link rel="stylesheet" href="/static/css/components.css">
   <link rel="stylesheet" href="/static/css/app.css">
   <script type="module" src="/static/js/landing.js"></script>
 </head>
 <body>
-  <a class="skip" href="#main">Zum Inhalt</a>
+  <a class="skip" href="#main" data-i18n="c.skip">Zum Inhalt springen</a>
   <header class="site-header">
     <div class="inner">
-      <a class="brand" href="/"><span class="logo" aria-hidden="true">R</span>Smarte Radstation</a>
+      <a class="brand" href="/">
+        <svg class="logo" viewBox="0 0 48 48" aria-hidden="true" focusable="false"><path d="M6 42V12h36v30" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><rect x="14" y="14" width="20" height="8" rx="1" fill="currentColor"/><circle cx="16" cy="35" r="5" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="32" cy="35" r="5" fill="none" stroke="currentColor" stroke-width="3"/><path d="M16 35l5-8h7l4 8" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>
+        Smart Bicycle Box</a>
       <nav class="site-nav" aria-label="Hauptnavigation">
         <a class="link" href="#features" data-i18n="l.features">Funktionen</a>
         <a class="link" href="#how" data-i18n="l.how">So funktioniert’s</a>
@@ -31,17 +36,17 @@
     <section class="hero">
       <div class="section-inner hero-grid">
         <div>
-          <h1 data-i18n="l.hero_title">Freie Fahrradplätze auf einen Blick.</h1>
+          <h1 data-i18n="l.hero_title">Ein Stellplatz. Ein ehrlicher Status.</h1>
           <p class="lead" data-i18n="l.hero_lead"></p>
           <div class="btn-row">
             <a class="btn primary" href="/app#/register" data-i18n="l.cta">Jetzt kostenlos starten</a>
             <a class="btn" href="#pricing" data-i18n="l.cta2">Preise ansehen</a>
           </div>
         </div>
-        <div class="card preview" aria-labelledby="preview-h">
-          <h2 id="preview-h" class="small muted" data-i18n="l.preview">Live-Vorschau (Beispiel)</h2>
-          <p class="big" id="preview-free"></p>
-          <ul class="slots" id="preview-slots"></ul>
+        <div class="card" aria-labelledby="preview-h">
+          <h2 id="preview-h" class="label-caps" data-i18n="l.preview">So sieht der Status aus (Beispiel)</h2>
+          <div id="preview"></div>
+          <div class="btn-row preview-switch" id="preview-switch" role="group" aria-labelledby="preview-h"></div>
         </div>
       </div>
     </section>
@@ -50,12 +55,11 @@
       <div class="section-inner">
         <h2 id="features-h" data-i18n="l.features">Funktionen</h2>
         <div class="grid cols-3">
-          <div class="card feature"><h3><span class="icon" aria-hidden="true">✓</span><span data-i18n="l.f1_t"></span></h3><p data-i18n="l.f1"></p></div>
-          <div class="card feature"><h3><span class="icon" aria-hidden="true">→</span><span data-i18n="l.f2_t"></span></h3><p data-i18n="l.f2"></p></div>
-          <div class="card feature"><h3><span class="icon" aria-hidden="true">⚠</span><span data-i18n="l.f3_t"></span></h3><p data-i18n="l.f3"></p></div>
-          <div class="card feature"><h3><span class="icon" aria-hidden="true">▦</span><span data-i18n="l.f4_t"></span></h3><p data-i18n="l.f4"></p></div>
-          <div class="card feature"><h3><span class="icon" aria-hidden="true">Aa</span><span data-i18n="l.f5_t"></span></h3><p data-i18n="l.f5"></p></div>
-          <div class="card feature"><h3><span class="icon" aria-hidden="true">☺</span><span data-i18n="l.f6_t"></span></h3><p data-i18n="l.f6"></p></div>
+          <div class="card feature"><h3><span class="icon" aria-hidden="true"><svg viewBox="0 0 48 48" focusable="false"><circle cx="24" cy="24" r="19" fill="none" stroke="currentColor" stroke-width="4"/><path d="M15 25l6 6 12-13" fill="none" stroke="currentColor" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span data-i18n="l.f1_t"></span></h3><p data-i18n="l.f1"></p></div>
+          <div class="card feature"><h3><span class="icon" aria-hidden="true"><svg viewBox="0 0 48 48" focusable="false"><path d="M4 24h7l4-10 6 20 6-24 6 20 4-6h7" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span data-i18n="l.f3_t"></span></h3><p data-i18n="l.f3"></p></div>
+          <div class="card feature"><h3><span class="icon" aria-hidden="true"><svg viewBox="0 0 48 48" focusable="false"><path d="M8 40V8M8 40h34" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><path d="M16 34v-8M24 34V16M32 34v-12" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round"/></svg></span><span data-i18n="l.f4_t"></span></h3><p data-i18n="l.f4"></p></div>
+          <div class="card feature"><h3><span class="icon" aria-hidden="true"><svg viewBox="0 0 48 48" focusable="false"><circle cx="24" cy="24" r="19" fill="none" stroke="currentColor" stroke-width="4"/><path d="M5 24h38M24 5c6 6 6 32 0 38M24 5c-6 6-6 32 0 38" fill="none" stroke="currentColor" stroke-width="3"/></svg></span><span data-i18n="l.f5_t"></span></h3><p data-i18n="l.f5"></p></div>
+          <div class="card feature"><h3><span class="icon" aria-hidden="true"><svg viewBox="0 0 48 48" focusable="false"><circle cx="18" cy="16" r="7" fill="none" stroke="currentColor" stroke-width="4"/><path d="M5 40c1-8 6-12 13-12s12 4 13 12" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><circle cx="34" cy="18" r="5" fill="none" stroke="currentColor" stroke-width="3"/><path d="M34 28c5 0 8 4 9 10" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg></span><span data-i18n="l.f6_t"></span></h3><p data-i18n="l.f6"></p></div>
         </div>
       </div>
     </section>
@@ -63,17 +67,17 @@
     <section class="section" id="how" aria-labelledby="how-h">
       <div class="section-inner">
         <h2 id="how-h" data-i18n="l.how">So funktioniert’s</h2>
-        <p class="muted" data-i18n="l.how_lead"></p>
-        <ol class="flow" aria-label="Datenfluss">
-          <li class="step"><span data-i18n="l.s1"></span><small data-i18n="l.s1s"></small></li>
-          <li class="arrow" aria-hidden="true">→</li>
-          <li class="step"><span data-i18n="l.s2"></span><small data-i18n="l.s2s"></small></li>
-          <li class="arrow" aria-hidden="true">→</li>
-          <li class="step"><span data-i18n="l.s3"></span><small data-i18n="l.s3s"></small></li>
-          <li class="arrow" aria-hidden="true">→</li>
-          <li class="step"><span data-i18n="l.s4"></span><small data-i18n="l.s4s"></small></li>
-          <li class="arrow" aria-hidden="true">→</li>
-          <li class="step"><span data-i18n="l.s5"></span><small data-i18n="l.s5s"></small></li>
+        <p class="lead" data-i18n="l.how_lead"></p>
+        <ol class="sbb-flow" aria-labelledby="how-h">
+          <li class="sbb-node"><p class="sbb-node__title" data-i18n="l.s1">Sensoren</p><p class="sbb-node__role" data-i18n="l.s1s"></p></li>
+          <li class="sbb-link" aria-hidden="true"><span class="sbb-link__line"></span></li>
+          <li class="sbb-node"><p class="sbb-node__title" data-i18n="l.s2">Arduino</p><p class="sbb-node__role" data-i18n="l.s2s"></p></li>
+          <li class="sbb-link" aria-hidden="true"><span class="sbb-link__line"></span></li>
+          <li class="sbb-node"><p class="sbb-node__title" data-i18n="l.s3">Raspberry Pi</p><p class="sbb-node__role" data-i18n="l.s3s"></p></li>
+          <li class="sbb-link" aria-hidden="true"><span class="sbb-link__line"></span></li>
+          <li class="sbb-node"><p class="sbb-node__title" data-i18n="l.s4">Server</p><p class="sbb-node__role" data-i18n="l.s4s"></p></li>
+          <li class="sbb-link" aria-hidden="true"><span class="sbb-link__line"></span></li>
+          <li class="sbb-node"><p class="sbb-node__title" data-i18n="l.s5">Dashboard</p><p class="sbb-node__role" data-i18n="l.s5s"></p></li>
         </ol>
       </div>
     </section>
@@ -95,7 +99,7 @@
     <section class="section" id="pricing" aria-labelledby="pricing-h">
       <div class="section-inner">
         <h2 id="pricing-h" data-i18n="l.pricing">Preise</h2>
-        <p class="muted" data-i18n="l.pricing_lead"></p>
+        <p class="lead" data-i18n="l.pricing_lead"></p>
         <div class="grid cols-3" id="plans"></div>
       </div>
     </section>
@@ -104,7 +108,7 @@
       <div class="section-inner">
         <h2 id="privacy-h" data-i18n="l.privacy">Datenschutz</h2>
         <p>Platzhalter für die Datenschutzerklärung des Betreibers. Verarbeitet werden: Konto­daten der Nutzer (Name, E-Mail, Rolle),
-          Sitzungsdaten (IP-Adresse, Browserkennung) zur Absicherung, technische Messdaten der Stellplätze (Belegung, Vibrationswert,
+          Sitzungsdaten (IP-Adresse, Browserkennung) zur Absicherung, technische Messdaten des Stellplatzes (Belegung, Erschütterungswert,
           Zeitpunkt) sowie ein Audit-Log sicherheitsrelevanter Aktionen. Keine Kameras, keine Personenerkennung, keine Tracking- oder
           Werbe-Cookies. Vor dem produktiven Einsatz durch den Betreiber zu vervollständigen (Verantwortlicher, Rechtsgrundlagen,
           Aufbewahrungsfristen, Auftragsverarbeitung, Betroffenenrechte).</p>
@@ -114,7 +118,7 @@
 
   <footer class="site-footer">
     <div class="section-inner">
-      <span>© Smarte Radstation · <span data-i18n="l.footer"></span></span>
+      <span>© Smart Bicycle Box · <span data-i18n="l.footer"></span></span>
       <span><a href="#privacy" data-i18n="l.privacy">Datenschutz</a> · <a href="#imprint" id="imprint" data-i18n="l.imprint">Impressum</a> ·
         <a href="/.well-known/security.txt">security.txt</a></span>
     </div>

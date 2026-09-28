@@ -1,6 +1,6 @@
 # Raspberry Pi: Gateway Arduino -> API. Startet automatisch beim Booten (Plan 3.1).
 [Unit]
-Description=Smarte Radstation - Pi-Gateway
+Description=Smart Bicycle Box - Pi-Gateway
 After=network-online.target
 Wants=network-online.target
 

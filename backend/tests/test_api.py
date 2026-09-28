@@ -17,44 +17,48 @@ def setup(env):
 def status(api, sid):
     r = api.get(f"/api/v1/stations/{sid}/status")
     assert r.status_code == 200, r.text
-    return {s["slot_id"]: s for s in r.json()["slots"]}, r.json()
+    return r.json()
 
 
 def test_no_data_is_unknown_never_free(setup):
     env, owner, dev = setup
-    slots, body = status(owner, dev.sid)
-    assert all(s["state"] == "unknown" for s in slots.values())
-    assert body["free_count"] == 0 and body["recommendation"] is None
+    body = status(owner, dev.sid)
+    assert body["state"] == "unknown" and body["unknown_reason"] == "no_data"
+    assert "slots" not in body and "recommendation" not in body
 
 
-def test_T01_T02_T03_free_occupied_recommendation(setup):
+def test_T01_T02_free_and_occupied(setup):
     env, owner, dev = setup
-    assert dev.send("A", occupied=True).status_code == 202
-    dev.send("B", occupied=False)
-    dev.send("C", occupied=False)
-    slots, body = status(owner, dev.sid)
-    assert slots["A"]["state"] == "occupied" and slots["B"]["state"] == "free"
-    assert body["free_count"] == 2 and body["recommendation"] == "B"
+    assert dev.send(occupied=True).status_code == 202
+    assert status(owner, dev.sid)["state"] == "occupied"
+    dev.send(occupied=False)
+    body = status(owner, dev.sid)
+    assert body["state"] == "free" and body["age_s"] == 0 and body["simulated_data"] is False
 
 
 def test_T07_sensor_error_and_stale_are_unknown(setup):
     env, owner, dev = setup
-    dev.send("A", occupied=False)
-    dev.send("A", occupied=None, state="error")
-    dev.send("B", occupied=False)
-    slots, _ = status(owner, dev.sid)
-    assert slots["A"]["unknown_reason"] == "sensor_error"
+    dev.send(occupied=False)
+    dev.send(occupied=None, state="error")
+    assert status(owner, dev.sid)["unknown_reason"] == "sensor_error"
+    dev.send(occupied=False)
     env.clock.advance(31)
-    slots, body = status(owner, dev.sid)
-    assert slots["B"]["state"] == "unknown" and slots["B"]["unknown_reason"] == "stale"
-    assert body["free_count"] == 0
+    body = status(owner, dev.sid)
+    assert body["state"] == "unknown" and body["unknown_reason"] == "stale"
+
+
+def test_future_timestamp_is_unknown(setup):
+    env, owner, dev = setup
+    dev.send(occupied=False)
+    env.clock.advance(-60)  # Serveruhr springt zurück -> Messung liegt "in der Zukunft"
+    assert status(owner, dev.sid)["state"] == "unknown"
 
 
 def test_duplicate_sequence_is_ignored(setup):
     env, owner, dev = setup
-    assert dev.send("A", occupied=True).json()["stored"] is True
+    assert dev.send(occupied=True).json()["stored"] is True
     dev.seq -= 1
-    assert dev.send("A", occupied=False).json()["duplicate"] is True
+    assert dev.send(occupied=False).json()["duplicate"] is True
 
 
 def test_T09_device_write_without_or_with_bad_token_rejected_and_logged(setup):
@@ -81,45 +85,46 @@ def test_device_tokens_are_stored_hashed(setup):
 def test_validation_rejects_bad_input(setup):
     env, owner, dev = setup
     assert dev.send(vib=5000).status_code == 422
-    assert dev.send(slot="Z").status_code == 422
+    assert dev.send(slot_id="Z").status_code == 422  # nur der eine Stellplatz "A" (alte Gateways)
+    assert dev.send(slot_id="A").status_code == 202
     assert dev.send(occupied=None, state="ok").status_code == 422
     assert dev.send(evil="x").status_code == 422
-    assert dev.send(slot="A; DROP TABLE slot").status_code == 422
+    assert dev.send(slot_id="A; DROP TABLE slot").status_code == 422
 
 
-def _vibrate(dev, clock, n, vib=600, step=0.5, slot="A"):
+def _vibrate(dev, clock, n, vib=600, step=0.5):
     created = False
     for _ in range(n):
         clock.advance(step)
-        created |= dev.send(slot, occupied=True, vib=vib).json()["alert_created"]
+        created |= dev.send(occupied=True, vib=vib).json()["alert_created"]
     return created
 
 
 def test_T05_T06_alert_after_grace_but_not_while_parking(setup):
     env, owner, dev = setup
-    dev.send("A", occupied=True)
+    dev.send(occupied=True)
     assert _vibrate(dev, env.clock, 5) is False  # Schonzeit
     env.clock.advance(20)
     assert _vibrate(dev, env.clock, 3) is True
-    slots, _ = status(owner, dev.sid)
-    assert slots["A"]["state"] == "occupied"
-    assert slots["A"]["alert"]["kind"] == "unusual_movement"
+    body = status(owner, dev.sid)
+    assert body["state"] == "occupied"
+    assert body["alert"]["kind"] == "unusual_movement"
 
 
 def test_single_bump_no_alert_and_old_buffered_data_ignored(setup):
     env, owner, dev = setup
-    dev.send("A", occupied=True)
+    dev.send(occupied=True)
     env.clock.advance(60)
     assert _vibrate(dev, env.clock, 1) is False
     created = False
     for i in range(5):
-        created |= dev.send("A", occupied=True, vib=800, age_ms=40_000 - i * 100).json()["alert_created"]
+        created |= dev.send(occupied=True, vib=800, age_ms=40_000 - i * 100).json()["alert_created"]
     assert created is False
 
 
 def test_cooldown_ack_and_roles(setup):
     env, owner, dev = setup
-    dev.send("A", occupied=True)
+    dev.send(occupied=True)
     env.clock.advance(20)
     assert _vibrate(dev, env.clock, 3)
     assert not _vibrate(dev, env.clock, 3)
@@ -132,29 +137,28 @@ def test_cooldown_ack_and_roles(setup):
     operator = env.invite(owner, "op@example.org", "operator")
     r = operator.post(f"/api/v1/events/{alert['id']}/ack")
     assert r.json() == {"acknowledged": True, "already_acknowledged": False}
-    slots, _ = status(owner, dev.sid)
-    assert slots["A"]["alert"] is None
+    assert status(owner, dev.sid)["alert"] is None
 
 
 def test_T13_summary_time_weighted_and_labels_simulated(setup):
     env, owner, dev = setup
     env.clock.t = 1_700_000_000 - (1_700_000_000 % 3600)
     for _ in range(6):
-        dev.send("A", occupied=True, source="simulated")
+        dev.send(occupied=True, source="simulated")
         env.clock.advance(10)
     for _ in range(6):
-        dev.send("A", occupied=False, source="simulated")
+        dev.send(occupied=False, source="simulated")
         env.clock.advance(10)
     body = owner.get(f"/api/v1/stations/{dev.sid}/occupancy?hours=1").json()
     assert body["contains_simulated"] is True and body["contains_live"] is False
-    assert body["buckets"][-1]["occupancy"]["A"] == pytest.approx(0.5, abs=0.01)
-    assert body["buckets"][-1]["occupancy"]["B"] is None
+    assert body["buckets"][-1]["occupancy"] == pytest.approx(0.5, abs=0.01)
+    assert body["buckets"][0]["occupancy"] is None or body["hours"] == 1
 
 
 def test_batch_endpoint(setup):
     env, owner, dev = setup
     ms = [{"station_id": dev.sid, "slot_id": "A", "sequence": 1, "occupied": True, "sensor_state": "ok"},
-          {"station_id": dev.sid, "slot_id": "A", "sequence": 1, "occupied": True, "sensor_state": "ok"},
+          {"station_id": dev.sid, "sequence": 1, "occupied": True, "sensor_state": "ok"},
           {"station_id": dev.sid, "slot_id": "Q", "sequence": 2, "occupied": True, "sensor_state": "ok"}]
     r = owner.c.post("/api/v1/measurements/batch", json={"measurements": ms}, headers={"Authorization": f"Bearer {dev.token}"})
     assert r.json() == {"stored": 1, "duplicate": 1, "rejected": 1}
@@ -162,13 +166,13 @@ def test_batch_endpoint(setup):
 
 def test_public_display_link(setup):
     env, owner, dev = setup
-    dev.send("A", occupied=False)
+    dev.send(occupied=False)
     r = owner.post(f"/api/v1/stations/{dev.sid}/display-link")
     token = r.json()["token"]
     assert "#" in r.json()["url"]  # Token im Fragment, nicht im Pfad
     anon = env.client()
     body = anon.get("/api/v1/public/display/status", headers={"X-Display-Token": token}).json()
-    assert body["free_count"] == 1 and "ai" not in body
+    assert body["state"] == "free" and "ai" not in body and "id" not in (body["alert"] or {})
     assert anon.get("/api/v1/public/display/status", headers={"X-Display-Token": "bsp_nope_nope_nope"}).status_code == 404
     owner.patch(f"/api/v1/stations/{dev.sid}", {"display_enabled": False})
     assert anon.get("/api/v1/public/display/status", headers={"X-Display-Token": token}).status_code == 404
@@ -194,9 +198,9 @@ def test_ml_model_loaded_and_runs_in_shadow(env, tmp_path):
     env.set_plan(owner, "school")
     sid, token = env.station(owner)
     dev = Device(owner, sid, token)
-    _, body = status(owner, sid)
+    body = status(owner, sid)
     assert body["ai"]["model_available"] is True and body["ai"]["plan_allows_ml"] is True
-    dev.send("A", occupied=True)
+    dev.send(occupied=True)
     env.clock.advance(20)
     _vibrate(dev, env.clock, 6, vib=900)
     alerts = [e for e in owner.get("/api/v1/events?include_shadow=true").json()["events"] if e["kind"] == "unusual_movement"]
@@ -204,3 +208,13 @@ def test_ml_model_loaded_and_runs_in_shadow(env, tmp_path):
     assert any(e["severity"] == "shadow" and e["detector"] == "ml" for e in alerts)
     # Umschalten auf KI als sichtbares Verfahren
     assert owner.patch(f"/api/v1/stations/{sid}", {"alert_source": "ml"}).status_code == 200
+
+
+def test_station_is_exactly_one_stall(setup):
+    env, owner, dev = setup
+    st = owner.get(f"/api/v1/stations/{dev.sid}").json()
+    assert "slots" not in st
+    assert owner.post(f"/api/v1/stations/{dev.sid}/slots", {"key": "B", "label": "B"}).status_code in (404, 405)
+    assert env.core.db.scalar("SELECT COUNT(*) FROM slot WHERE station_id = ?", (dev.sid,)) == 1
+    live = owner.get("/api/v1/stations").json()["stations"][0]["live"]
+    assert live["state"] == "unknown" and live["alert"] is False

@@ -1,8 +1,11 @@
-// Betrieb: Übersicht, Stationen, Live-Ansicht, Einstellungen, Meldungen.
-import { get, post, patch, del, describeError } from "./api.js";
+// Betrieb: Übersicht, Stellplätze, Live-Ansicht, Einstellungen, Meldungen.
+// Eine Station ist genau ein vorne offener Stellplatz.
+import { get, post, patch, put, del, describeError } from "./api.js";
 import { getLang, t } from "./i18n.js";
-import { el, clear, field, toast, confirmDialog, fmtDateTime, fmtTime, copyText, slotSymbol } from "./ui.js";
+import { el, clear, field, toast, confirmDialog, fmtDateTime, fmtTime, copyText, icon, effectiveState, reasonText,
+  stallStatus, stallBadge, fmtAge } from "./ui.js";
 import { state, can, every, go } from "./state.js";
+import { sessionSummary, tariffForm, tariffText } from "./views-parking.js";
 
 let devicesTimer = null;
 const errorCard = (e) => el("div", { class: "alert-box error", role: "alert" }, describeError(e));
@@ -11,33 +14,31 @@ function kpi(value, label) {
   return el("div", { class: "card kpi" }, el("span", { class: "value" }, String(value)), el("span", { class: "label" }, label));
 }
 
-function stationCard(s) {
+function stallCard(s) {
   const live = s.live || {};
-  return el("article", { class: "card" },
-    el("h3", {}, s.name),
+  return el("article", { class: "card stall-card" },
+    el("h3", {}, el("a", { href: `#/stations/${s.id}` }, s.name)),
     s.location ? el("p", { class: "muted small" }, s.location) : null,
-    el("p", { class: "kpi" }, el("span", { class: "value" }, `${live.free_count ?? "–"}`),
-      el("span", { class: "label" }, t("ov.free_of", { f: live.free_count ?? "–", t: live.total ?? "–" }))),
-    el("div", { class: "btn-row" },
-      live.alerts ? el("span", { class: "badge warn" }, `⚠ ${live.alerts} ${t("st.alert")}`) : null,
-      live.known_count < live.total ? el("span", { class: "badge" }, `? ${live.total - live.known_count} ${t("st.unknown")}`) : null,
-      live.simulated_data ? el("span", { class: "badge sim" }, t("c.simulated")) : null),
-    el("p", {}, el("a", { class: "btn small", href: `#/stations/${s.id}` }, t("ov.open"))));
+    stallBadge(live.state || "unknown"),
+    el("div", { class: "stall-meta" },
+      live.state === "unknown" && live.unknown_reason ? el("span", {}, reasonText(live.unknown_reason)) :
+        live.age_s !== null && live.age_s !== undefined ? el("span", {}, t("st.age", { s: fmtAge(live.age_s) })) : null,
+      live.alert ? el("span", { class: "badge warn" }, icon("vib"), t("st.alert")) : null,
+      live.simulated_data ? el("span", { class: "badge sim" }, t("st.sim")) : null));
 }
 
 // ---------------------------------------------------------------------- Übersicht
 export function viewOverview() {
   const kpis = el("div", { class: "grid cols-4" });
   const cards = el("div", { class: "grid cols-3" });
-  const node = el("div", {}, kpis, el("h2", { class: "visually-hidden" }, t("nav.stations")), el("div", { style: null }, cards));
+  const node = el("div", {}, kpis, el("h2", { class: "visually-hidden" }, t("nav.stations")), cards);
   every(5000, async () => {
     try {
       const [{ stations }, { events }] = await Promise.all([get("/api/v1/stations"), get("/api/v1/events?open_only=true&limit=100")]);
-      const free = stations.reduce((a, s) => a + (s.live?.free_count || 0), 0);
-      const known = stations.reduce((a, s) => a + (s.live?.known_count || 0), 0);
-      const total = stations.reduce((a, s) => a + (s.live?.total || 0), 0);
-      clear(kpis, kpi(free, t("ov.free")), kpi(stations.length, t("ov.stations")), kpi(events.length, t("ov.alerts")), kpi(`${known}/${total}`, t("ov.known")));
-      clear(cards, stations.length ? stations.map(stationCard) : el("div", { class: "card" }, el("p", {}, t("ov.empty")),
+      const count = (st) => stations.filter((s) => (s.live?.state || "unknown") === st).length;
+      clear(kpis, kpi(stations.length, t("ov.stations")), kpi(count("free"), t("ov.state_free")),
+        kpi(count("unknown"), t("ov.state_unknown")), kpi(events.length, t("ov.alerts")));
+      clear(cards, stations.length ? stations.map(stallCard) : el("div", { class: "card" }, el("p", {}, t("ov.empty")),
         can("admin") ? el("a", { class: "btn primary", href: "#/stations/new" }, t("ov.create")) : null));
     } catch (e) { clear(cards, errorCard(e)); }
   });
@@ -48,10 +49,10 @@ export function viewStations() {
   const body = el("div", {}, el("p", {}, t("c.loading")));
   get("/api/v1/stations").then(({ stations }) => {
     clear(body, stations.length ? el("div", { class: "card table-wrap" }, el("table", {},
-      el("thead", {}, el("tr", {}, [t("ss.name"), t("ss.location"), t("ov.free"), t("ss.display"), t("c.actions")].map((h) => el("th", { scope: "col" }, h)))),
+      el("thead", {}, el("tr", {}, [t("ss.name"), t("ss.location"), t("c.status"), t("ss.display"), t("c.actions")].map((h) => el("th", { scope: "col" }, h)))),
       el("tbody", {}, stations.map((s) => el("tr", {},
         el("td", {}, el("a", { href: `#/stations/${s.id}` }, s.name)), el("td", {}, s.location || "–"),
-        el("td", {}, t("ov.free_of", { f: s.live.free_count, t: s.live.total })),
+        el("td", {}, stallBadge(s.live?.state || "unknown")),
         el("td", {}, s.display_enabled ? el("span", { class: "badge ok" }, t("ss.active")) : "–"),
         el("td", {}, el("div", { class: "btn-row" }, el("a", { class: "btn small", href: `#/stations/${s.id}` }, t("ov.open")),
           can("admin") ? el("a", { class: "btn small", href: `#/stations/${s.id}/settings` }, t("st.settings")) : null))))))) :
@@ -61,21 +62,16 @@ export function viewStations() {
 }
 
 export function viewNewStation() {
-  const plan = state.me.tenant.plan;
   const err = el("div", { role: "alert" });
   const name = el("input", { type: "text", name: "name", required: true, maxlength: "100", autofocus: true });
   const loc = el("input", { type: "text", name: "location", maxlength: "200" });
-  const count = el("input", { type: "number", name: "count", min: "1", max: String(plan.max_slots_per_station), value: String(Math.min(3, plan.max_slots_per_station)), required: true });
-  const form = el("form", { class: "card" }, err, field(t("ss.name"), name), field(t("ss.location"), loc),
-    field(t("ss.slots_count"), count, `max. ${plan.max_slots_per_station}`),
+  const form = el("form", { class: "card" }, err, el("p", { class: "muted" }, t("ss.new_hint")),
+    field(t("ss.name"), name), field(t("ss.location"), loc),
     el("button", { class: "btn primary", type: "submit" }, t("ss.create")));
   form.addEventListener("submit", async (ev) => {
     ev.preventDefault();
-    const n = Math.max(1, Math.min(plan.max_slots_per_station, parseInt(count.value, 10) || 1));
-    const keys = Array.from({ length: n }, (_, i) => (i < 26 ? String.fromCharCode(65 + i) : "P" + (i + 1)));
-    const slotWord = t("ev.slot");
     try {
-      const st = await post("/api/v1/stations", { name: name.value, location: loc.value, slots: keys.map((k) => ({ key: k, label: `${slotWord} ${k}` })) });
+      const st = await post("/api/v1/stations", { name: name.value, location: loc.value });
       go(`/stations/${st.id}/settings`);
     } catch (e) { clear(err, errorCard(e)); }
   });
@@ -83,46 +79,31 @@ export function viewNewStation() {
 }
 
 // ---------------------------------------------------------------------- Live-Ansicht
-export function slotList(status, { connLost = false } = {}) {
-  const slots = status.slots.map((s) => (connLost ? { ...s, state: "unknown", unknown_reason: "connection" } : s));
-  const rec = connLost ? null : status.recommendation;
-  return el("ul", { class: "slots" }, slots.map((s) => {
-    const isRec = s.slot_id === rec && s.state === "free";
-    return el("li", { class: `slot ${s.state}${isRec ? " recommended" : ""}${s.alert ? " alerting" : ""}` },
-      el("span", { class: "name" }, s.label),
-      el("span", { class: "state" }, el("span", { class: "sym", "aria-hidden": "true" }, slotSymbol(s.state)), t("st." + s.state)),
-      s.state === "unknown" && s.unknown_reason ? el("span", { class: "small" }, t("st.r_" + s.unknown_reason)) : null,
-      isRec ? el("span", { class: "badge" }, "→ " + t("st.recommended")) : null,
-      s.alert ? el("span", { class: "badge warn" }, "⚠ " + t("st.alert")) : null,
-      el("span", { class: "small" }, fmtTime(s.last_update)));
-  }));
-}
-
-export function heatmap(summary, slots) {
-  const first = summary.buckets.findIndex((b) => b.avg_occupied_slots !== null);
+export function usageChart(summary) {
+  const first = summary.buckets.findIndex((b) => b.occupancy !== null);
   const buckets = first < 0 ? [] : summary.buckets.slice(first);
   if (!buckets.length) return el("p", { class: "muted" }, t("st.usage_none"));
   const hourOf = (iso) => String(new Date(iso).getHours()).padStart(2, "0");
-  const top = buckets.filter((b) => b.avg_occupied_slots !== null).reduce((a, b) => (b.avg_occupied_slots > a.avg_occupied_slots ? b : a));
+  const top = buckets.filter((b) => b.occupancy !== null).reduce((a, b) => (b.occupancy > a.occupancy ? b : a));
   return el("div", {},
-    el("p", {}, t("st.usage_text", { h: hourOf(top.hour_start), v: top.avg_occupied_slots.toLocaleString(getLang()) })),
-    el("div", { class: "table-wrap" }, el("table", { class: "heatmap" },
-      el("caption", { class: "visually-hidden" }, t("st.usage")),
-      el("thead", {}, el("tr", {}, el("th", { scope: "col" }, t("st.hour")), slots.map((s) => el("th", { scope: "col" }, s.label)))),
-      el("tbody", {}, buckets.map((b) => el("tr", {}, el("th", { scope: "row" }, hourOf(b.hour_start)),
-        slots.map((s) => {
-          const v = b.occupancy[s.slot_id];
-          if (v === null || v === undefined) return el("td", { class: "nodata" }, "–");
-          return el("td", { class: `lvl${Math.min(4, Math.floor(v * 5))}` }, `${Math.round(v * 100)} %`);
-        })))))),
-    el("p", { class: summary.contains_simulated ? "badge sim" : "small muted" },
-      summary.contains_simulated ? t("st.src_sim") : summary.contains_live ? t("st.src_live") : ""));
+    el("p", {}, t("st.usage_text", { h: hourOf(top.hour_start), v: Math.round(top.occupancy * 100).toLocaleString(getLang()) })),
+    el("ul", { class: "usage-list", "aria-label": t("st.usage") }, buckets.map((b) => {
+      const v = b.occupancy;
+      const bar = el("span");
+      bar.style.width = v === null ? "0%" : `${Math.round(v * 100)}%`;
+      return el("li", { class: v === null ? "nodata" : null },
+        el("span", { class: "hour" }, `${hourOf(b.hour_start)}:00`),
+        el("span", { class: "meter", "aria-hidden": "true" }, bar),
+        el("span", { class: "val" }, v === null ? "–" : `${Math.round(v * 100)} %`));
+    })),
+    el("p", { class: "small muted" }, t("st.usage_hint")),
+    summary.contains_simulated ? el("p", {}, el("span", { class: "badge sim" }, t("st.usage_sim"))) : null);
 }
 
 function eventsTable(events, reload, { showStation = true } = {}) {
   if (!events.length) return el("p", { class: "muted" }, t("ev.none"));
   return el("div", { class: "table-wrap" }, el("table", {},
-    el("thead", {}, el("tr", {}, [t("ev.time"), showStation ? t("ev.station") : null, t("ev.slot"), t("ev.kind"), t("ev.detector"), t("ev.ack")]
+    el("thead", {}, el("tr", {}, [t("ev.time"), showStation ? t("ev.station") : null, t("ev.kind"), t("ev.detector"), t("ev.ack")]
       .filter(Boolean).map((h) => el("th", { scope: "col" }, h)))),
     el("tbody", {}, events.map((e) => {
       let ack = "–";
@@ -133,55 +114,98 @@ function eventsTable(events, reload, { showStation = true } = {}) {
         } }, t("ev.ack_btn"));
       }
       return el("tr", { class: e.severity },
-        el("td", {}, fmtDateTime(e.occurred_at)), showStation ? el("td", {}, e.station_name) : null, el("td", {}, e.slot_id),
-        el("td", {}, t("ev.k_" + e.kind), e.simulated ? el("span", { class: "badge sim" }, " " + t("c.simulated")) : null),
+        el("td", {}, fmtDateTime(e.occurred_at)), showStation ? el("td", {}, e.station_name) : null,
+        el("td", {}, t("ev.k_" + e.kind), e.simulated ? [" ", el("span", { class: "badge sim" }, t("c.simulated"))] : null),
         el("td", {}, e.detector ? t("ev.d_" + e.detector) + (e.severity === "shadow" ? " " + t("ev.shadow") : "") : "–"),
         el("td", {}, ack));
     }))));
 }
 
+function warningItem(kind, title, text, action) {
+  return el("li", { class: `sbb-alert sbb-alert--${kind}` }, icon(kind === "warn" ? "warn" : "info"),
+    el("p", { class: "sbb-alert__title" }, title), el("p", { class: "sbb-alert__text" }, text),
+    action ? el("div", { class: "sbb-alert__actions" }, action) : null);
+}
+
 export function viewStation(id, setTitle) {
-  const summary = el("div", { class: "card" });
-  const alerts = el("div", { role: "alert", "aria-live": "assertive" });
-  const slotsBox = el("div", { class: "card" });
-  const ai = el("div", { class: "card" });
-  const usage = el("div", { class: "card" });
-  const recent = el("div", { class: "card" });
+  const statusBox = el("div");
+  const sessionBox = el("div");
+  const live = el("p", { class: "visually-hidden", "aria-live": "polite" });
+  const measure = el("section", { class: "card", "aria-labelledby": "measure-h" });
+  const warnings = el("section", { class: "card", "aria-labelledby": "warn-h" });
+  const ai = el("section", { class: "card" });
+  const usage = el("section", { class: "card" });
+  const recent = el("section", { class: "card" });
   let lastOk = 0;
   let last = null;
-  let alertText = "";
+  let lastState = null;
+  let warnSig = "";
 
-  const node = el("div", {}, summary, alerts, el("section", { "aria-label": t("st.slots") }, slotsBox),
-    el("div", { class: "grid cols-2" }, usage, el("div", {}, ai, recent)));
+  const node = el("div", { class: "stall-grid" },
+    el("div", {}, el("section", { "aria-labelledby": "status-h" }, el("h2", { id: "status-h", class: "visually-hidden" }, t("st.current")), statusBox, sessionBox, live), measure, usage),
+    el("div", {}, warnings, ai, recent));
 
   const render = () => {
     if (!last) return;
-    const connLost = Date.now() - lastOk > (last.stale_after_s || 30) * 1000;
-    const free = connLost ? 0 : last.free_count;
-    const rec = !connLost && last.recommendation ? last.slots.find((s) => s.slot_id === last.recommendation) : null;
-    clear(summary,
-      el("p", { class: "kpi" }, el("span", { class: "value" }, t("st.free_of", { f: free, t: last.total }))),
-      el("p", { class: "big" }, rec ? t("st.rec", { s: rec.label }) : t("st.rec_none")),
-      el("div", { class: "btn-row" },
-        el("span", { class: connLost ? "badge err" : "badge ok", role: "status" }, connLost ? "⚠ " + t("st.conn_lost") : "● " + t("st.conn_ok")),
-        el("span", { class: "small muted" }, t("st.updated", { t: fmtTime(last.server_time) })),
-        last.simulated_data ? el("span", { class: "badge sim" }, t("st.sim")) : null));
-    clear(slotsBox, el("h2", {}, t("st.slots")), slotList(last, { connLost }));
-    const active = last.slots.filter((s) => s.alert);
-    const text = active.map((s) => t("st.alert_text", { slot: s.label, t: fmtTime(s.alert.occurred_at) })).join("|");
-    if (text !== alertText) {
-      alertText = text;
-      clear(alerts, active.map((s) => el("div", { class: "alert-box warn" }, "⚠ ",
-        t("st.alert_text", { slot: s.label, t: fmtTime(s.alert.occurred_at) }), s.alert.simulated ? ` [${t("c.simulated")}]` : "",
-        can("operator") && s.alert.id ? el("button", { class: "btn small", type: "button", onclick: async () => {
-          try { await post(`/api/v1/events/${s.alert.id}/ack`); poll(); loadRecent(); } catch (e) { toast(describeError(e), "error"); }
-        } }, " ", t("ev.ack_btn")) : null)));
+    const stale = last.stale_after_s || 30;
+    const connLost = Date.now() - lastOk > stale * 1000;
+    const { state: st, reason } = effectiveState(last, connLost);
+    clear(statusBox, last.maintenance ? el("div", { class: "maint-banner", role: "status" }, icon("wrench"), t("st.maintenance")) : null,
+      stallStatus(last, { connLost, simulated: last.simulated_data }));
+    clear(sessionBox, sessionSummary(last.session));
+    if (st !== lastState) {
+      lastState = st;
+      live.textContent = `${t("st.current")}: ${t("st." + st)}. ${st === "unknown" ? reasonText(reason, stale) : ""}`;
     }
-    const a = last.ai;
+
+    // Messung
+    const age = last.age_s === null ? null : last.age_s + (Date.now() - lastOk) / 1000;
+    const isStale = age === null || age > stale;
+    const fill = el("div", { class: "sbb-age__fill" });
+    fill.style.width = age === null ? "0%" : `${Math.min(100, (age / stale) * 100).toFixed(1)}%`;
+    clear(measure, el("h2", { id: "measure-h", class: "sbb-card__title" }, t("st.measure")),
+      el("dl", { class: "sbb-meta" },
+        el("div", {}, el("dt", {}, t("st.last")), el("dd", { class: "mono" }, fmtTime(last.last_update),
+          el("small", {}, age === null ? t("c.never") : t("st.ago", { s: fmtAge(age) })))),
+        el("div", {}, el("dt", {}, t("st.source")), el("dd", {},
+          last.last_update ? (last.simulated_data ? t("st.src_simulator") : t("st.src_sensor")) : t("st.src_none"),
+          last.simulated_data ? el("small", {}, t("st.sim_long")) : null))),
+      el("div", { class: "sbb-age", "data-stale": String(isStale && age !== null) },
+        el("div", { class: "sbb-age__track", "aria-hidden": "true" }, fill),
+        el("div", { class: "sbb-age__text" },
+          el("span", {}, age === null ? "–" : `${t("st.age", { s: fmtAge(age) })} – ${isStale ? t("st.age_stale") : t("st.age_ok")}`),
+          el("span", {}, t("st.valid", { s: stale })))));
+
+    // Technische Warnungen – nur bei Änderung neu zeichnen (Fokus auf „Quittieren“ bleibt erhalten)
+    const items = [];
+    if (connLost) items.push(["warn", t("st.w_conn"), t("st.w_conn_text")]);
+    else if (reason === "stale") items.push(["warn", t("st.w_stale"), t("st.w_stale_text", { s: stale })]);
+    else if (reason === "sensor_error") items.push(["warn", t("st.w_sensor"), t("st.w_sensor_text")]);
+    else if (reason === "no_data") items.push(["info", t("st.w_nodata"), t("st.w_nodata_text")]);
+    const a = last.alert;
+    const sig = JSON.stringify([items, a && a.id, getLang()]);
+    if (sig !== warnSig) {
+      warnSig = sig;
+      const list = items.map(([k, ti, tx]) => warningItem(k, ti, tx));
+      if (a) {
+        list.push(el("li", { class: "sbb-alert sbb-alert--warn" }, icon("vib"),
+          el("p", { class: "sbb-alert__title" }, t("st.w_movement", { t: fmtTime(a.occurred_at) }), a.simulated ? [" ", el("span", { class: "badge sim" }, t("c.simulated"))] : null),
+          el("p", { class: "sbb-alert__text" }, t("st.w_movement_text")),
+          can("operator") && a.id ? el("div", { class: "sbb-alert__actions" }, el("button", { class: "btn small", type: "button", onclick: async () => {
+            try { await post(`/api/v1/events/${a.id}/ack`); await poll(); loadRecent(); warnings.querySelector("h2")?.focus(); } catch (e) { toast(describeError(e), "error"); }
+          } }, t("ev.ack_btn"))) : null));
+      }
+      clear(warnings, el("h2", { id: "warn-h", class: "sbb-card__title", tabindex: "-1" }, t("st.warnings"), " ",
+        el("span", { class: "badge planned" }, t("st.warn_count", { n: list.length }))),
+        el("ul", { class: "sbb-alerts" }, list.length ? list : el("li", { class: "sbb-alert sbb-alert--ok" }, icon("ok"),
+          el("p", { class: "sbb-alert__title" }, t("st.warn_none")))));
+    }
+
+    const m = last.ai;
     clear(ai, el("h2", {}, t("st.ai")),
-      el("p", {}, a.visible_detector === "ml" ? t("st.ai_ml") : t("st.ai_rule")),
-      el("p", { class: "small" }, !a.plan_allows_ml ? t("st.ai_plan") : a.model_available ? t("st.ai_ok") : t("st.ai_off")),
-      a.model_trained_on_simulated_data ? el("p", { class: "badge sim" }, t("st.ai_sim")) : null,
+      el("p", {}, m.visible_detector === "ml" ? t("st.ai_ml") : t("st.ai_rule")),
+      el("p", { class: "small" }, !m.plan_allows_ml ? t("st.ai_plan") : m.model_available ? t("st.ai_ok") : t("st.ai_off")),
+      m.model_trained_on_simulated_data ? el("p", {}, el("span", { class: "badge sim" }, t("st.ai_sim"))) : null,
       el("p", { class: "small muted" }, t("st.disclaimer")));
   };
 
@@ -191,15 +215,12 @@ export function viewStation(id, setTitle) {
       lastOk = Date.now();
       setTitle(last.display_name);
     } catch (e) {
-      if (!last) clear(summary, errorCard(e));
+      if (!last) clear(statusBox, errorCard(e));
     }
     render();
   };
   const loadUsage = async () => {
-    try {
-      const s = await get(`/api/v1/stations/${id}/occupancy?hours=24`);
-      if (last) clear(usage, el("h2", {}, t("st.usage")), heatmap(s, last.slots));
-    } catch (_) {}
+    try { clear(usage, el("h2", {}, t("st.usage")), usageChart(await get(`/api/v1/stations/${id}/occupancy?hours=24`))); } catch (_) {}
   };
   const loadRecent = async () => {
     try {
@@ -221,7 +242,7 @@ export function viewStationSettings(id, setTitle) {
     try {
       const st = await get(`/api/v1/stations/${id}`);
       setTitle(`${st.name} – ${t("st.settings")}`);
-      clear(node, general(st), slotsCard(st), devicesCard(st), displayCard(st), dangerCard(st));
+      clear(node, general(st), operationCard(st), devicesCard(st), displayCard(st), dangerCard(st));
     } catch (e) { clear(node, errorCard(e)); }
   };
 
@@ -246,23 +267,20 @@ export function viewStationSettings(id, setTitle) {
     return f;
   }
 
-  function slotsCard(st) {
-    const key = el("input", { type: "text", required: true, maxlength: "16", pattern: "[A-Za-z0-9_\\-]{1,16}" });
-    const label = el("input", { type: "text", required: true, maxlength: "100" });
-    const add = el("form", { class: "btn-row" }, field(t("ss.key"), key, t("ss.key_hint")), field(t("ss.label"), label),
-      el("button", { class: "btn", type: "submit" }, t("ss.add_slot")));
-    add.addEventListener("submit", async (ev) => {
-      ev.preventDefault();
-      try { await post(`/api/v1/stations/${id}/slots`, { key: key.value, label: label.value }); load(); } catch (e) { toast(describeError(e), "error"); }
+  function operationCard(st) {
+    const maint = el("input", { type: "checkbox", checked: st.maintenance });
+    maint.addEventListener("change", async () => {
+      try { await patch(`/api/v1/stations/${id}`, { maintenance: maint.checked }); toast(t("c.saved")); }
+      catch (e) { maint.checked = !maint.checked; toast(describeError(e), "error"); }
     });
-    return el("section", { class: "card" }, el("h2", {}, t("ss.slots")),
-      el("div", { class: "table-wrap" }, el("table", {},
-        el("thead", {}, el("tr", {}, [t("ss.position"), t("ss.key"), t("ss.label"), t("c.actions")].map((h) => el("th", { scope: "col" }, h)))),
-        el("tbody", {}, st.slots.map((s) => el("tr", {}, el("td", {}, String(s.position)), el("td", { class: "mono" }, s.key), el("td", {}, s.label),
-          el("td", {}, el("button", { class: "btn small danger", type: "button", onclick: async () => {
-            if (!(await confirmDialog(`${s.label}: ${t("c.delete")}?`, { danger: true }))) return;
-            try { await del(`/api/v1/stations/${id}/slots/${s.id}`); load(); } catch (e) { toast(describeError(e), "error"); }
-          } }, t("c.delete")))))))), add);
+    const billingOn = !!state.me.tenant.plan.parking_billing;
+    return el("section", { class: "card" }, el("h2", {}, t("ss.operation")),
+      el("label", { class: "check" }, maint, el("span", {}, t("ss.maintenance"), el("small", { class: "hint" }, t("ss.maintenance_hint")))),
+      el("h3", {}, t("pk.tariff")),
+      el("p", {}, st.tariff ? tariffText(st.tariff) : t("pk.inherited")),
+      billingOn ? tariffForm(st.tariff, async (tf) => {
+        try { await put(`/api/v1/stations/${id}/tariff`, { tariff: tf }); toast(t("c.saved")); load(); } catch (e) { toast(describeError(e), "error"); }
+      }, { allowInherit: true }) : el("p", { class: "small muted" }, t("pk.feature_off", { f: t("feat.parking_billing") })));
   }
 
   function devicesCard(st) {
@@ -289,8 +307,10 @@ export function viewStationSettings(id, setTitle) {
           el("h3", {}, t("ag.setup_title")),
           el("p", {}, t("ag.code_label")), el("p", { class: "enroll-code mono" }, r.code),
           el("p", { class: "small muted" }, t("ag.code_expires", { t: fmtDateTime(r.expires_at) })),
+          r.install.tls ? el("p", { class: "small" }, t("ag.tls_hint"), " ", el("code", { class: "mono" }, r.install.tls.fingerprint)) : null,
           el("ol", { class: "steps" },
             el("li", {}, t("ag.step_os")),
+            c.fetch_cert ? el("li", {}, cmdRow(t("ag.step_cert"), c.fetch_cert)) : null,
             el("li", {}, cmdRow(t("ag.step_download"), c.download)),
             el("li", {}, cmdRow(t("ag.step_verify"), c.verify)),
             el("li", {}, cmdRow(t("ag.step_install"), c.install)),
@@ -346,7 +366,7 @@ export function viewStationSettings(id, setTitle) {
       ev.preventDefault();
       try {
         const d = await post(`/api/v1/stations/${id}/devices`, { name: name.value });
-        const cfg = `[api]\nurl = "${location.origin}"\n\n[station]\nid = "${d.station_id}"\n[station.slot_map]\n${st.slots.map((s) => `${s.key} = "${s.key}"`).join("\n")}\n\n# /etc/bike-gateway/gateway.env\n# BIKE_DEVICE_TOKEN=${d.token}`;
+        const cfg = `[api]\nurl = "${location.origin}"\n\n[station]\nid = "${d.station_id}"\n\n# /etc/bike-gateway/gateway.env\n# BIKE_DEVICE_TOKEN=${d.token}`;
         clear(manualReveal, el("div", { class: "alert-box warn" }, el("p", {}, t("ss.token_once")),
           el("p", { class: "secret-box mono" }, d.token), el("button", { class: "btn small", type: "button", onclick: () => copyText(d.token) }, t("c.copy"))),
           el("p", { class: "small muted" }, t("ss.gateway_hint")), el("pre", { class: "secret-box mono small" }, cfg),

@@ -41,7 +41,7 @@ als Ziel), OWASP Top 10 und NIST SP 800-63B für Passwörter.
   passender SHA-256, sicherem Entpacken und automatischem Rollback (Details: [agent.md](agent.md)).
 - Öffentliche Anzeige-Links: nur lesend, eingeschränkte Daten (keine KI-/Ereignisdetails), rotierbar,
   deaktivierbar; Token im URL-Fragment und im Header – nie in Server-Logs.
-- Tarif-Limits (Stationen, Plätze, Nutzer, Funktionen) werden serverseitig erzwungen.
+- Tarif-Limits (Stellplätze, Nutzer, Funktionen) werden serverseitig erzwungen.
 - Plattform-Admins sind von Mandanten getrennt und benötigen 2FA.
 
 ### Transport, Header, Eingaben
@@ -82,7 +82,7 @@ als Ziel), OWASP Top 10 und NIST SP 800-63B für Passwörter.
 
 ## Datenschutz
 
-- Keine Kameras, kein RFID, keine Personenerkennung. Messdaten: Platz, Zustand, Vibrationswert, Zeit, Quelle.
+- Keine Kamera (nur als nicht genehmigte Idee notiert), keine Personenerkennung. Der NFC-Leser ist geplant; ob und welche Kartendaten verarbeitet werden, ist vor dem Einsatz festzulegen und zu prüfen. Messdaten: Stellplatz, Zustand, Erschütterungswert, Zeit, Quelle.
 - Kontodaten: Name, E-Mail, Rolle, Sprache; Sitzungen: IP und Browserkennung (Sicherheitszweck, max. 12 h).
 - Betroffenenrechte: Datenexport (JSON, Art. 20), Konto löschen, Organisation vollständig löschen (Kaskade).
 - Keine Tracking-/Werbe-Cookies; nur ein technisch notwendiges Session-Cookie.

@@ -3,6 +3,7 @@ import { api, get, post, patch, del, describeError, setCsrf } from "./api.js";
 import { getLang, setLang, t, STRINGS } from "./i18n.js";
 import { el, clear, field, toast, confirmDialog, fmtDateTime, fmtMoney, copyText, passwordMeter } from "./ui.js";
 import { state, can, go } from "./state.js";
+import { licenseCard } from "./views-parking.js";
 
 const errorCard = (e) => el("div", { class: "alert-box error", role: "alert" }, describeError(e));
 const th = (...hs) => el("thead", {}, el("tr", {}, hs.map((h) => el("th", { scope: "col" }, h))));
@@ -264,16 +265,21 @@ export function viewOrg() {
 
 // ---------------------------------------------------------------------- Tarif
 function planFeatures(p) {
-  return [t("bill.f_stations", { n: p.max_stations }), t("bill.f_slots", { n: p.max_slots_per_station }), t("bill.f_users", { n: p.max_users }),
-    t("bill.f_retention", { n: p.retention_days }), p.ml_enabled ? t("bill.f_ml") : null, p.audit_log ? t("bill.f_audit") : null,
-    p.public_display ? t("bill.f_display") : null].filter(Boolean);
+  return [t("bill.f_stations", { n: p.max_stations }), t("bill.f_users", { n: p.max_users }),
+    t("bill.f_retention", { n: p.retention_days }), p.nfc ? t("feat.nfc") : null, p.parking_billing ? t("feat.parking_billing") : null,
+    p.stall_view ? t("feat.stall_view") : null, p.camera ? t("feat.camera") : null, p.ml_enabled ? t("bill.f_ml") : null,
+    p.audit_log ? t("bill.f_audit") : null, p.public_display ? t("bill.f_display") : null,
+    p.trial_days ? t("bill.f_trial", { n: p.trial_days }) : null].filter(Boolean);
 }
 export function planCard(p, { current, action, featured } = {}) {
+  const eur = (c) => new Intl.NumberFormat(getLang(), { style: "currency", currency: "EUR" }).format(c / 100);
   return el("article", { class: `card plan${featured ? " featured" : ""}` },
-    el("h3", {}, p.name, current ? el("span", { class: "badge ok" }, " " + t("bill.current_badge")) : null,
-      featured && !current ? el("span", { class: "badge" }, " " + t("l.popular")) : null),
-    el("p", { class: "price" }, p.price_eur_month ? fmtMoney(p.price_eur_month) : t("bill.free"),
-      p.price_eur_month ? el("span", { class: "small muted" }, " " + t("bill.per_month")) : null),
+    el("h3", {}, p.name, current ? [" ", el("span", { class: "badge ok" }, t("bill.current_badge"))] : null,
+      featured && !current ? [" ", el("span", { class: "badge" }, t("l.popular"))] : null),
+    p.price_per_stall_day_cents || p.base_month_cents
+      ? [el("p", { class: "price" }, eur(p.price_per_stall_day_cents), el("span", { class: "small muted" }, " " + t("bill.per_stall_day"))),
+        el("p", { class: "small muted" }, t("bill.plus_base", { p: eur(p.base_month_cents) }))]
+      : el("p", { class: "price" }, t("bill.free")),
     el("ul", {}, planFeatures(p).map((f) => el("li", {}, f))), action || null);
 }
 
@@ -289,7 +295,7 @@ export function viewBilling(rerender) {
   };
   const usage = el("section", { class: "card" }, el("h2", {}, t("bill.usage")),
     meter(t("bill.stations"), u.stations, p.max_stations), meter(t("bill.users"), u.users, p.max_users),
-    el("p", { class: "muted" }, `${t("bill.slots")}: ${u.slots} · ${t("bill.devices")}: ${u.devices}`));
+    el("p", { class: "muted" }, `${t("bill.devices")}: ${u.devices}`));
   const plans = el("div", { class: "grid cols-3" });
   get("/api/v1/org/plans").then(({ plans: list }) => {
     clear(plans, list.map((pl) => planCard(pl, { current: pl.id === p.id, featured: pl.id === "school",
@@ -300,6 +306,7 @@ export function viewBilling(rerender) {
       } }, t("bill.choose")) : null })));
   }).catch((e) => clear(plans, errorCard(e)));
   return el("div", {}, el("div", { class: "grid cols-2" }, el("section", { class: "card" }, el("h2", {}, t("bill.current")), planCard(p, { current: true })), usage),
+    licenseCard(),
     el("h2", {}, t("l.pricing")), plans, el("p", { class: "small muted" }, t("bill.note")));
 }
 

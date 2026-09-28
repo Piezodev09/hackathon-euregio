@@ -13,12 +13,8 @@ url = "https://bike-vm.demo.lan:8443"
 timeout_s = 5
 
 [station]
+# Station = genau ein Stellplatz. ID aus dem Portal (Stationen -> Gateways).
 id = "demo-01"
-# Arduino-Platzkennung = Stellplatz in der API. Muss zu backend/config.toml passen.
-[station.slot_map]
-A = "A"
-B = "B"
-C = "C"
 
 [serial]
 # Portname vor Ort prüfen: ls /dev/ttyACM* /dev/ttyUSB*
@@ -27,7 +23,7 @@ port = "/dev/ttyACM0"
 baudrate = 115200
 
 [timing]
-# Kommt so lange nichts vom Arduino, werden alle Plätze als Sensorfehler gemeldet.
+# Kommt so lange nichts vom Arduino, wird der Stellplatz als Sensorfehler (STATUS UNBEKANNT) gemeldet.
 arduino_timeout_s = 15
 # Wiederholung der Fehlermeldung bzw. erwarteter Arduino-Heartbeat.
 heartbeat_s = 10

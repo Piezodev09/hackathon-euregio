@@ -1,0 +1,98 @@
+/* Design-Tokens der Smart Bicycle Box – generiert aus design/tokens.json (nicht von Hand ändern). */
+:root, [data-theme="light"] {
+  color-scheme: light;
+  --surface: #f4f6f5;
+  --surface-raised: #ffffff;
+  --surface-sunken: #e8ecea;
+  --line: #c9d1cd;
+  --line-strong: #6b7780;
+  --ink: #14202b;
+  --ink-muted: #4b5963;
+  --petrol: #0e5a63;
+  --petrol-soft: #d6ebec;
+  --on-petrol: #ffffff;
+  --signal: #f5b700;
+  --on-signal: #14202b;
+  --focus: #0a4a52;
+  --free-bg: #cdeed8;
+  --free-ink: #0b4d24;
+  --free-line: #1b7a3d;
+  --occupied-bg: #8f1b14;
+  --occupied-ink: #ffffff;
+  --unknown-bg: #dfe3e6;
+  --unknown-stripe: #c4cbd0;
+  --unknown-ink: #14202b;
+  --unknown-line: #4b5963;
+  --danger-ink: #8f1b14;
+  --warn-bg: #fff0c2;
+  --warn-ink: #5c3d00;
+  --warn-line: #a86f00;
+  --info-bg: #e1eff0;
+  --info-ink: #0a4a52;
+  --device-bezel: #1b2327;
+  --shadow-card: 0 1px 2px rgba(20,32,43,0.08), 0 4px 12px rgba(20,32,43,0.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --surface: #111719;
+    --surface-raised: #1a2225;
+    --surface-sunken: #0b1012;
+    --line: #36434a;
+    --line-strong: #8a979f;
+    --ink: #eef2f1;
+    --ink-muted: #a9b6bc;
+    --petrol: #5cc4cc;
+    --petrol-soft: #12363a;
+    --on-petrol: #0b1a1c;
+    --focus: #f5c400;
+    --danger-ink: #ff9d92;
+    --warn-bg: #3a2c03;
+    --warn-ink: #ffe08a;
+    --warn-line: #e0a800;
+    --info-bg: #0f2a2d;
+    --info-ink: #bfe9ec;
+    --device-bezel: #05080a;
+    --shadow-card: 0 1px 2px rgba(0,0,0,0.5);
+  }
+}
+[data-theme="dark"] {
+  color-scheme: dark;
+  --surface: #111719;
+  --surface-raised: #1a2225;
+  --surface-sunken: #0b1012;
+  --line: #36434a;
+  --line-strong: #8a979f;
+  --ink: #eef2f1;
+  --ink-muted: #a9b6bc;
+  --petrol: #5cc4cc;
+  --petrol-soft: #12363a;
+  --on-petrol: #0b1a1c;
+  --focus: #f5c400;
+  --danger-ink: #ff9d92;
+  --warn-bg: #3a2c03;
+  --warn-ink: #ffe08a;
+  --warn-line: #e0a800;
+  --info-bg: #0f2a2d;
+  --info-ink: #bfe9ec;
+  --device-bezel: #05080a;
+  --shadow-card: 0 1px 2px rgba(0,0,0,0.5);
+}
+:root {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 16px;
+  --radius-pill: 999px;
+  --touch-target: 48px;
+  --focus-width: 3px;
+  --font-sans: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Atkinson Hyperlegible Mono", ui-monospace, Consolas, monospace;
+}

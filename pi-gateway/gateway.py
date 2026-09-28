@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Raspberry-Pi-Gateway der Smarten Radstation (Plan 3.1, 5, 10.3).
+"""Raspberry-Pi-Gateway der Smart Bicycle Box (Plan 3.1, 5, 10.3).
 
 Aufgaben:
   * JSON-Zeilen vom Arduino (USB-Seriell) lesen, Format und Plausibilität prüfen
@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import logging
 import os
 import signal
@@ -40,7 +41,6 @@ HERE = Path(__file__).resolve().parent
 class GatewayConfig:
     api_url: str
     station_id: str
-    slot_map: dict[str, str]
     token: str = field(repr=False)
     serial_port: str = "/dev/ttyACM0"
     baudrate: int = 115200
@@ -74,7 +74,6 @@ def load_config(path: str | os.PathLike) -> GatewayConfig:
         http_timeout_s=float(api.get("timeout_s", 5)),
         token=token,
         station_id=st["id"],
-        slot_map={str(k): str(v) for k, v in st["slot_map"].items()},
         serial_port=ser.get("port", "/dev/ttyACM0"),
         baudrate=int(ser.get("baudrate", 115200)),
         arduino_timeout_s=float(tim.get("arduino_timeout_s", 15)),
@@ -90,12 +89,17 @@ class ParseError(ValueError):
     pass
 
 
-def parse_line(line: str, slot_map: dict[str, str]) -> dict | None:
-    """Arduino-Zeile -> {'slot_id','occupied','vibration_score','sensor_state'}.
+NFC_UID_RE = re.compile(r"^[0-9A-F]{8,20}$")  # 4–10 Byte als Hex
+NFC_MAX_AGE_S = 60.0
+
+
+def parse_line(line: str) -> dict | None:
+    """Arduino-Zeile -> {'occupied','vibration_score','sensor_state'} für den einen Stellplatz.
 
     Gibt None für Info-Zeilen (z. B. {"type":"hello"}) zurück, wirft ParseError bei ungültigen Daten.
-    Erwartetes Format: {"slot_id":"A","presence":1,"vibration":12,"seq":1042[,"state":"ok"]}
+    Erwartetes Format: {"presence":1,"vibration":12,"seq":1042[,"state":"ok"]}
     presence: 1 = belegt, 0 = frei, -1 = Sensor liefert keinen gültigen Wert.
+    Ein "slot_id" älterer Firmware wird nur als "A" akzeptiert – es gibt genau einen Stellplatz.
     """
     line = line.strip()
     if not line:
@@ -108,14 +112,17 @@ def parse_line(line: str, slot_map: dict[str, str]) -> dict | None:
         raise ParseError(f"kein JSON: {exc.msg}") from None
     if not isinstance(d, dict):
         raise ParseError("kein JSON-Objekt")
-    if "slot_id" not in d:
+    if d.get("type") == "nfc":
+        uid = str(d.get("uid", "")).upper()
+        if not NFC_UID_RE.match(uid):
+            raise ParseError("ungültige NFC-UID")
+        return {"kind": "nfc", "uid": uid}
+    if "presence" not in d:
         if d.get("type") in ("hello", "info", "debug"):
             return None
-        raise ParseError("slot_id fehlt")
-
-    ard_slot = str(d["slot_id"])
-    if ard_slot not in slot_map:
-        raise ParseError(f"unbekannter Platz {ard_slot!r}")
+        raise ParseError("presence fehlt")
+    if "slot_id" in d and str(d["slot_id"]) != "A":
+        raise ParseError(f"unbekannter Platz {d['slot_id']!r} – nur ein Stellplatz vorgesehen")
 
     presence = d.get("presence")
     if isinstance(presence, bool) or presence not in (0, 1, -1):
@@ -134,7 +141,6 @@ def parse_line(line: str, slot_map: dict[str, str]) -> dict | None:
         state = "error"
 
     return {
-        "slot_id": slot_map[ard_slot],
         "occupied": None if state == "error" else bool(presence),
         "vibration_score": 0 if state == "error" else int(vib),
         "sensor_state": state,
@@ -188,13 +194,14 @@ class Queued:
 class Uplink:
     """Begrenzter Puffer und Versand an die API. Älteste Nachrichten fallen bei Überlauf weg."""
 
-    def __init__(self, cfg: GatewayConfig, post: Callable[[str, dict], int] | None = None):
+    def __init__(self, cfg: GatewayConfig, post: Callable[[str, dict], "int | tuple[int, dict]"] | None = None):
         self.cfg = cfg
         self.buffer: deque[Queued] = deque(maxlen=cfg.buffer_max)
         self.lock = threading.Lock()
         self.wake = threading.Event()
         self.online: bool | None = None
         self.on_status_change: Callable[[bool], None] | None = None
+        self.on_response: Callable[[dict], None] | None = None  # z. B. {"capture": true} -> Kamerabild
         self._post = post or self._http_post
         ctx = ssl.create_default_context(cafile=cfg.ca_file) if cfg.ca_file else ssl.create_default_context()
         self._ssl = ctx
@@ -206,7 +213,12 @@ class Uplink:
             self.buffer.append(Queued(body, time.monotonic()))
         self.wake.set()
 
-    def _http_post(self, path: str, payload: dict) -> int:
+    def request(self, path: str, payload: dict) -> tuple[int, dict]:
+        """POST mit JSON-Antwort. Wirft URLError/OSError bei Netzfehlern."""
+        res = self._post(path, payload)
+        return res if isinstance(res, tuple) else (res, {})
+
+    def _http_post(self, path: str, payload: dict) -> tuple[int, dict]:
         data = json.dumps(payload).encode()
         req = urllib.request.Request(
             self.cfg.api_url + path,
@@ -217,9 +229,14 @@ class Uplink:
         try:
             ctx = self._ssl if self.cfg.api_url.startswith("https") else None
             with urllib.request.urlopen(req, timeout=self.cfg.http_timeout_s, context=ctx) as r:
-                return r.status
+                raw = r.read(65536)
+                try:
+                    body = json.loads(raw) if raw else {}
+                except ValueError:
+                    body = {}
+                return r.status, body if isinstance(body, dict) else {}
         except urllib.error.HTTPError as e:
-            return e.code
+            return e.code, {}
 
     def _set_online(self, ok: bool) -> None:
         if ok != self.online:
@@ -241,7 +258,7 @@ class Uplink:
             ]
         }
         try:
-            status = self._post("/api/v1/measurements/batch", payload)
+            status, resp = self.request("/api/v1/measurements/batch", payload)
         except (urllib.error.URLError, OSError, TimeoutError) as exc:
             log.debug("Versand fehlgeschlagen: %s", exc)
             self._set_online(False)
@@ -250,6 +267,8 @@ class Uplink:
         if status in (200, 202):
             self._drop(batch)
             self._set_online(True)
+            if resp and self.on_response:
+                self.on_response(resp)
             return True
         if status == 422:
             # Dauerhaft ungültig – verwerfen statt endlos wiederholen.
@@ -296,6 +315,9 @@ class Gateway:
         self.last_fault_sent: float | None = None
         self.write_back: Callable[[str], None] | None = None
         self.uplink.on_status_change = self._net_status
+        self.last_tap: dict | None = None
+        # Taps werden sofort (nicht gepuffert) gesendet; eigener Thread, damit das Lesen weiterläuft.
+        self.run_async: Callable[..., None] = lambda f, *a: threading.Thread(target=f, args=a, daemon=True).start()
 
     def _net_status(self, ok: bool) -> None:
         if self.write_back:
@@ -310,17 +332,57 @@ class Gateway:
 
     def handle_line(self, line: str) -> None:
         try:
-            m = parse_line(line, self.cfg.slot_map)
+            m = parse_line(line)
         except ParseError as exc:
             log.warning("Ungültige Zeile verworfen: %s", exc)
             return
         self.last_line_at = self.clock()
         if m is None:
             return
+        if m.get("kind") == "nfc":
+            self.tap(m["uid"])
+            return
         self._emit(m)
 
+    # ---- NFC
+    def tap(self, uid: str) -> None:
+        body = {"station_id": self.cfg.station_id, "sequence": self.seq.next(), "uid": uid, "source": self.cfg.source}
+        log.info("NFC-Karte gelesen (…%s)", uid[-4:])
+        self.run_async(self._send_tap, body, time.monotonic())
+
+    def _send_tap(self, body: dict, t0: float, sleep: Callable[[float], None] = time.sleep) -> str:
+        delay = 1.0
+        while True:
+            age = time.monotonic() - t0
+            if age > NFC_MAX_AGE_S:
+                log.warning("NFC-Vorgang verworfen: Plattform %d s nicht erreichbar", int(age))
+                result = "offline"
+                break
+            try:
+                status, resp = self.uplink.request("/api/v1/nfc/tap", {**body, "age_ms": int(age * 1000)})
+            except (urllib.error.URLError, OSError, TimeoutError):
+                status, resp = 0, {}
+            if status == 200:
+                result = str(resp.get("result", "error"))
+                amount = resp.get("amount_cents")
+                log.info("NFC: %s%s", result, f" ({amount / 100:.2f} EUR)" if isinstance(amount, int) and amount else "")
+                break
+            if status in (401, 403, 422):
+                log.error("NFC-Vorgang abgelehnt (HTTP %d)", status)
+                result = "rejected"
+                break
+            sleep(delay)
+            delay = min(delay * 2, 10.0)
+        self.last_tap = {"result": result, "at": time.time()}
+        if self.write_back:
+            try:
+                self.write_back(f"NFC {result}\n")
+            except OSError:
+                pass
+        return result
+
     def watchdog(self) -> None:
-        """Schweigt der Arduino, werden alle Plätze als Sensorfehler gemeldet."""
+        """Schweigt der Arduino, wird der Stellplatz als Sensorfehler (-> STATUS UNBEKANNT) gemeldet."""
         now = self.clock()
         silent = self.last_line_at is None or now - self.last_line_at > self.cfg.arduino_timeout_s
         if not silent:
@@ -329,10 +391,9 @@ class Gateway:
         if self.last_fault_sent is not None and now - self.last_fault_sent < self.cfg.heartbeat_s:
             return
         if self.last_line_at is not None or self.last_fault_sent is None:
-            log.warning("Keine Daten vom Arduino – alle Plätze werden als unbekannt gemeldet")
+            log.warning("Keine Daten vom Arduino – Stellplatz wird als unbekannt gemeldet")
         self.last_fault_sent = now
-        for slot in self.cfg.slot_map.values():
-            self._emit({"slot_id": slot, "occupied": None, "vibration_score": 0, "sensor_state": "error"})
+        self._emit({"occupied": None, "vibration_score": 0, "sensor_state": "error"})
 
 
 # ---------------------------------------------------------------------- Quellen

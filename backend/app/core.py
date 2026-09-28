@@ -123,9 +123,6 @@ class Core:
                 "SELECT COUNT(*) FROM auth_token WHERE tenant_id = ? AND purpose = 'invite' AND used_at IS NULL AND expires_at > ?",
                 (tenant_id, self.clock()),
             ),
-            "slots": self.db.scalar(
-                "SELECT COUNT(*) FROM slot s JOIN station st ON st.id = s.station_id WHERE st.tenant_id = ?", (tenant_id,)
-            ),
             "devices": self.db.scalar(
                 "SELECT COUNT(*) FROM device WHERE tenant_id = ? AND revoked_at IS NULL", (tenant_id,)
             ),

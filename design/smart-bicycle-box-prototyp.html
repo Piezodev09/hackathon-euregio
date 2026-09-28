@@ -1,0 +1,1073 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Smart Bicycle Box – Prototyp (Demodaten)</title>
+<meta name="description" content="Klickbarer Frontend-Prototyp für einen einzelnen, vorne offenen Fahrradstellplatz. Nur Demodaten, keine Hardware-Anbindung.">
+<!-- Schrift: Atkinson Hyperlegible (für Lesbarkeit entwickelt). Ohne Internet greift automatisch die Systemschrift. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Atkinson+Hyperlegible+Mono:wght@400;700&display=swap">
+<style>
+/* ===== Design-Tokens (generiert aus tokens.json) ===== */
+:root, [data-theme="light"] {
+  --surface: #f4f6f5;
+  --surface-raised: #ffffff;
+  --surface-sunken: #e8ecea;
+  --line: #c9d1cd;
+  --line-strong: #6b7780;
+  --ink: #14202b;
+  --ink-muted: #4b5963;
+  --petrol: #0e5a63;
+  --petrol-soft: #d6ebec;
+  --on-petrol: #ffffff;
+  --signal: #f5b700;
+  --on-signal: #14202b;
+  --focus: #0a4a52;
+  --free-bg: #cdeed8;
+  --free-ink: #0b4d24;
+  --free-line: #1b7a3d;
+  --occupied-bg: #8f1b14;
+  --occupied-ink: #ffffff;
+  --unknown-bg: #dfe3e6;
+  --unknown-stripe: #c4cbd0;
+  --unknown-ink: #14202b;
+  --unknown-line: #4b5963;
+  --danger-ink: #8f1b14;
+  --warn-bg: #fff0c2;
+  --warn-ink: #5c3d00;
+  --warn-line: #a86f00;
+  --info-bg: #e1eff0;
+  --info-ink: #0a4a52;
+  --device-bezel: #1b2327;
+  --shadow-card: 0 1px 2px rgba(20,32,43,0.08), 0 4px 12px rgba(20,32,43,0.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --surface: #111719;
+    --surface-raised: #1a2225;
+    --surface-sunken: #0b1012;
+    --line: #36434a;
+    --line-strong: #8a979f;
+    --ink: #eef2f1;
+    --ink-muted: #a9b6bc;
+    --petrol: #5cc4cc;
+    --petrol-soft: #12363a;
+    --on-petrol: #0b1a1c;
+    --focus: #f5c400;
+    --danger-ink: #ff9d92;
+    --warn-bg: #3a2c03;
+    --warn-ink: #ffe08a;
+    --warn-line: #e0a800;
+    --info-bg: #0f2a2d;
+    --info-ink: #bfe9ec;
+    --device-bezel: #05080a;
+    --shadow-card: 0 1px 2px rgba(0,0,0,0.5);
+  }
+}
+[data-theme="dark"] {
+  --surface: #111719;
+  --surface-raised: #1a2225;
+  --surface-sunken: #0b1012;
+  --line: #36434a;
+  --line-strong: #8a979f;
+  --ink: #eef2f1;
+  --ink-muted: #a9b6bc;
+  --petrol: #5cc4cc;
+  --petrol-soft: #12363a;
+  --on-petrol: #0b1a1c;
+  --focus: #f5c400;
+  --danger-ink: #ff9d92;
+  --warn-bg: #3a2c03;
+  --warn-ink: #ffe08a;
+  --warn-line: #e0a800;
+  --info-bg: #0f2a2d;
+  --info-ink: #bfe9ec;
+  --device-bezel: #05080a;
+  --shadow-card: 0 1px 2px rgba(0,0,0,0.5);
+}
+:root {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 16px;
+  --radius-pill: 999px;
+  --touch-target: 48px;
+  --focus-width: 3px;
+  --font-sans: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Atkinson Hyperlegible Mono", ui-monospace, Consolas, monospace;
+}
+
+/* ===== Komponenten (identisch mit components/bundle.css des Design-Systems) ===== */
+/* Smart Bicycle Box – Komponenten (Präfix sbb-). Nutzt ausschließlich Tokens. */
+.sbb-root, .sbb-root *, .sbb-root *::before, .sbb-root *::after { box-sizing: border-box; }
+.sbb-root {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 18px;
+  line-height: 1.55;
+  color: var(--ink);
+  background: var(--surface);
+  -webkit-text-size-adjust: 100%;
+}
+.sbb-root :focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: var(--focus-width); }
+.sbb-root .mono, .sbb-mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.sbb-vh { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.sbb-icon { width: 1.25em; height: 1.25em; flex: none; display: inline-block; vertical-align: -0.2em; }
+
+/* ---------- Demo-Kennzeichnung ---------- */
+.sbb-demo {
+  display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 4px 12px;
+  padding: 10px 16px; margin: 0;
+  background-color: var(--signal); color: var(--on-signal);
+  background-image: repeating-linear-gradient(135deg, transparent 0 16px, rgba(20, 32, 43, 0.1) 16px 32px);
+  border-bottom: 3px solid var(--on-signal);
+  font-size: 16px; font-weight: 700; text-align: center;
+}
+.sbb-demo strong { font-size: 20px; letter-spacing: 0.06em; }
+
+/* ---------- Tags ---------- */
+.sbb-tag {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 1px 10px; border: 2px solid currentColor; border-radius: var(--radius-pill);
+  font-size: 14px; line-height: 22px; font-weight: 700; letter-spacing: 0.04em; white-space: nowrap;
+}
+.sbb-tag--planned { color: var(--ink-muted); border-style: dashed; background: transparent; }
+.sbb-tag--present { color: var(--petrol); background: var(--petrol-soft); }
+.sbb-tag--blocked { color: var(--warn-ink); background: var(--warn-bg); border-color: var(--warn-line); border-style: dotted; }
+.sbb-tag--demo { color: var(--on-signal); background: var(--signal); border-color: var(--on-signal); }
+
+/* ---------- Status (Display & Status-Karte) ---------- */
+.sbb-status {
+  display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 12px 24px;
+  padding: var(--space-8); border: 4px solid; border-radius: var(--radius-lg);
+  min-height: 200px; position: relative; container-type: inline-size;
+}
+.sbb-status:has(> .sbb-status__corner:not([hidden])) { padding-top: 56px; }
+.sbb-status__icon { width: 96px; height: 96px; }
+.sbb-status__word { margin: 0; font-size: clamp(32px, 10cqi, 72px); line-height: 1.05; font-weight: 700; letter-spacing: 0.02em; overflow-wrap: normal; hyphens: manual; }
+.sbb-status__sub { margin: 6px 0 0; font-size: 18px; line-height: 1.45; font-weight: 700; }
+.sbb-status__corner { position: absolute; top: 12px; right: 12px; }
+.sbb-status[data-state="free"] { background: var(--free-bg); color: var(--free-ink); border-color: var(--free-line); }
+.sbb-status[data-state="occupied"] { background: var(--occupied-bg); color: var(--occupied-ink); border-color: var(--occupied-bg); }
+.sbb-status[data-state="unknown"] {
+  background-color: var(--unknown-bg); color: var(--unknown-ink); border-color: var(--unknown-line); border-style: dashed;
+  background-image: repeating-linear-gradient(135deg, var(--unknown-stripe) 0 12px, transparent 12px 24px);
+}
+@media (max-width: 520px) {
+  .sbb-status { grid-template-columns: 1fr; padding: 24px 20px; }
+  .sbb-status__icon { width: 64px; height: 64px; }
+  .sbb-status__corner { position: static; justify-self: start; }
+  .sbb-status:has(> .sbb-status__corner:not([hidden])) { padding-top: 24px; }
+}
+
+/* Display-Modell (physisches Gerät oben vorne) */
+.sbb-device { background: var(--device-bezel); padding: 14px; border-radius: 12px; max-width: 460px; }
+.sbb-device .sbb-status { aspect-ratio: 16 / 10; min-height: 0; grid-template-columns: 1fr; justify-items: center; text-align: center; align-content: center; border-radius: 4px; padding: 16px; gap: 8px; }
+.sbb-device .sbb-status__icon { width: 64px; height: 64px; }
+.sbb-device .sbb-status__word { font-size: clamp(24px, 9cqi, 44px); }
+.sbb-device .sbb-status__sub { font-size: 16px; margin: 0; }
+.sbb-device__cap { color: #cfd6da; font-size: 14px; margin: 10px 2px 0; }
+
+/* Kompaktes Badge */
+.sbb-badge { display: inline-flex; align-items: center; gap: 8px; padding: 4px 12px 4px 8px; border: 2px solid; border-radius: var(--radius-md); font-weight: 700; font-size: 16px; line-height: 24px; }
+.sbb-badge .sbb-icon { width: 22px; height: 22px; }
+.sbb-badge[data-state="free"] { background: var(--free-bg); color: var(--free-ink); border-color: var(--free-line); }
+.sbb-badge[data-state="occupied"] { background: var(--occupied-bg); color: var(--occupied-ink); border-color: var(--occupied-bg); }
+.sbb-badge[data-state="unknown"] { background-color: var(--unknown-bg); color: var(--unknown-ink); border-color: var(--unknown-line); border-style: dashed; background-image: repeating-linear-gradient(135deg, var(--unknown-stripe) 0 6px, transparent 6px 12px); }
+
+/* ---------- Karte ---------- */
+.sbb-card { background: var(--surface-raised); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: var(--space-6); box-shadow: var(--shadow-card); min-width: 0; }
+.sbb-card__title { margin: 0 0 16px; font-size: 20px; line-height: 28px; font-weight: 700; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.sbb-label { font-size: 14px; line-height: 20px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-muted); }
+
+/* ---------- Messung / Datenalter ---------- */
+.sbb-meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px 24px; margin: 0; }
+.sbb-meta div { min-width: 0; }
+.sbb-meta dt { font-size: 14px; line-height: 20px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-muted); }
+.sbb-meta dd { margin: 4px 0 0; font-size: 20px; line-height: 28px; font-weight: 700; }
+.sbb-meta dd small { display: block; font-size: 16px; line-height: 24px; font-weight: 400; color: var(--ink-muted); }
+.sbb-age { margin-top: 16px; }
+.sbb-age__track { position: relative; height: 12px; border-radius: var(--radius-sm); background: var(--surface-sunken); border: 1px solid var(--line-strong); overflow: hidden; }
+.sbb-age__fill { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--petrol); transition: width 0.4s ease; }
+.sbb-age[data-stale="true"] .sbb-age__fill { background: var(--danger-ink); background-image: repeating-linear-gradient(135deg, transparent 0 6px, rgba(255,255,255,0.35) 6px 12px); }
+.sbb-age__text { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 16px; color: var(--ink-muted); margin-top: 6px; }
+
+/* ---------- Sensorliste ---------- */
+.sbb-sensors { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.sbb-sensor { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 4px 16px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface-raised); }
+.sbb-sensor__name { font-weight: 700; }
+.sbb-sensor__detail { flex: 1 1 100%; font-size: 16px; line-height: 24px; color: var(--ink-muted); }
+.sbb-state { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; font-size: 16px; white-space: nowrap; }
+.sbb-state--ok { color: var(--petrol); }
+.sbb-state--fault { color: var(--danger-ink); }
+.sbb-state--nodata { color: var(--ink-muted); }
+.sbb-state--planned { color: var(--ink-muted); }
+.sbb-state--blocked { color: var(--warn-ink); }
+@media (max-width: 520px) { .sbb-state { white-space: normal; } }
+.sbb-sensor[data-kind="planned"], .sbb-sensor[data-kind="blocked"] { border-style: dashed; background: transparent; }
+
+/* ---------- Warnungen ---------- */
+.sbb-alerts { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.sbb-alert { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; padding: 14px 16px; border: 2px solid; border-radius: var(--radius-md); }
+.sbb-alert .sbb-icon { width: 28px; height: 28px; }
+.sbb-alert__title { margin: 0; font-weight: 700; font-size: 18px; line-height: 28px; }
+.sbb-alert__text { grid-column: 2; margin: 0; font-size: 16px; line-height: 24px; }
+.sbb-alert__actions { grid-column: 2; margin-top: 8px; }
+.sbb-alert--warn { background: var(--warn-bg); color: var(--warn-ink); border-color: var(--warn-line); }
+.sbb-alert--info { background: var(--info-bg); color: var(--info-ink); border-color: var(--info-ink); border-style: dashed; }
+.sbb-alert--ok { background: var(--surface-raised); color: var(--ink); border-color: var(--line); }
+
+/* ---------- Bedienelemente ---------- */
+.sbb-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: var(--touch-target); padding: 10px 18px; border-radius: var(--radius-md);
+  border: 2px solid var(--line-strong); background: var(--surface-raised); color: var(--ink);
+  font: inherit; font-size: 16px; font-weight: 700; cursor: pointer; text-decoration: none;
+}
+.sbb-btn:hover { border-color: var(--ink); }
+.sbb-btn--primary { background: var(--petrol); color: var(--on-petrol); border-color: var(--petrol); }
+.sbb-btn--small { min-height: 40px; padding: 6px 12px; font-size: 15px; }
+.sbb-btn[disabled], .sbb-btn[aria-disabled="true"] { cursor: not-allowed; border-style: dashed; color: var(--ink-muted); background: transparent; }
+
+.sbb-seg { display: flex; flex-wrap: wrap; gap: 8px; border: 0; padding: 0; margin: 0; min-width: 0; }
+.sbb-seg legend { padding: 0; margin-bottom: 8px; font-weight: 700; }
+.sbb-seg input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; }
+.sbb-seg label {
+  display: inline-flex; align-items: center; gap: 10px; min-height: var(--touch-target); padding: 10px 18px 10px 14px;
+  border: 2px solid var(--line-strong); border-radius: var(--radius-md); background: var(--surface-raised);
+  font-weight: 700; cursor: pointer; user-select: none;
+}
+.sbb-seg label::before { content: ""; width: 20px; height: 20px; border-radius: 50%; border: 2px solid currentColor; flex: none; }
+.sbb-seg input:checked + label { background: var(--ink); color: var(--surface-raised); border-color: var(--ink); }
+.sbb-seg input:checked + label::before { background: currentColor; box-shadow: inset 0 0 0 3px var(--ink); }
+.sbb-seg input:focus-visible + label { outline: var(--focus-width) solid var(--focus); outline-offset: var(--focus-width); }
+.sbb-seg kbd { font-family: var(--font-mono); font-size: 14px; border: 1px solid currentColor; border-radius: 4px; padding: 0 5px; opacity: 0.85; }
+
+.sbb-check { display: flex; align-items: flex-start; gap: 12px; min-height: 44px; padding: 8px 0; cursor: pointer; }
+.sbb-check input { width: 24px; height: 24px; margin: 2px 0 0; accent-color: var(--petrol); flex: none; }
+.sbb-check small { display: block; color: var(--ink-muted); font-size: 16px; }
+
+.sbb-lang { display: flex; gap: 6px; flex-wrap: wrap; margin: 0; padding: 0; list-style: none; }
+.sbb-lang button[aria-pressed="true"] { background: var(--ink); color: var(--surface-raised); border-color: var(--ink); }
+
+/* ---------- Architektur ---------- */
+.sbb-flow { list-style: none; margin: 0; padding: 0; display: flex; align-items: stretch; flex-wrap: nowrap; gap: 0; overflow-x: auto; padding-bottom: 8px; }
+.sbb-node { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 6px; padding: 12px; border: 3px solid var(--ink); border-radius: var(--radius-md); background: var(--surface-raised); }
+.sbb-node__title { font-weight: 700; font-size: 18px; line-height: 24px; margin: 0; }
+.sbb-node .sbb-tag { white-space: normal; font-size: 13px; line-height: 18px; padding: 1px 8px; align-self: flex-start; }
+.sbb-node__role { hyphens: auto; overflow-wrap: break-word; font-size: 15px; line-height: 22px; color: var(--ink-muted); margin: 0; flex: 1; }
+.sbb-node--present { border-color: var(--petrol); }
+.sbb-node--planned { border-style: dashed; border-color: var(--ink-muted); }
+.sbb-link { flex: 0 0 64px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 0 4px; text-align: center; font-size: 13px; line-height: 17px; color: var(--ink-muted); font-weight: 700; }
+.sbb-link__line { width: 100%; height: 0; border-top: 3px dashed var(--ink-muted); position: relative; }
+.sbb-link__line::after { content: ""; position: absolute; right: -2px; top: -9px; border: 7px solid transparent; border-left: 10px solid var(--ink-muted); border-right: 0; }
+.sbb-link--present .sbb-link__line { border-top-style: solid; border-top-color: var(--petrol); }
+.sbb-link--present .sbb-link__line::after { border-left-color: var(--petrol); }
+@media (max-width: 1000px) {
+  .sbb-flow { flex-direction: column; overflow: visible; }
+  .sbb-node { min-width: 0; }
+  .sbb-link { flex: 0 0 auto; flex-direction: row; justify-content: flex-start; padding: 6px 0 6px 24px; min-height: 56px; }
+  .sbb-link__line { width: 0; height: 44px; border-top: 0; border-left: 3px dashed var(--ink-muted); flex: none; }
+  .sbb-link--present .sbb-link__line { border-left-style: solid; border-left-color: var(--petrol); }
+  .sbb-link__line::after { right: auto; left: -9px; top: auto; bottom: -2px; border: 7px solid transparent; border-top: 10px solid var(--ink-muted); border-bottom: 0; }
+  .sbb-link--present .sbb-link__line::after { border-top-color: var(--petrol); border-left-color: transparent; }
+  .sbb-link span { text-align: left; }
+}
+
+/* ---------- Ereignisprotokoll ---------- */
+.sbb-log { list-style: none; margin: 0; padding: 0; font-size: 16px; line-height: 24px; }
+.sbb-log li { display: grid; grid-template-columns: 5.5em 1fr; gap: 12px; padding: 8px 0; border-top: 1px solid var(--line); }
+.sbb-log li:first-child { border-top: 0; }
+.sbb-log time { font-family: var(--font-mono); color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+
+/* ---------- Konstruktionszeichnung ---------- */
+.dw { width: 100%; height: auto; display: block; font-family: var(--font-sans); }
+.dw-ground { stroke: var(--ink); stroke-width: 2; }
+.dw-hatch { stroke: var(--ink-muted); stroke-width: 1; }
+.dw-panel { fill: var(--surface-sunken); stroke: var(--ink); stroke-width: 2; }
+.dw-solid { fill: var(--ink); }
+.dw-line { fill: none; stroke: var(--ink); stroke-width: 2; }
+.dw-bike { fill: none; stroke: var(--ink-muted); stroke-width: 1.5; stroke-dasharray: 5 4; }
+.dw-dim { stroke: var(--ink-muted); stroke-width: 1; fill: none; }
+.dw-dimtext { fill: var(--ink-muted); font-size: 12px; }
+.dw-note { fill: var(--ink); font-size: 12px; font-weight: 700; }
+.dw-display { fill: var(--free-bg); stroke: var(--device-bezel); stroke-width: 4; }
+.dw-display-text { fill: var(--free-ink); font-size: 13px; font-weight: 700; }
+.dw-part { fill: var(--surface-raised); stroke: var(--ink); stroke-width: 2; }
+.dw-box { fill: var(--petrol-soft); stroke: var(--petrol); stroke-width: 2; }
+.dw-cable { fill: none; stroke: var(--petrol); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.dw-beam { fill: none; stroke: var(--ink); stroke-width: 1.5; stroke-dasharray: 2 4; }
+.dw-planned { fill: none; stroke: var(--warn-line); stroke-width: 2; stroke-dasharray: 6 4; }
+.dw-open { fill: var(--petrol); }
+.dw-callout circle { fill: var(--ink); }
+.dw-callout text { fill: var(--surface-raised); font-size: 12px; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
+.dw-legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.dw-legend li { display: grid; grid-template-columns: 32px 1fr; gap: 12px; align-items: start; }
+.dw-num { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--ink); color: var(--surface-raised); font-weight: 700; font-size: 15px; }
+.dw-num--planned { background: transparent; color: var(--warn-ink); border: 2px dashed var(--warn-line); }
+
+@media (prefers-reduced-motion: reduce) { .sbb-root *, .sbb-root *::before, .sbb-root *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; } }
+
+/* ===== Seitenlayout ===== */
+html { scroll-behavior: smooth; scroll-padding-top: 72px; }
+body { background: var(--surface); }
+.skip { position: absolute; left: 16px; top: -100px; z-index: 50; background: var(--surface-raised); color: var(--ink); padding: 12px 16px; border: 3px solid var(--focus); border-radius: var(--radius-md); font-weight: 700; }
+.skip:focus { top: 12px; }
+@media (min-width: 720px) and (min-height: 600px) { .demo-sticky { position: sticky; top: 0; z-index: 20; } }
+.wrap { max-width: 1200px; margin: 0 auto; padding: 0 var(--space-4); }
+@media (min-width: 720px) { .wrap { padding: 0 var(--space-6); } }
+header.top { background: var(--surface-raised); border-bottom: 1px solid var(--line); }
+header.top .wrap { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; padding-top: 16px; padding-bottom: 16px; }
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand svg { width: 44px; height: 44px; color: var(--petrol); flex: none; }
+.brand h1 { margin: 0; font-size: 26px; line-height: 32px; }
+.brand p { margin: 0; font-size: 16px; color: var(--ink-muted); }
+.top-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; }
+.tool-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tool-group > span { font-size: 14px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-muted); }
+nav.sections { background: var(--surface); border-bottom: 1px solid var(--line); }
+nav.sections ul { list-style: none; margin: 0; padding: 0; display: flex; gap: 4px; overflow-x: auto; }
+nav.sections a { display: block; padding: 12px 14px; color: var(--ink); text-decoration: none; font-weight: 700; font-size: 16px; border-bottom: 4px solid transparent; white-space: nowrap; }
+nav.sections a:hover { border-bottom-color: var(--line-strong); }
+nav.sections a[aria-current="true"] { border-bottom-color: var(--petrol); color: var(--petrol); }
+main section { padding: var(--space-12) 0 var(--space-6); }
+main section + section { border-top: 1px solid var(--line); }
+.sec-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px; margin-bottom: var(--space-6); }
+.sec-head h2 { margin: 0; font-size: 28px; line-height: 36px; }
+.sec-head p { margin: 0; color: var(--ink-muted); max-width: 70ch; flex-basis: 100%; }
+.grid-dash { display: grid; gap: var(--space-6); grid-template-columns: 1fr; }
+@media (min-width: 980px) { .grid-dash { grid-template-columns: 1.35fr 1fr; } }
+.stack { display: grid; gap: var(--space-6); align-content: start; min-width: 0; }
+.status-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+.status-head h3 { margin: 0; font-size: 20px; }
+.control { border: 3px dashed var(--on-signal); background: var(--surface-raised); }
+.control .sbb-card__title::before { content: ""; }
+.control-grid { display: grid; gap: var(--space-6); grid-template-columns: 1fr; }
+@media (min-width: 860px) { .control-grid { grid-template-columns: 1.1fr 1fr; } }
+.hint { font-size: 16px; color: var(--ink-muted); margin: 8px 0 0; }
+.two { display: grid; gap: var(--space-6); grid-template-columns: 1fr; }
+@media (min-width: 860px) { .two { grid-template-columns: 1fr 1fr; } }
+.views { display: grid; gap: var(--space-6); grid-template-columns: 1fr; }
+@media (min-width: 760px) { .views { grid-template-columns: 1fr 1fr; } .views .wide { grid-column: 1 / -1; } }
+figure { margin: 0; }
+figcaption { font-weight: 700; margin-bottom: 8px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.dw-frame { max-width: 560px; }
+.views .wide .dw-frame { max-width: 760px; }
+table.simple { width: 100%; border-collapse: collapse; font-size: 16px; line-height: 24px; }
+table.simple th, table.simple td { text-align: left; vertical-align: top; padding: 10px 12px 10px 0; border-top: 1px solid var(--line); }
+table.simple thead th { border-top: 0; font-size: 14px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-muted); }
+.table-scroll { overflow-x: auto; }
+.checklist { margin: 0; padding-left: 1.3em; display: grid; gap: 8px; }
+.checklist li::marker { color: var(--petrol); font-weight: 700; }
+.legend-row { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin-top: var(--space-4); font-size: 16px; }
+.arch-extra { display: grid; gap: var(--space-4); grid-template-columns: 1fr; margin-top: var(--space-6); }
+@media (min-width: 860px) { .arch-extra { grid-template-columns: repeat(3, 1fr); } }
+.note { border-left: 0; }
+footer { padding: var(--space-8) 0 var(--space-16); color: var(--ink-muted); font-size: 16px; }
+footer p { margin: 4px 0; }
+select.sbb-btn { appearance: auto; padding-right: 12px; }
+</style>
+</head>
+<body class="sbb-root">
+<a class="skip" href="#inhalt">Zum Inhalt springen</a>
+
+<div class="demo-sticky">
+  <p class="sbb-demo" role="note">
+    <svg class="sbb-icon" viewBox="0 0 48 48" aria-hidden="true"><path d="M24 6 44 41H4Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M24 19v10" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><circle cx="24" cy="35" r="2.6" fill="currentColor"/></svg>
+    <strong>SIMULATION / DEMODATEN</strong>
+    <span>Keine Verbindung zu Sensoren, Arduino, Raspberry Pi oder Server. Alle Werte werden im Browser erzeugt.</span>
+  </p>
+</div>
+
+<header class="top">
+  <div class="wrap">
+    <div class="brand">
+      <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M6 42V12h36v30" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><rect x="14" y="14" width="20" height="8" rx="1" fill="currentColor"/><circle cx="16" cy="35" r="5" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="32" cy="35" r="5" fill="none" stroke="currentColor" stroke-width="3"/><path d="M16 35l5-8h7l4 8" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>
+      <div>
+        <h1>Smart Bicycle Box</h1>
+        <p><span data-i18n="app.subtitle">Stellplatz 1 · Schul-Demonstration</span> · <span id="hdrBadge"></span></p>
+      </div>
+    </div>
+    <div class="top-tools">
+      <div class="tool-group" role="group" aria-labelledby="langLbl">
+        <span id="langLbl" data-i18n="lang.label">Sprache</span>
+        <ul class="sbb-lang">
+          <li><button type="button" class="sbb-btn sbb-btn--small" aria-pressed="true" lang="de">DE</button></li>
+          <li><button type="button" class="sbb-btn sbb-btn--small" disabled lang="en" title="Englisch: geplant">EN <span class="sbb-vh">–</span>(geplant)</button></li>
+          <li><button type="button" class="sbb-btn sbb-btn--small" disabled lang="nl" title="Niederländisch: geplant">NL <span class="sbb-vh">–</span>(geplant)</button></li>
+        </ul>
+      </div>
+      <label class="tool-group"><span data-i18n="theme.label">Darstellung</span>
+        <select id="theme" class="sbb-btn sbb-btn--small">
+          <option value="auto">System</option>
+          <option value="light">Hell</option>
+          <option value="dark">Dunkel</option>
+        </select>
+      </label>
+    </div>
+  </div>
+</header>
+
+<nav class="sections" aria-label="Abschnitte">
+  <div class="wrap">
+    <ul>
+      <li><a href="#uebersicht" aria-current="true">Übersicht</a></li>
+      <li><a href="#stellplatz">Stellplatz-Konzept</a></li>
+      <li><a href="#architektur">Architektur</a></li>
+      <li><a href="#pruefen">Vor dem Bau prüfen</a></li>
+    </ul>
+  </div>
+</nav>
+
+<main id="inhalt" tabindex="-1">
+<!-- ===================================================== ÜBERSICHT -->
+<section id="uebersicht" aria-labelledby="h-uebersicht">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2 id="h-uebersicht" data-i18n="dash.title">Übersicht Stellplatz 1</h2>
+      <span class="sbb-tag sbb-tag--demo">DEMODATEN</span>
+      <p data-i18n="dash.intro">Ein einzelner, vorne offener Stellplatz. Fehlt eine gültige, aktuelle Messung, zeigt das System „STATUS UNBEKANNT“ – niemals automatisch „FREI“.</p>
+    </div>
+
+    <div class="grid-dash">
+      <div class="stack">
+        <div>
+          <div class="status-head">
+            <h3 data-i18n="dash.current">Aktueller Zustand</h3>
+          </div>
+          <div id="statusCard" class="sbb-status" data-state="unknown">
+            <span id="statusIcon" aria-hidden="true"></span>
+            <div>
+              <p class="sbb-status__word" id="statusWord">STATUS UNBEKANNT</p>
+              <p class="sbb-status__sub" id="statusReason">Noch keine Messung empfangen.</p>
+            </div>
+            <span class="sbb-status__corner sbb-tag sbb-tag--demo">SIMULATION</span>
+          </div>
+          <p id="live" class="sbb-vh" aria-live="polite"></p>
+        </div>
+
+        <div class="sbb-card">
+          <h3 class="sbb-card__title" data-i18n="meta.title">Messung</h3>
+          <dl class="sbb-meta">
+            <div><dt data-i18n="meta.last">Letzte Messung</dt><dd class="mono" id="mLast">–<small>keine Daten</small></dd></div>
+            <div><dt data-i18n="meta.value">Messwert Präsenzsensor</dt><dd class="mono" id="mValue">–<small>–</small></dd></div>
+            <div><dt data-i18n="meta.source">Datenquelle</dt><dd id="mSource">Simulation<small>im Browser, keine Hardware</small></dd></div>
+          </dl>
+          <div class="sbb-age" id="age" data-stale="false">
+            <div class="sbb-age__track" aria-hidden="true"><div class="sbb-age__fill" id="ageFill"></div></div>
+            <div class="sbb-age__text"><span id="ageText">Datenalter: –</span><span>Gültig bis 30 s (Vorschlag)</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="stack">
+        <div class="sbb-card">
+          <h3 class="sbb-card__title"><span data-i18n="warn.title">Technische Warnungen</span> <span class="sbb-tag sbb-tag--planned" id="warnCount">0 aktiv</span></h3>
+          <ul class="sbb-alerts" id="alerts" tabindex="-1" aria-label="Technische Warnungen"></ul>
+        </div>
+        <div class="sbb-card">
+          <h3 class="sbb-card__title" data-i18n="sensors.title">Sensorzustand</h3>
+          <ul class="sbb-sensors" id="sensors"></ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Präsentationssteuerung -->
+    <div class="sbb-card control" style="margin-top: var(--space-6)">
+      <h3 class="sbb-card__title"><span data-i18n="ctl.title">Präsentationssteuerung</span> <span class="sbb-tag sbb-tag--demo">NUR SIMULATION</span></h3>
+      <div class="control-grid">
+        <div>
+          <fieldset class="sbb-seg" id="stateSeg">
+            <legend data-i18n="ctl.legend">Simulierter Sensorwert</legend>
+            <input type="radio" name="simstate" id="s-free" value="free" checked><label for="s-free">FREI <kbd aria-hidden="true">1</kbd></label>
+            <input type="radio" name="simstate" id="s-occ" value="occupied"><label for="s-occ">BELEGT <kbd aria-hidden="true">2</kbd></label>
+            <input type="radio" name="simstate" id="s-unk" value="unknown"><label for="s-unk">STATUS UNBEKANNT <kbd aria-hidden="true">3</kbd></label>
+          </fieldset>
+          <p class="hint" id="ctlHint">Die Anzeige wird immer aus der simulierten Messung abgeleitet – dieselbe Regel, die später für echte Messungen gelten soll.</p>
+          <label class="sbb-check"><input type="checkbox" id="kbdOn" checked><span>Tastenkürzel 1 / 2 / 3 aktiv<small>Für die Präsentation. Lässt sich abschalten, falls es mit Hilfstechnik kollidiert.</small></span></label>
+        </div>
+        <div>
+          <p class="sbb-label" style="margin:0 0 4px">Störungen vorführen</p>
+          <label class="sbb-check"><input type="checkbox" id="fStale"><span>Messungen bleiben aus<small>Letzte Messung wird 95 s alt → STATUS UNBEKANNT</small></span></label>
+          <label class="sbb-check"><input type="checkbox" id="fSensor"><span>Präsenzsensor meldet Fehler<small>Ungültiger Messwert → STATUS UNBEKANNT</small></span></label>
+          <label class="sbb-check"><input type="checkbox" id="fLink"><span>Verbindung Arduino ↔ Raspberry Pi getrennt<small>Keine neuen Daten → STATUS UNBEKANNT</small></span></label>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
+            <button type="button" class="sbb-btn" id="bVib">Erschütterung simulieren</button>
+            <button type="button" class="sbb-btn" id="bReset">Alles zurücksetzen</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="two" style="margin-top: var(--space-6)">
+      <div class="sbb-card">
+        <h3 class="sbb-card__title">Vorschau Stellplatz-Display <span class="sbb-tag sbb-tag--planned">Entwurf</span></h3>
+        <div class="sbb-device">
+          <div id="devStatus" class="sbb-status" data-state="unknown" aria-hidden="true">
+            <span id="devIcon"></span>
+            <p class="sbb-status__word" id="devWord">STATUS UNBEKANNT</p>
+            <p class="sbb-status__sub">Stellplatz 1</p>
+          </div>
+          <p class="sbb-device__cap">So könnte das Display oben an der Vorderseite aussehen: Wort + Symbol + Farbe + Muster.</p>
+        </div>
+      </div>
+      <div class="sbb-card">
+        <h3 class="sbb-card__title">Ereignisprotokoll <span class="sbb-tag sbb-tag--demo">DEMO</span></h3>
+        <ul class="sbb-log" id="log" aria-label="Letzte Ereignisse, neueste zuerst"></ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================================================== STELLPLATZ -->
+<section id="stellplatz" aria-labelledby="h-stellplatz">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2 id="h-stellplatz">Stellplatz-Konzept</h2>
+      <span class="sbb-tag sbb-tag--planned">Maße = Vorschlag</span>
+      <p>Ein vorne offener Einzelstellplatz: zwei Seitenwände, Rückwand, ein Kopfträger oben vorne für das Display. Keine Tür, kein Schloss. Alle Maße sind Vorschläge, bis reale Fahrrad- und Bauteilmaße vorliegen.</p>
+    </div>
+
+    <div class="views">
+      <figure class="sbb-card">
+        <figcaption>Ansicht von vorne <span class="sbb-tag sbb-tag--planned">Vorschlag</span></figcaption>
+        <div class="dw-frame">
+        <svg class="dw" viewBox="0 0 400 560" role="img" aria-labelledby="dwFrontT dwFrontD">
+          <title id="dwFrontT">Frontansicht des Stellplatzes</title>
+          <desc id="dwFrontD">Zwei Seitenwände, oben vorne ein Kopfträger mit Display. Die Einfahrt darunter ist offen. Präsenzsensor innen links auf ca. 40 cm Höhe, Radhalteschiene mittig am Boden, Elektronikgehäuse außen rechts oben.</desc>
+          <!-- Boden -->
+          <line class="dw-ground" x1="20" y1="500" x2="380" y2="500"/>
+          <path class="dw-hatch" d="M30 500l-10 10M60 500l-10 10M90 500l-10 10M120 500l-10 10M150 500l-10 10M180 500l-10 10M210 500l-10 10M240 500l-10 10M270 500l-10 10M300 500l-10 10M330 500l-10 10M360 500l-10 10"/>
+          <!-- Seitenwände (2 cm) und Kopfträger (25 cm) – Maßstab 3 px = 1 cm -->
+          <rect class="dw-panel" x="60" y="50" width="6" height="450"/>
+          <rect class="dw-panel" x="291" y="50" width="6" height="450"/>
+          <rect class="dw-panel" x="66" y="50" width="225" height="75"/>
+          <!-- Display -->
+          <rect class="dw-display" x="126" y="58" width="105" height="60" rx="3"/>
+          <text class="dw-display-text" x="178.5" y="93" text-anchor="middle">FREI ✓</text>
+          <!-- Fahrrad (Silhouette) -->
+          <ellipse class="dw-bike" cx="178.5" cy="395" rx="6" ry="105"/>
+          <path class="dw-bike" d="M81 185h195M178.5 185v105"/>
+          <!-- Radhalteschiene -->
+          <rect class="dw-part" x="168" y="470" width="21" height="30"/>
+          <!-- Präsenzsensor + Messstrahl -->
+          <rect class="dw-part" x="66" y="372" width="10" height="16"/>
+          <line class="dw-beam" x1="76" y1="380" x2="289" y2="380"/>
+          <!-- Erschütterungssensor -->
+          <rect class="dw-solid" x="172" y="462" width="13" height="8"/>
+          <!-- NFC außen rechts -->
+          <rect class="dw-part" x="297" y="190" width="6" height="30"/>
+          <!-- Elektronikgehäuse außen rechts hinten -->
+          <rect class="dw-box" x="297" y="58" width="36" height="60" rx="3"/>
+          <!-- Kabelweg -->
+          <path class="dw-cable" d="M297 70H240M126 70H72V372M303 205h8V118M172 480H72"/>
+          <!-- Kamera optional -->
+          <rect class="dw-planned" x="170" y="125" width="17" height="10"/>
+          <!-- Maße -->
+          <path class="dw-dim" d="M60 525h237M60 519v12M297 519v12"/>
+          <text class="dw-dimtext" x="178" y="545" text-anchor="middle">ca. 80 cm außen / 75 cm innen (Vorschlag)</text>
+          <path class="dw-dim" d="M36 50v450M30 50h12M30 500h12"/>
+          <text class="dw-dimtext" transform="translate(28 275) rotate(-90)" text-anchor="middle">ca. 150 cm (Vorschlag)</text>
+          <path class="dw-dim" d="M355 125v375M349 125h12"/>
+          <text class="dw-dimtext" transform="translate(372 312) rotate(-90)" text-anchor="middle">lichte Höhe ca. 125 cm</text>
+          <text class="dw-note" x="178.5" y="160" text-anchor="middle">Einfahrt offen</text>
+          <path class="dw-open" d="M166 170h25l-12.5 14z"/>
+          <!-- Nummern -->
+          <g class="dw-callout"><circle cx="112" cy="88" r="11"/><text x="112" y="88">1</text></g>
+          <g class="dw-callout"><circle cx="92" cy="355" r="11"/><text x="92" y="355">2</text></g>
+          <g class="dw-callout"><circle cx="320" cy="205" r="11"/><text x="320" y="205">3</text></g>
+          <g class="dw-callout"><circle cx="205" cy="455" r="11"/><text x="205" y="455">4</text></g>
+          <g class="dw-callout"><circle cx="348" cy="88" r="11"/><text x="348" y="88">5</text></g>
+          <g class="dw-callout"><circle cx="92" cy="245" r="11"/><text x="92" y="245">6</text></g>
+          <g class="dw-callout"><circle cx="150" cy="485" r="11"/><text x="150" y="485">7</text></g>
+          <g class="dw-callout"><circle cx="205" cy="140" r="11" style="fill:var(--warn-line)"/><text x="205" y="140" style="fill:var(--on-signal)">8</text></g>
+        </svg>
+        </div>
+      </figure>
+
+      <figure class="sbb-card">
+        <figcaption>Draufsicht <span class="sbb-tag sbb-tag--planned">Vorschlag</span></figcaption>
+        <div class="dw-frame">
+        <svg class="dw" viewBox="0 0 320 400" role="img" aria-labelledby="dwTopT dwTopD">
+          <title id="dwTopT">Draufsicht des Stellplatzes</title>
+          <desc id="dwTopD">U-Form aus Rückwand und zwei Seitenwänden, vorne offen. Das Fahrrad steht mittig, Vorderrad in der Radhalteschiene an der Rückwand. Der Messstrahl des Präsenzsensors verläuft quer über den Stellplatz. Elektronikgehäuse und NFC-Leser außen an der rechten Wand. Das Kabel quer über die Front verläuft oben im Kopfträger, nicht am Boden.</desc>
+          <!-- Maßstab 1,4 px = 1 cm -->
+          <rect class="dw-panel" x="90" y="30" width="115" height="4"/>
+          <rect class="dw-panel" x="90" y="30" width="4" height="280"/>
+          <rect class="dw-panel" x="201" y="30" width="4" height="280"/>
+          <!-- Kopfträger oben (verdeckt) -->
+          <path class="dw-dim" d="M94 304h107" style="stroke-dasharray:4 3;stroke-width:2"/>
+          <!-- Fahrrad -->
+          <path class="dw-bike" d="M147.5 40v250M103 100h89"/>
+          <!-- Schiene -->
+          <rect class="dw-part" x="142" y="34" width="11" height="70"/>
+          <!-- Sensor + Strahl -->
+          <rect class="dw-part" x="94" y="163" width="8" height="14"/>
+          <line class="dw-beam" x1="102" y1="170" x2="200" y2="170"/>
+          <!-- Box + NFC außen rechts -->
+          <rect class="dw-box" x="205" y="40" width="22" height="50" rx="2"/>
+          <rect class="dw-part" x="205" y="262" width="6" height="20"/>
+          <!-- Kabel -->
+          <path class="dw-cable" d="M205 60h-7V300M198 300H97V170M208 272V90"/>
+          <!-- Einfahrt -->
+          <path class="dw-open" d="M136 360h23v-18h10l-21.5-20-21.5 20h10z"/>
+          <text class="dw-note" x="147.5" y="380" text-anchor="middle">Einfahrt offen</text>
+          <!-- Maße -->
+          <path class="dw-dim" d="M60 30v280M54 30h12M54 310h12"/>
+          <text class="dw-dimtext" transform="translate(50 170) rotate(-90)" text-anchor="middle">Tiefe ca. 200 cm</text>
+          <path class="dw-dim" d="M90 330h115" style="display:none"/>
+          <g class="dw-callout"><circle cx="118" cy="315" r="10"/><text x="118" y="315">1</text></g>
+          <g class="dw-callout"><circle cx="118" cy="190" r="10"/><text x="118" y="190">2</text></g>
+          <g class="dw-callout"><circle cx="240" cy="272" r="10"/><text x="240" y="272">3</text></g>
+          <g class="dw-callout"><circle cx="240" cy="65" r="10"/><text x="240" y="65">5</text></g>
+          <g class="dw-callout"><circle cx="240" cy="200" r="10"/><text x="240" y="200">6</text></g>
+          <g class="dw-callout"><circle cx="170" cy="60" r="10"/><text x="170" y="60">7</text></g>
+        </svg>
+        </div>
+      </figure>
+
+      <figure class="sbb-card wide">
+        <figcaption>Seitenansicht rechts (von außen) <span class="sbb-tag sbb-tag--planned">Vorschlag</span></figcaption>
+        <div class="dw-frame">
+        <svg class="dw" viewBox="0 0 520 380" role="img" aria-labelledby="dwSideT dwSideD">
+          <title id="dwSideT">Seitenansicht des Stellplatzes von rechts</title>
+          <desc id="dwSideD">Einfahrt links. Kopfträger mit Display oben vorne. NFC-Leser außen vorne auf ca. 100 cm Höhe. Elektronikgehäuse außen hinten oben, Kabelkanal entlang der Oberkante zum Kopfträger, Stromzuführung hinten nach unten. Fahrrad gestrichelt, Vorderrad hinten in der Radhalteschiene.</desc>
+          <!-- Maßstab 1,8 px = 1 cm; vorne = links -->
+          <line class="dw-ground" x1="30" y1="310" x2="500" y2="310"/>
+          <rect class="dw-panel" x="70" y="40" width="360" height="270"/>
+          <rect class="dw-part" x="70" y="40" width="18" height="45"/>
+          <!-- Fahrrad dahinter -->
+          <circle class="dw-bike" cx="349" cy="247" r="63"/>
+          <circle class="dw-bike" cx="160" cy="247" r="63"/>
+          <path class="dw-bike" d="M160 247l55-85h110l24 85M215 162l40 85h94M325 162l-8-40h22M200 135h30"/>
+          <!-- Schiene + Vibration -->
+          <rect class="dw-part" x="320" y="300" width="105" height="10"/>
+          <rect class="dw-solid" x="370" y="292" width="16" height="8"/>
+          <!-- Sensorposition (Strahl zeigt in die Bildebene) -->
+          <circle class="dw-part" cx="250" cy="238" r="8"/>
+          <circle class="dw-solid" cx="250" cy="238" r="3"/>
+          <!-- NFC -->
+          <rect class="dw-box" x="103" y="118" width="26" height="26" rx="3"/>
+          <path class="dw-line" d="M110 131a6 6 0 0 1 6-6M110 131a12 12 0 0 1 12-12" style="stroke:var(--petrol)"/>
+          <!-- Elektronik -->
+          <rect class="dw-box" x="355" y="50" width="65" height="50" rx="4"/>
+          <text class="dw-note" x="387" y="80" text-anchor="middle" style="fill:var(--petrol)">IP54</text>
+          <!-- Kabel -->
+          <path class="dw-cable" d="M355 58H88M388 100v10H425V300M116 118V58"/>
+          <path class="dw-line" d="M425 300v10h60" style="stroke:var(--petrol);stroke-width:3"/>
+          <text class="dw-dimtext" x="436" y="296">Netzteil</text>
+          <!-- Kamera optional (Blick nach innen) -->
+          <path class="dw-planned" d="M74 88h14v10H74zM88 93l132 27M88 93l112 57"/>
+          <!-- Einfahrt -->
+          <path class="dw-open" d="M36 200h18v-10l18 18-18 18v-10H36z"/>
+          <text class="dw-note" x="36" y="250">offen</text>
+          <!-- Maße -->
+          <path class="dw-dim" d="M70 335h360M70 329v12M430 329v12"/>
+          <text class="dw-dimtext" x="250" y="355" text-anchor="middle">Tiefe ca. 200 cm (Vorschlag – Fahrradlänge messen)</text>
+          <path class="dw-dim" d="M500 40v270M494 40h12"/>
+          <text class="dw-dimtext" transform="translate(514 175) rotate(-90)" text-anchor="middle">ca. 150 cm</text>
+          <text class="dw-dimtext" x="100" y="162">NFC ca. 100 cm</text>
+          <g class="dw-callout"><circle cx="79" cy="30" r="10"/><text x="79" y="30">1</text></g>
+          <g class="dw-callout"><circle cx="270" cy="222" r="10"/><text x="270" y="222">2</text></g>
+          <g class="dw-callout"><circle cx="146" cy="131" r="10"/><text x="146" y="131">3</text></g>
+          <g class="dw-callout"><circle cx="378" cy="278" r="10"/><text x="378" y="278">4</text></g>
+          <g class="dw-callout"><circle cx="388" cy="30" r="10"/><text x="388" y="30">5</text></g>
+          <g class="dw-callout"><circle cx="230" cy="44" r="10"/><text x="230" y="44">6</text></g>
+          <g class="dw-callout"><circle cx="336" cy="290" r="10"/><text x="336" y="290">7</text></g>
+          <g class="dw-callout"><circle cx="232" cy="118" r="10" style="fill:var(--warn-line)"/><text x="232" y="118" style="fill:var(--on-signal)">8</text></g>
+        </svg>
+        </div>
+      </figure>
+    </div>
+
+    <div class="two" style="margin-top: var(--space-6)">
+      <div class="sbb-card">
+        <h3 class="sbb-card__title">Legende &amp; Positionen</h3>
+        <ol class="dw-legend">
+          <li><span class="dw-num">1</span><span><strong>Display</strong> im Kopfträger oben vorne, mittig. Vorschlag: 13–15,6″ Monitor hinter Acryl, Unterkante ≥ 125 cm, damit Lenker frei durchpassen. Zeigt Wort + Symbol + Farbe.</span></li>
+          <li><span class="dw-num">2</span><span><strong>Präsenzsensor</strong> innen an der linken Wand, ca. 40 cm hoch, misst quer zur gegenüberliegenden Wand (z. B. ToF-Laser-Distanzsensor). Rahmen/Laufräder unterbrechen die Messstrecke.</span></li>
+          <li><span class="dw-num">3</span><span><strong>NFC-Leser</strong> außen an der rechten Wand, vorne, ca. 100 cm hoch, hinter max. 3 mm Kunststoff (nicht hinter Metall). Funktion noch festzulegen.</span></li>
+          <li><span class="dw-num">4</span><span><strong>Erschütterungssensor</strong> an der Radhalteschiene. Meldet ungewöhnliche Bewegung – kein Diebstahlnachweis.</span></li>
+          <li><span class="dw-num">5</span><span><strong>Elektronikgehäuse</strong> (IP54) außen rechts hinten oben: Arduino, Raspberry Pi, geprüftes Netzteil. Kabel nur über Kabelverschraubungen.</span></li>
+          <li><span class="dw-num">6</span><span><strong>Kabelkanal</strong> entlang der Oberkante, durch den Kopfträger, an der Innenkante der linken Wand nach unten. Keine losen Kabel im Fahrbereich, Bodenkabel unter der Schiene.</span></li>
+          <li><span class="dw-num">7</span><span><strong>Radhalteschiene</strong> / Vorderradhalter an der Rückwand – sorgt für eine definierte Position und damit für stabile Messwerte.</span></li>
+          <li><span class="dw-num dw-num--planned">8</span><span><strong>Kamera – nur optionale Idee, nicht genehmigt.</strong> Falls überhaupt: im Kopfträger, ausschließlich nach innen gerichtet. Vorher Schulleitung und Datenschutz klären.</span></li>
+        </ol>
+        <p class="legend-row">
+          <svg width="40" height="10" aria-hidden="true"><line x1="0" y1="5" x2="40" y2="5" class="dw-cable"/></svg> Kabelweg
+          <svg width="40" height="10" aria-hidden="true"><line x1="0" y1="5" x2="40" y2="5" class="dw-beam"/></svg> Messstrecke
+          <svg width="40" height="10" aria-hidden="true"><line x1="0" y1="5" x2="40" y2="5" class="dw-bike"/></svg> Fahrrad
+          <svg width="40" height="10" aria-hidden="true"><line x1="0" y1="5" x2="40" y2="5" class="dw-planned"/></svg> optional / nicht genehmigt
+        </p>
+      </div>
+      <div class="sbb-card">
+        <h3 class="sbb-card__title">Material &amp; Budget <span class="sbb-tag sbb-tag--planned">Richtwerte, ungeprüft</span></h3>
+        <div class="table-scroll">
+        <table class="simple">
+          <thead><tr><th scope="col">Bauteil</th><th scope="col">Vorschlag</th><th scope="col">ca. €</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Rahmen</th><td>Kantholz 45×70 + Siebdruckplatte 15 mm (günstig, schulwerkstatt-tauglich) – alternativ Aluprofil 40×40</td><td>80–150<br>(Alu 150–250)</td></tr>
+            <tr><th scope="row">Display</th><td>Tragbarer Monitor 13–15,6″ per HDMI am Raspberry Pi, hinter Acryl 3 mm</td><td>70–130</td></tr>
+            <tr><th scope="row">Präsenz</th><td>ToF-Distanzsensor (z. B. VL53L1X); Budget-Alternative Ultraschall HC-SR04</td><td>3–15</td></tr>
+            <tr><th scope="row">Erschütterung</th><td>Vibrationsmodul (z. B. SW-420) oder Beschleunigungssensor</td><td>2–8</td></tr>
+            <tr><th scope="row">NFC</th><td>13,56-MHz-Modul (z. B. PN532), Kunststoff-Abdeckung</td><td>8–15</td></tr>
+            <tr><th scope="row">Gehäuse</th><td>Kunststoff-Abzweigkasten IP54, Kabelverschraubungen M16</td><td>15–30</td></tr>
+            <tr><th scope="row">Kleinteile</th><td>Kabelkanal, Zugentlastung, Radhalter, Schrauben, Kantenschutz</td><td>30–50</td></tr>
+            <tr><th scope="row">Arduino / Pi</th><td>falls schon vorhanden, sonst zusätzlich einplanen</td><td>0 / offen</td></tr>
+          </tbody>
+          <tfoot><tr><th scope="row">Summe</th><td>grobe Schätzung ohne vorhandene Teile</td><td><strong>ca. 210–400</strong></td></tr></tfoot>
+        </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================================================== ARCHITEKTUR -->
+<section id="architektur" aria-labelledby="h-arch">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2 id="h-arch">Architektur</h2>
+      <p>Datenfluss von den Sensoren bis zum Dashboard. Durchgezogen und mit „vorhanden“ markiert ist nur, was heute tatsächlich eingerichtet ist. Alles Gestrichelte ist geplant.</p>
+    </div>
+    <ol class="sbb-flow" aria-label="Datenfluss">
+      <li class="sbb-node sbb-node--planned"><p class="sbb-node__title">Sensoren</p><p class="sbb-node__role">Präsenz, Erschütterung, NFC (Kamera nur optional, nicht genehmigt)</p><span class="sbb-tag sbb-tag--planned">geplant</span></li>
+      <li class="sbb-link"><span class="sbb-link__line" aria-hidden="true"></span><span>Kabel<br>geplant</span></li>
+      <li class="sbb-node sbb-node--planned"><p class="sbb-node__title">Arduino</p><p class="sbb-node__role">liest Sensoren, entprellt, sendet Messwerte</p><span class="sbb-tag sbb-tag--planned">geplant</span></li>
+      <li class="sbb-link"><span class="sbb-link__line" aria-hidden="true"></span><span>USB-Seriell<br>geplant</span></li>
+      <li class="sbb-node sbb-node--planned"><p class="sbb-node__title">Raspberry Pi</p><p class="sbb-node__role">Gateway: prüft, puffert, leitet weiter; Display lokal</p><span class="sbb-tag sbb-tag--planned">geplant</span></li>
+      <li class="sbb-link"><span class="sbb-link__line" aria-hidden="true"></span><span>Netzwerk<br>geplant</span></li>
+      <li class="sbb-node sbb-node--present"><p class="sbb-node__title">Edge-VM</p><p class="sbb-node__role">Proxmox. Empfangsdienst noch nicht implementiert</p><span class="sbb-tag sbb-tag--present">VM vorhanden</span><span class="sbb-tag sbb-tag--planned">Dienst geplant</span></li>
+      <li class="sbb-link"><span class="sbb-link__line" aria-hidden="true"></span><span>intern<br>geplant</span></li>
+      <li class="sbb-node sbb-node--present"><p class="sbb-node__title">App-VM</p><p class="sbb-node__role">abgeschirmt. Anwendung, Datenhaltung, KI-Funktion noch nicht implementiert</p><span class="sbb-tag sbb-tag--present">VM vorhanden</span><span class="sbb-tag sbb-tag--planned">App geplant</span></li>
+      <li class="sbb-link"><span class="sbb-link__line" aria-hidden="true"></span><span>HTTPS<br>geplant</span></li>
+      <li class="sbb-node sbb-node--planned"><p class="sbb-node__title">Dashboard</p><p class="sbb-node__role">Web-Oberfläche. Heute nur dieser Klick-Prototyp mit Demodaten</p><span class="sbb-tag sbb-tag--planned">geplant</span></li>
+    </ol>
+    <p class="legend-row">
+      <span class="sbb-tag sbb-tag--present">vorhanden</span> Infrastruktur eingerichtet
+      <span class="sbb-tag sbb-tag--planned">geplant</span> noch nicht implementiert
+      <span class="sbb-tag sbb-tag--blocked">nicht genehmigt</span> nur Idee
+    </p>
+    <div class="arch-extra">
+      <div class="sbb-alert sbb-alert--info"><svg class="sbb-icon" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="19" fill="none" stroke="currentColor" stroke-width="4"/><path d="M24 22v13" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><circle cx="24" cy="15" r="2.6" fill="currentColor"/></svg><p class="sbb-alert__title">Display lokal am Pi</p><p class="sbb-alert__text">Vorschlag: Das Stellplatz-Display hängt direkt am Raspberry Pi, damit es auch ohne Netz den Zustand zeigt – mit derselben 30-s-Regel.</p></div>
+      <div class="sbb-alert sbb-alert--info"><svg class="sbb-icon" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="19" fill="none" stroke="currentColor" stroke-width="4"/><path d="M24 22v13" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><circle cx="24" cy="15" r="2.6" fill="currentColor"/></svg><p class="sbb-alert__title">KI-Funktion</p><p class="sbb-alert__text">Geplant auf der App-VM; Zweck und Daten noch festzulegen. Sie darf den Zustand nie von UNBEKANNT auf FREI „raten“.</p></div>
+      <div class="sbb-alert sbb-alert--warn"><svg class="sbb-icon" viewBox="0 0 48 48" aria-hidden="true"><path d="M24 6 44 41H4Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M24 19v10" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><circle cx="24" cy="35" r="2.6" fill="currentColor"/></svg><p class="sbb-alert__title">Kamera</p><p class="sbb-alert__text">Nicht Teil der Architektur. Optionale Idee, nicht genehmigt – erst nach Freigabe durch Schule und Datenschutz.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================================================== PRÜFEN -->
+<section id="pruefen" aria-labelledby="h-pruefen">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2 id="h-pruefen">Vor dem echten Bau prüfen</h2>
+      <p>Diese Punkte sind offen. Erst wenn sie geklärt sind, sollten Maße, Bauteile und Anzeigen festgelegt werden.</p>
+    </div>
+    <div class="two">
+      <div class="sbb-card">
+        <h3 class="sbb-card__title">Maße &amp; Aufbau</h3>
+        <ol class="checklist">
+          <li>Länge, Lenkerbreite und Lenkerhöhe der Demo-Fahrräder messen (inkl. Körbe, Kindersitze).</li>
+          <li>Lichte Höhe unter dem Kopfträger an die höchste Lenkerhöhe anpassen.</li>
+          <li>Standfestigkeit: kippsicher ohne Befestigung am Boden? Sonst Ballast oder breitere Füße.</li>
+          <li>Aufstellort: Zugang zur rechten Seite (NFC) und zum Elektronikgehäuse, Steckdose, WLAN/LAN.</li>
+          <li>Innen oder außen? Außen: Regen, Sonne auf dem Display, Temperatur, Schutzart.</li>
+          <li>Kanten, Schrauben, Kabel: Verletzungs- und Stolpergefahr ausschließen.</li>
+        </ol>
+      </div>
+      <div class="sbb-card">
+        <h3 class="sbb-card__title">Elektronik &amp; Daten</h3>
+        <ol class="checklist">
+          <li>Sensormodelle anhand der Datenblätter festlegen: Spannung (3,3 V / 5 V), Schnittstelle, Reichweite.</li>
+          <li>Präsenzsensor mit echten Fahrrädern testen (dünne Rahmen, Speichen, Carbon, Sonnenlicht).</li>
+          <li>Schwellwert „belegt“ und Gültigkeitsdauer (Vorschlag 30 s) mit Messreihen festlegen.</li>
+          <li>Erschütterung: Fehlalarme durch Wind, Anlehnen, Einparken messen; Meldung bleibt „Hinweis“.</li>
+          <li>Stromversorgung nur mit geprüftem Netzteil; keine selbst verdrahtete 230-V-Leitung.</li>
+          <li>Display: Helligkeit, Blickwinkel, Lesbarkeit aus 3–5 m, Einbaumaße.</li>
+          <li>NFC: Zweck definieren (wer, was, wozu?) und ob Kartendaten gespeichert werden dürfen.</li>
+          <li>Kamera: nur nach Genehmigung durch Schulleitung und Datenschutzbeauftragte.</li>
+          <li>Netzwerk: Freigaben zwischen Pi, Edge-VM und App-VM mit der Schul-IT klären.</li>
+          <li>Englisch und Niederländisch: Übersetzungen prüfen lassen (Texte sind vorbereitet, nicht übersetzt).</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p><strong>Klick-Prototyp, keine Live-Daten.</strong> Dieser Prototyp ist mit keiner Hardware und keinem Server verbunden. Anwendung, Sensoranbindung, Dashboard-Backend und KI-Funktion sind noch nicht implementiert.</p>
+    <p>Sprache: Deutsch · Englisch und Niederländisch geplant.</p>
+  </div>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ---------- Konfiguration (Vorschläge, später an echte Messreihen anpassen) ---------- */
+  var CFG = {
+    maxAgeMs: 30000,       // Messung älter als 30 s  -> STATUS UNBEKANNT
+    simIntervalMs: 5000,   // simulierte Messung alle 5 s
+    thresholdCm: 60,       // Abstand < 60 cm -> Fahrrad erkannt (Vorschlag)
+    staleDemoMs: 95000     // Alter der letzten Messung im Störungsfall "Messungen bleiben aus"
+  };
+
+  /* ---------- Texte: DE aktiv, EN/NL geplant (Schlüssel identisch) ---------- */
+  var I18N = {
+    de: {
+      'state.free': 'FREI', 'state.occupied': 'BELEGT', 'state.unknown': 'STATUS UNBEKANNT',
+      'sub.free': 'Stellplatz ist frei.', 'sub.occupied': 'Ein Fahrrad steht im Stellplatz.',
+      'reason.noReading': 'Noch keine Messung empfangen.',
+      'reason.linkDown': 'Keine Verbindung zum Arduino – kein aktueller Messwert.',
+      'reason.stale': 'Letzte Messung ist {age} alt (Grenze 30 s).',
+      'reason.sensorFault': 'Präsenzsensor meldet einen Fehler.',
+      'reason.invalid': 'Kein eindeutiger Messwert.',
+      'age.label': 'Datenalter: {age}', 'ago': 'vor {age}',
+      'warn.none': 'Keine technischen Warnungen.', 'warn.count': '{n} aktiv'
+    },
+    en: null, // geplant
+    nl: null  // geplant
+  };
+  var lang = 'de';
+  function t(key, vars) {
+    var s = (I18N[lang] && I18N[lang][key]) || I18N.de[key] || key;
+    if (vars) Object.keys(vars).forEach(function (k) { s = s.replace('{' + k + '}', vars[k]); });
+    return s;
+  }
+
+  /* ---------- Kernregel: Zustand nur aus gültiger, aktueller Messung ---------- */
+  function resolveStatus(reading, health, now, maxAgeMs) {
+    if (!reading) return { state: 'unknown', reason: 'reason.noReading' };
+    if (health && health.link === false) return { state: 'unknown', reason: 'reason.linkDown' };
+    var age = now - reading.ts;
+    if (!(age >= 0) || age > maxAgeMs) return { state: 'unknown', reason: 'reason.stale', age: age };
+    if (reading.sensorOk === false) return { state: 'unknown', reason: 'reason.sensorFault' };
+    if (reading.presence === 1) return { state: 'occupied' };
+    if (reading.presence === 0) return { state: 'free' };
+    return { state: 'unknown', reason: 'reason.invalid' };
+  }
+
+  /* ---------- Icons ---------- */
+  var ICON = {
+    free: '<svg class="sbb-status__icon" viewBox="0 0 48 48"><circle cx="24" cy="24" r="20" fill="none" stroke="currentColor" stroke-width="4"/><path d="M14 25l7 7 13-15" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    occupied: '<svg class="sbb-status__icon" viewBox="0 0 48 48"><circle cx="12" cy="32" r="8" fill="none" stroke="currentColor" stroke-width="3.5"/><circle cx="36" cy="32" r="8" fill="none" stroke="currentColor" stroke-width="3.5"/><path d="M12 32l8-14h11l5 14M20 18l7 14h-15M31 18l-2-6h5M17 13h6" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    unknown: '<svg class="sbb-status__icon" viewBox="0 0 48 48"><circle cx="24" cy="24" r="20" fill="none" stroke="currentColor" stroke-width="4" stroke-dasharray="7 4"/><path d="M18 19a6 6 0 1 1 8.4 5.5c-1.6.8-2.4 2-2.4 3.5v1.5" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><circle cx="24" cy="35.5" r="2.8" fill="currentColor"/></svg>',
+    warn: '<svg class="sbb-icon" viewBox="0 0 48 48" aria-hidden="true"><path d="M24 6 44 41H4Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M24 19v10" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><circle cx="24" cy="35" r="2.6" fill="currentColor"/></svg>',
+    ok: '<svg class="sbb-icon" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="19" fill="none" stroke="currentColor" stroke-width="4"/><path d="M15 25l6 6 12-13" fill="none" stroke="currentColor" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    fault: '<svg class="sbb-icon" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="19" fill="none" stroke="currentColor" stroke-width="4"/><path d="M17 17l14 14M31 17 17 31" stroke="currentColor" stroke-width="4.5" stroke-linecap="round"/></svg>',
+    nodata: '<svg class="sbb-icon" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="19" fill="none" stroke="currentColor" stroke-width="4" stroke-dasharray="6 4"/><path d="M16 24h16" stroke="currentColor" stroke-width="4.5" stroke-linecap="round"/></svg>',
+    planned: '<svg class="sbb-icon" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="19" fill="none" stroke="currentColor" stroke-width="3" stroke-dasharray="4 4"/><path d="M24 14v10l7 5" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/></svg>',
+    blocked: '<svg class="sbb-icon" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="19" fill="none" stroke="currentColor" stroke-width="4"/><path d="M11 37 37 11" stroke="currentColor" stroke-width="4"/></svg>',
+    vib: '<svg class="sbb-icon" viewBox="0 0 48 48" aria-hidden="true"><path d="M4 24h7l4-10 6 20 6-24 6 20 4-6h7" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+  };
+
+  /* ---------- Simulationszustand ---------- */
+  var sim, $ = function (id) { return document.getElementById(id); };
+  function freshSim() {
+    return { presence: 0, stale: false, sensorFault: false, linkDown: false,
+             reading: null, vibrations: [], log: [], lastState: null, started: Date.now() };
+  }
+  sim = freshSim();
+
+  function fmtTime(ts) { var d = new Date(ts); return [d.getHours(), d.getMinutes(), d.getSeconds()].map(function (n) { return String(n).padStart(2, '0'); }).join(':'); }
+  function fmtAge(ms) {
+    var s = Math.max(0, Math.round(ms / 1000));
+    if (s < 60) return s + ' s';
+    var m = Math.floor(s / 60); return m + ' min ' + (s % 60) + ' s';
+  }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function log(text) { sim.log.unshift({ ts: Date.now(), text: text }); sim.log = sim.log.slice(0, 10); }
+
+  function makeReading() {
+    var now = Date.now(), p = sim.sensorFault ? null : sim.presence, d = null;
+    if (p === 1) d = 28 + Math.round(Math.random() * 12);        // Fahrrad in der Messstrecke
+    else if (p === 0) d = 73 + Math.round(Math.random() * 3);     // Messung bis zur gegenüberliegenden Wand
+    return { ts: now, presence: p, distanceCm: d, sensorOk: !sim.sensorFault };
+  }
+  function tick() {
+    if (!sim.stale && !sim.linkDown) sim.reading = makeReading();
+    render();
+  }
+
+  /* ---------- Rendern ---------- */
+  function render() {
+    var now = Date.now();
+    var st = resolveStatus(sim.reading, { link: !sim.linkDown }, now, CFG.maxAgeMs);
+    var word = t('state.' + st.state);
+    var sub = st.state === 'unknown' ? t(st.reason, { age: fmtAge(st.age || 0) }) : t('sub.' + st.state);
+
+    var card = $('statusCard');
+    card.dataset.state = st.state;
+    if ($('statusWord').textContent !== word) {
+      $('statusWord').textContent = word;
+      $('statusIcon').innerHTML = ICON[st.state];
+      $('devIcon').innerHTML = ICON[st.state];
+      $('devWord').textContent = word;
+      $('devStatus').dataset.state = st.state;
+    }
+    $('statusReason').textContent = sub;
+    $('hdrBadge').innerHTML = '<span class="sbb-vh">Aktueller Zustand: </span>' + esc(word);
+    document.title = word + ' – Smart Bicycle Box (Demodaten)';
+
+    if (sim.lastState !== st.state) {
+      if (sim.lastState !== null) log('Anzeige wechselt auf ' + word + (st.state === 'unknown' ? ' (' + sub + ')' : ''));
+      $('live').textContent = 'Zustand: ' + word + '. ' + sub;
+      sim.lastState = st.state;
+    }
+
+    // Messung
+    var r = sim.reading;
+    if (r) {
+      var age = now - r.ts;
+      $('mLast').innerHTML = esc(fmtTime(r.ts)) + '<small>' + esc(t('ago', { age: fmtAge(age) })) + ' · simuliert</small>';
+      $('mValue').innerHTML = (r.distanceCm == null ? 'ungültig' : esc(r.distanceCm + ' cm')) +
+        '<small>' + (r.distanceCm == null ? 'kein verwertbarer Wert' : 'Schwelle &lt; ' + CFG.thresholdCm + ' cm = Fahrrad (Vorschlag)') + '</small>';
+      var ratio = Math.min(age / CFG.maxAgeMs, 1), stale = age > CFG.maxAgeMs;
+      $('ageFill').style.width = (ratio * 100).toFixed(1) + '%';
+      $('age').dataset.stale = String(stale);
+      $('ageText').textContent = t('age.label', { age: fmtAge(age) }) + (stale ? ' – veraltet' : ' – aktuell');
+    } else {
+      $('mLast').innerHTML = '–<small>keine Daten</small>';
+      $('mValue').innerHTML = '–<small>–</small>';
+      $('ageFill').style.width = '0%';
+      $('age').dataset.stale = 'false';
+      $('ageText').textContent = 'Datenalter: keine Messung';
+    }
+
+    renderSensors(st, now);
+    renderAlerts(st, now);
+    renderLog();
+  }
+
+  function stateCell(kind, text) { return '<span class="sbb-state sbb-state--' + kind + '">' + ICON[kind] + esc(text) + '</span>'; }
+  function renderSensors(st, now) {
+    var lastVib = sim.vibrations[sim.vibrations.length - 1];
+    var rows = [
+      { name: 'Präsenzsensor', detail: 'Distanzmessung quer über den Stellplatz (Modell noch offen). Werte simuliert.',
+        state: sim.linkDown ? ['nodata', 'keine Daten'] : sim.sensorFault ? ['fault', 'Fehler'] : sim.stale ? ['nodata', 'keine neuen Daten'] : ['ok', 'OK (simuliert)'] },
+      { name: 'Erschütterungssensor', detail: lastVib ? 'Letztes Ereignis ' + fmtTime(lastVib.ts) + ' – Hinweis, kein Diebstahlnachweis.' : 'Kein Ereignis seit Start der Simulation.',
+        state: sim.linkDown ? ['nodata', 'keine Daten'] : ['ok', lastVib && !lastVib.ack ? 'Ereignis gemeldet' : 'ruhig (simuliert)'] },
+      { name: 'Arduino ↔ Raspberry Pi', detail: 'USB-Seriell – Verbindung wird im Browser simuliert.',
+        state: sim.linkDown ? ['fault', 'getrennt'] : ['ok', 'verbunden (simuliert)'] },
+      { name: 'NFC-Leser', kind: 'planned', detail: 'Seitlich vorgesehen, Funktion noch festzulegen.', state: ['planned', 'geplant'] },
+      { name: 'Raspberry Pi → Edge-VM', kind: 'planned', detail: 'Weiterleitung noch nicht implementiert.', state: ['planned', 'geplant'] },
+      { name: 'Kamera (innen)', kind: 'blocked', detail: 'Optionale Idee, nicht genehmigt. Nicht vorhanden.', state: ['blocked', 'nicht genehmigt'] }
+    ];
+    setIfChanged($('sensors'), rows.map(function (r) {
+      return '<li class="sbb-sensor"' + (r.kind ? ' data-kind="' + r.kind + '"' : '') + '><span class="sbb-sensor__name">' + esc(r.name) + '</span>' +
+        stateCell(r.state[0], r.state[1]) + '<span class="sbb-sensor__detail">' + esc(r.detail) + '</span></li>';
+    }).join(''));
+  }
+
+  function renderAlerts(st, now) {
+    var a = [];
+    if (sim.linkDown) a.push({ k: 'warn', title: 'Verbindung zum Arduino unterbrochen', text: 'Es kommen keine Messwerte an. Die Anzeige zeigt STATUS UNBEKANNT, bis wieder gültige Messungen eintreffen.' });
+    else if (st.reason === 'reason.stale') a.push({ k: 'warn', title: 'Messung veraltet', text: 'Seit über 30 s ist keine gültige Messung eingetroffen. Der Zustand gilt als unbekannt.' });
+    if (sim.sensorFault) a.push({ k: 'warn', title: 'Präsenzsensor meldet Fehler', text: 'Der Messwert ist ungültig. Sensor, Kabel und Stromversorgung prüfen.' });
+    if (!sim.sensorFault && !sim.linkDown && st.reason === 'reason.invalid') a.push({ k: 'warn', title: 'Kein eindeutiger Messwert', text: 'Der Sensor liefert keinen verwertbaren Abstand. Der Zustand wird nicht geraten.' });
+    sim.vibrations.forEach(function (v, i) {
+      if (!v.ack) a.push({ k: 'warn', vib: i, title: 'Erschütterung registriert um ' + fmtTime(v.ts), text: 'Ungewöhnliche Bewegung am Stellplatz. Das ist kein Nachweis für einen Diebstahl – bei Bedarf vor Ort nachsehen.' });
+    });
+    $('warnCount').textContent = t('warn.count', { n: a.length });
+    var html = !a.length
+      ? '<li class="sbb-alert sbb-alert--ok">' + ICON.ok + '<p class="sbb-alert__title">' + esc(t('warn.none')) + '</p></li>'
+      : a.map(function (x) {
+      return '<li class="sbb-alert sbb-alert--' + x.k + '">' + (x.vib != null ? ICON.vib : ICON.warn) +
+        '<p class="sbb-alert__title">' + esc(x.title) + '</p><p class="sbb-alert__text">' + esc(x.text) + '</p>' +
+        (x.vib != null ? '<div class="sbb-alert__actions"><button type="button" class="sbb-btn sbb-btn--small" data-ack="' + x.vib + '">Zur Kenntnis genommen</button></div>' : '') +
+        '</li>';
+    }).join('');
+    setIfChanged($('alerts'), html); // nur bei Änderung neu zeichnen, damit der Tastaturfokus erhalten bleibt
+  }
+
+  function setIfChanged(el, html) { if (el.dataset.sig !== html) { el.innerHTML = html; el.dataset.sig = html; } }
+
+  function renderLog() {
+    var html = sim.log.map(function (e) { return '<li><time>' + esc(fmtTime(e.ts)) + '</time><span>' + esc(e.text) + '</span></li>'; }).join('');
+    setIfChanged($('log'), html || '<li><span></span><span>Noch keine Ereignisse.</span></li>');
+  }
+
+  /* ---------- Bedienung ---------- */
+  var PRES = { free: 0, occupied: 1, unknown: null };
+  var LABEL = { free: 'FREI', occupied: 'BELEGT', unknown: 'STATUS UNBEKANNT' };
+  function setSim(value) {
+    sim.presence = PRES[value];
+    $({ free: 's-free', occupied: 's-occ', unknown: 's-unk' }[value]).checked = true;
+    log('Demo: Sensorwert auf „' + LABEL[value] + '“ gesetzt');
+    var blocked = sim.stale || sim.linkDown || sim.sensorFault;
+    $('ctlHint').textContent = blocked
+      ? 'Eine Störung ist aktiv – die Anzeige bleibt STATUS UNBEKANNT, bis die Störung aufgehoben ist.'
+      : 'Die Anzeige wird immer aus der simulierten Messung abgeleitet – dieselbe Regel, die später für echte Messungen gelten soll.';
+    tick();
+  }
+  document.querySelectorAll('input[name="simstate"]').forEach(function (el) {
+    el.addEventListener('change', function () { if (el.checked) setSim(el.value); });
+  });
+  $('fStale').addEventListener('change', function (e) {
+    sim.stale = e.target.checked;
+    if (sim.stale) { if (!sim.reading) sim.reading = makeReading(); sim.reading.ts = Date.now() - CFG.staleDemoMs; log('Störung: Messungen bleiben aus'); }
+    else log('Störung aufgehoben: Messungen kommen wieder');
+    tick();
+  });
+  $('fSensor').addEventListener('change', function (e) { sim.sensorFault = e.target.checked; log(sim.sensorFault ? 'Störung: Präsenzsensor meldet Fehler' : 'Präsenzsensor wieder OK'); tick(); });
+  $('fLink').addEventListener('change', function (e) { sim.linkDown = e.target.checked; log(sim.linkDown ? 'Störung: Verbindung Arduino getrennt' : 'Verbindung Arduino wiederhergestellt'); tick(); });
+  $('bVib').addEventListener('click', function () { sim.vibrations.push({ ts: Date.now(), ack: false }); log('Erschütterung registriert (Hinweis, kein Diebstahlnachweis)'); render(); });
+  $('alerts').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-ack]'); if (!b) return;
+    sim.vibrations[+b.dataset.ack].ack = true; log('Erschütterungshinweis zur Kenntnis genommen'); render();
+    $('alerts').focus();
+  });
+  $('bReset').addEventListener('click', function () {
+    sim = freshSim(); ['fStale', 'fSensor', 'fLink'].forEach(function (id) { $(id).checked = false; });
+    $('s-free').checked = true; log('Simulation zurückgesetzt'); render();
+    setTimeout(tick, 1500);
+  });
+  document.addEventListener('keydown', function (e) {
+    if (!$('kbdOn').checked || e.ctrlKey || e.metaKey || e.altKey) return;
+    var tag = (e.target.tagName || '').toLowerCase();
+    if (tag === 'select' || tag === 'textarea' || (tag === 'input' && e.target.type === 'text')) return;
+    var map = { '1': 'free', '2': 'occupied', '3': 'unknown' };
+    if (map[e.key]) { e.preventDefault(); setSim(map[e.key]); }
+  });
+
+  // Darstellung (Hell/Dunkel), nur für diesen Browser gemerkt
+  var themeSel = $('theme');
+  function applyTheme(v) { if (v === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.setAttribute('data-theme', v); }
+  try { var saved = localStorage.getItem('sbb-theme'); if (saved) { themeSel.value = saved; applyTheme(saved); } } catch (e) {}
+  themeSel.addEventListener('change', function () { applyTheme(themeSel.value); try { localStorage.setItem('sbb-theme', themeSel.value); } catch (e) {} });
+
+  // Abschnitts-Navigation markieren
+  var links = Array.prototype.slice.call(document.querySelectorAll('nav.sections a'));
+  if ('IntersectionObserver' in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) links.forEach(function (a) { a.setAttribute('aria-current', a.getAttribute('href') === '#' + en.target.id ? 'true' : 'false'); });
+      });
+    }, { rootMargin: '-40% 0px -55% 0px' });
+    document.querySelectorAll('main section').forEach(function (s) { io.observe(s); });
+  }
+
+  // Start: bewusst zuerst UNBEKANNT, bis die erste (simulierte) Messung da ist
+  log('Simulation gestartet – warte auf erste Messung');
+  render();
+  setTimeout(tick, 1500);
+  setInterval(tick, CFG.simIntervalMs);
+  setInterval(render, 1000);
+
+  // Für Tests/Entwicklung
+  window.SBB = { resolveStatus: resolveStatus, CFG: CFG, I18N: I18N };
+})();
+</script>
+</body>
+</html>

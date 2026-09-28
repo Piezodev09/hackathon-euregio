@@ -33,10 +33,6 @@ url = "http://127.0.0.1:8000"
 timeout_s = 3
 [station]
 id = "$STATION_ID"
-[station.slot_map]
-A = "A"
-B = "B"
-C = "C"
 CFG
 
 (cd backend && exec python3 -m uvicorn app.main:_app_factory --factory --host 127.0.0.1 --port 8000 --no-server-header) &

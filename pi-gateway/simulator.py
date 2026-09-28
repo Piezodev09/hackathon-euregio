@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Arduino-Simulator – NUR für Entwicklung und Tests ohne Hardware.
+"""Arduino-Simulator für EINEN Stellplatz – NUR für Entwicklung und Tests ohne Hardware.
 
 Gibt Zeilen im selben Format wie der Arduino-Sketch auf stdout aus. Zusammen mit
 `gateway.py --stdin --simulated` entsteht die komplette Kette bis zum Dashboard.
@@ -10,12 +10,14 @@ Beispiel:
     python simulator.py | python gateway.py --stdin --simulated
 
 Interaktive Befehle (Eingabe + Enter im Terminal):
-    p A    Platz A belegen/freigeben
-    b A    leichtes Anstoßen an Platz A (ein Ausschlag)
-    s A    kräftiges, wiederholtes Rütteln an Platz A (ca. 3 s)
-    e A    Sensorfehler an Platz A ein/aus
-    q      beenden
-Mit --auto wechseln Belegungen zufällig (zum Füllen der Auslastungsanzeige).
+    p    Fahrrad einstellen/ausparken (FREI <-> BELEGT)
+    b    leichtes Anstoßen (ein Ausschlag)
+    s    kräftiges, wiederholtes Rütteln (ca. 3 s)
+    e    Sensorfehler ein/aus (-> STATUS UNBEKANNT)
+    n    NFC-Karte an den Leser halten (Demo-Karte), n 04AABBCCDD = bestimmte UID
+    q    beenden
+Mit --auto wechselt die Belegung zufällig; dabei wird vor dem Ausparken und nach dem Einstellen
+die Demo-Karte angehalten (Ein-/Auschecken).
 """
 
 from __future__ import annotations
@@ -28,92 +30,94 @@ import threading
 import time
 
 
-class SimSlot:
-    def __init__(self, sid: str, present: bool):
-        self.id = sid
+DEMO_UID = "04A1B2C3D4"
+
+
+class Simulator:
+    def __init__(self, heartbeat_s: float, out=sys.stdout, present: bool = False):
         self.present = present
         self.error = False
         self.pending_vib: list[tuple[float, int]] = []  # (Zeitpunkt, Stärke)
         self.last_sent = 0.0
-
-
-class Simulator:
-    def __init__(self, slots: list[str], heartbeat_s: float, out=sys.stdout):
-        self.slots = {s: SimSlot(s, present=(i == 0)) for i, s in enumerate(slots)}
         self.heartbeat_s = heartbeat_s
         self.seq = 0
         self.out = out
         self.lock = threading.Lock()
 
-    def emit(self, slot: SimSlot, vib: int = 0) -> None:
+    def emit(self, vib: int = 0) -> None:
         self.seq += 1
         msg = {
-            "slot_id": slot.id,
-            "presence": -1 if slot.error else int(slot.present),
-            "vibration": 0 if slot.error else vib,
+            "presence": -1 if self.error else int(self.present),
+            "vibration": 0 if self.error else vib,
             "seq": self.seq,
-            "state": "error" if slot.error else "ok",
+            "state": "error" if self.error else "ok",
         }
         self.out.write(json.dumps(msg, separators=(",", ":")) + "\n")
         self.out.flush()
-        slot.last_sent = time.monotonic()
+        self.last_sent = time.monotonic()
+
+    def nfc(self, uid: str = DEMO_UID) -> None:
+        self.out.write(json.dumps({"type": "nfc", "uid": uid.upper()}, separators=(",", ":")) + "\n")
+        self.out.flush()
 
     def command(self, cmd: str) -> bool:
         parts = cmd.strip().split()
-        if not parts:
+        op = parts[0].lower() if parts else ""
+        if not op:
             return True
-        if parts[0] == "q":
+        if op == "q":
             return False
-        if len(parts) != 2 or parts[1].upper() not in self.slots:
-            print(f"? Befehl: p|b|s|e <{'/'.join(self.slots)}> oder q", file=sys.stderr)
-            return True
-        op, slot = parts[0], self.slots[parts[1].upper()]
         now = time.monotonic()
         with self.lock:
             if op == "p":
                 # Beim Einstellen/Ausparken wackelt es kurz – realistisch für die Schonzeit.
-                slot.present = not slot.present
-                self.emit(slot, vib=random.randint(150, 350))
+                self.present = not self.present
+                self.emit(vib=random.randint(150, 350))
             elif op == "b":
-                slot.pending_vib.append((now, random.randint(320, 450)))
+                self.pending_vib.append((now, random.randint(320, 450)))
             elif op == "s":
-                slot.pending_vib.extend((now + i * 0.4, random.randint(550, 950)) for i in range(8))
+                self.pending_vib.extend((now + i * 0.4, random.randint(550, 950)) for i in range(8))
             elif op == "e":
-                slot.error = not slot.error
-                self.emit(slot)
+                self.error = not self.error
+                self.emit()
+            elif op == "n":
+                self.nfc(parts[1] if len(parts) > 1 else DEMO_UID)
+            else:
+                print("? Befehl: p | b | s | e | n [UID] | q", file=sys.stderr)
         return True
 
     def tick(self) -> None:
         now = time.monotonic()
         with self.lock:
-            for slot in self.slots.values():
-                due = [v for v in slot.pending_vib if v[0] <= now]
-                if due:
-                    slot.pending_vib = [v for v in slot.pending_vib if v[0] > now]
-                    self.emit(slot, vib=max(v[1] for v in due))
-                elif now - slot.last_sent >= self.heartbeat_s:
-                    self.emit(slot)
+            due = [v for v in self.pending_vib if v[0] <= now]
+            if due:
+                self.pending_vib = [v for v in self.pending_vib if v[0] > now]
+                self.emit(vib=max(v[1] for v in due))
+            elif now - self.last_sent >= self.heartbeat_s:
+                self.emit()
 
-    def auto_step(self) -> None:
+    def auto_step(self, with_nfc: bool = True) -> None:
         with self.lock:
-            slot = random.choice(list(self.slots.values()))
-            if not slot.error:
-                slot.present = not slot.present
-                self.emit(slot, vib=random.randint(100, 300))
+            if self.error:
+                return
+            if self.present and with_nfc:
+                self.nfc()  # vor dem Ausparken auschecken
+            self.present = not self.present
+            self.emit(vib=random.randint(100, 300))
+            if self.present and with_nfc:
+                self.nfc()  # nach dem Einstellen einchecken
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--slots", default="A,B,C", help="Arduino-Platzkennungen, kommagetrennt")
     ap.add_argument("--heartbeat", type=float, default=10.0)
     ap.add_argument("--auto", type=float, default=0.0, metavar="SEK", help="alle SEK Sekunden zufälliger Belegungswechsel")
     ap.add_argument("--commands", default=None, help="Befehle aus Datei statt Terminal lesen")
     args = ap.parse_args()
 
-    sim = Simulator([s.strip().upper() for s in args.slots.split(",") if s.strip()], args.heartbeat)
+    sim = Simulator(args.heartbeat)
     print(json.dumps({"type": "hello", "fw": "simulator"}), flush=True)
-    for slot in sim.slots.values():
-        sim.emit(slot)
+    sim.emit()
 
     running = threading.Event()
     running.set()
@@ -123,7 +127,7 @@ def main() -> int:
             src = open(args.commands) if args.commands else open("/dev/tty")
         except OSError:
             src = sys.stdin
-        print("Simulator bereit. Befehle: p|b|s|e <Platz>, q", file=sys.stderr)
+        print("Simulator bereit. Befehle: p | b | s | e | n [UID] | q", file=sys.stderr)
         for line in src:
             if not sim.command(line):
                 break

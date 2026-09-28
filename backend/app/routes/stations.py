@@ -1,14 +1,16 @@
-"""Stationen, Plätze, Geräte-Tokens, öffentliche Anzeige, Meldungen, Telemetrie."""
+"""Stationen (je genau ein Stellplatz), Geräte-Tokens, öffentliche Anzeige, Meldungen, Telemetrie."""
 
 from __future__ import annotations
+
+import json
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from ..core import Ctx, client_ip, core_of, limit, require
 from ..plans import get_plan
-from ..schemas import DeviceIn, MeasurementBatchIn, MeasurementIn, SlotIn, SlotPatch, StationIn, StationPatch
+from ..schemas import DeviceIn, MeasurementBatchIn, MeasurementIn, StationIn, StationPatch
 from ..security import hash_token, new_id, new_token
-from ..service import Monitoring, UnknownSlotError, iso
+from ..service import STALL_KEY, Monitoring, UnknownSlotError, iso
 
 router = APIRouter(tags=["stations"])
 read_limit = Depends(limit("read_limiter", "r:"))
@@ -25,20 +27,20 @@ def _station(core, ctx: Ctx, station_id: str):
     return st
 
 
-def _bump_config(core, station_id: str) -> None:
-    """Gateways holen sich die neue Platzliste beim nächsten Heartbeat."""
-    core.db.execute("UPDATE station SET config_version = config_version + 1 WHERE id = ?", (station_id,))
-
-
 def _station_out(core, st, m: Monitoring | None = None) -> dict:
     out = {"id": st["id"], "name": st["name"], "location": st["location"], "alert_source": st["alert_source"],
            "display_enabled": bool(st["display_enabled"]), "display_configured": st["display_token_hash"] is not None,
            "auto_update": bool(st["auto_update"]), "config_version": st["config_version"],
+           "maintenance": bool(st["maintenance"]), "stall_view_enabled": bool(st["stall_view_enabled"]),
+           "stall_view_configured": st["stall_token_hash"] is not None, "camera_enabled": bool(st["camera_enabled"]),
+           "camera_retention_h": st["camera_retention_h"], "camera_approved_by": st["camera_approved_by"],
+           "tariff": json.loads(st["tariff"]) if st["tariff"] else None,
            "created_at": iso(st["created_at"])}
     if m is not None:
         s = m.status(st)
-        out["live"] = {"free_count": s["free_count"], "known_count": s["known_count"], "total": s["total"],
-                       "alerts": sum(1 for x in s["slots"] if x["alert"]), "simulated_data": s["simulated_data"]}
+        out["live"] = {"state": s["state"], "unknown_reason": s["unknown_reason"], "age_s": s["age_s"],
+                       "alert": s["alert"] is not None, "simulated_data": s["simulated_data"],
+                       "session": s["session"], "maintenance": s["maintenance"]}
     return out
 
 
@@ -56,18 +58,12 @@ def create_station(body: StationIn, request: Request, ctx: Ctx = Depends(require
     plan = get_plan(ctx.tenant["plan"])
     if core.tenant_usage(ctx.tenant_id)["stations"] >= plan.max_stations:
         raise HTTPException(409, {"code": "plan_limit", "limit": "max_stations", "value": plan.max_stations})
-    if len(body.slots) > plan.max_slots_per_station:
-        raise HTTPException(409, {"code": "plan_limit", "limit": "max_slots_per_station", "value": plan.max_slots_per_station})
-    keys = [s.key for s in body.slots]
-    if len(set(keys)) != len(keys):
-        raise HTTPException(422, "duplicate_slot_key")
     sid = new_id("st")
     with core.db.tx() as c:
         c.execute("INSERT INTO station (id, tenant_id, name, location, created_at) VALUES (?,?,?,?,?)",
                   (sid, ctx.tenant_id, body.name, body.location, core.clock()))
-        for i, s in enumerate(body.slots, start=1):
-            c.execute("INSERT INTO slot (id, station_id, key, label, position) VALUES (?,?,?,?,?)",
-                      (new_id("sl"), sid, s.key, s.label, i))
+        c.execute("INSERT INTO slot (id, station_id, key, label, position) VALUES (?,?,?,?,1)",
+                  (new_id("sl"), sid, STALL_KEY, "Stellplatz"))
     core.audit("station_created", tenant_id=ctx.tenant_id, user_id=ctx.user["id"], actor=ctx.actor, ip=ctx.ip, target=sid)
     return _station_out(core, core.db.one("SELECT * FROM station WHERE id = ?", (sid,)))
 
@@ -77,8 +73,6 @@ def get_station(station_id: str, request: Request, ctx: Ctx = Depends(require("v
     core = core_of(request)
     st = _station(core, ctx, station_id)
     out = _station_out(core, st)
-    out["slots"] = [{"id": s["id"], "key": s["key"], "label": s["label"], "position": s["position"]}
-                    for s in mon(request).slots(st["id"])]
     out["plan_allows_ml"] = get_plan(ctx.tenant["plan"]).ml_enabled
     return out
 
@@ -92,6 +86,10 @@ def patch_station(station_id: str, body: StationPatch, request: Request, ctx: Ct
         raise HTTPException(402, {"code": "plan_feature", "feature": "ml"})
     if changes.get("display_enabled") and st["display_token_hash"] is None:
         raise HTTPException(409, "create_display_link_first")
+    if changes.get("stall_view_enabled") and not get_plan(ctx.tenant["plan"]).stall_view:
+        raise HTTPException(402, {"code": "plan_feature", "feature": "stall_view"})
+    if changes.get("stall_view_enabled") and st["stall_token_hash"] is None:
+        raise HTTPException(409, "create_stall_link_first")
     for k, v in changes.items():
         core.db.execute(f"UPDATE station SET {k} = ? WHERE id = ?", (int(v) if isinstance(v, bool) else v, st["id"]))
     core.audit("station_updated", tenant_id=ctx.tenant_id, user_id=ctx.user["id"], actor=ctx.actor, ip=ctx.ip, target=st["id"],
@@ -106,55 +104,6 @@ def delete_station(station_id: str, request: Request, ctx: Ctx = Depends(require
     core.db.execute("DELETE FROM station WHERE id = ?", (st["id"],))
     core.audit("station_deleted", tenant_id=ctx.tenant_id, user_id=ctx.user["id"], actor=ctx.actor, ip=ctx.ip, target=st["id"],
                detail={"name": st["name"]})
-    return {"status": "deleted"}
-
-
-# ---------------------------------------------------------------------- Plätze
-@router.post("/api/v1/stations/{station_id}/slots", status_code=201)
-def add_slot(station_id: str, body: SlotIn, request: Request, ctx: Ctx = Depends(require("admin"))):
-    core = core_of(request)
-    st = _station(core, ctx, station_id)
-    plan = get_plan(ctx.tenant["plan"])
-    count = core.db.scalar("SELECT COUNT(*) FROM slot WHERE station_id = ?", (st["id"],))
-    if count >= plan.max_slots_per_station:
-        raise HTTPException(409, {"code": "plan_limit", "limit": "max_slots_per_station", "value": plan.max_slots_per_station})
-    if core.db.one("SELECT 1 FROM slot WHERE station_id = ? AND key = ?", (st["id"], body.key)):
-        raise HTTPException(409, "duplicate_slot_key")
-    pos = (core.db.scalar("SELECT MAX(position) FROM slot WHERE station_id = ?", (st["id"],)) or 0) + 1
-    slot_id = new_id("sl")
-    core.db.execute("INSERT INTO slot (id, station_id, key, label, position) VALUES (?,?,?,?,?)",
-                    (slot_id, st["id"], body.key, body.label, pos))
-    _bump_config(core, st["id"])
-    core.audit("slot_created", tenant_id=ctx.tenant_id, user_id=ctx.user["id"], actor=ctx.actor, ip=ctx.ip, target=slot_id)
-    return {"id": slot_id, "key": body.key, "label": body.label, "position": pos}
-
-
-def _slot(core, st, slot_id: str):
-    sl = core.db.one("SELECT * FROM slot WHERE id = ? AND station_id = ?", (slot_id[:64], st["id"]))
-    if sl is None:
-        raise HTTPException(404, "not_found")
-    return sl
-
-
-@router.patch("/api/v1/stations/{station_id}/slots/{slot_id}")
-def patch_slot(station_id: str, slot_id: str, body: SlotPatch, request: Request, ctx: Ctx = Depends(require("admin"))):
-    core = core_of(request)
-    sl = _slot(core, _station(core, ctx, station_id), slot_id)
-    if body.label is not None:
-        core.db.execute("UPDATE slot SET label = ? WHERE id = ?", (body.label, sl["id"]))
-    if body.position is not None:
-        core.db.execute("UPDATE slot SET position = ? WHERE id = ?", (body.position, sl["id"]))
-    _bump_config(core, sl["station_id"])
-    return {"status": "ok"}
-
-
-@router.delete("/api/v1/stations/{station_id}/slots/{slot_id}")
-def delete_slot(station_id: str, slot_id: str, request: Request, ctx: Ctx = Depends(require("admin"))):
-    core = core_of(request)
-    sl = _slot(core, _station(core, ctx, station_id), slot_id)
-    core.db.execute("DELETE FROM slot WHERE id = ?", (sl["id"],))
-    _bump_config(core, sl["station_id"])
-    core.audit("slot_deleted", tenant_id=ctx.tenant_id, user_id=ctx.user["id"], actor=ctx.actor, ip=ctx.ip, target=sl["id"])
     return {"status": "deleted"}
 
 

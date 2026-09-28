@@ -24,7 +24,7 @@ __all__ = [
     "DEFAULT_MODEL",
 ]
 
-CSV_FIELDS = ["run_id", "label", "source", "slot_id", "t", *FEATURE_NAMES]
+CSV_FIELDS = ["run_id", "label", "source", "t", *FEATURE_NAMES]
 DEFAULT_MODEL = ML_DIR / "models" / "vibration_iforest.joblib"
 
 

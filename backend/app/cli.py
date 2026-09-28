@@ -18,7 +18,7 @@ import time
 from .config import load_settings
 from .core import Core
 from .security import hash_password, hash_token, new_id, new_token, password_problems
-from .service import Monitoring
+from .service import STALL_KEY, Monitoring
 
 
 def _password(core: Core, email: str, name: str) -> str:
@@ -57,9 +57,9 @@ def create_demo(core: Core, email: str, org: str, plan: str) -> None:
             "VALUES (?,?,?,?,?,?,?,?,?)",
             (new_id("usr"), tid, email, "Demo Owner", "owner", _password(core, email, "Demo Owner"), now, now, now))
         c.execute("INSERT INTO station (id, tenant_id, name, location, display_token_hash, display_enabled, created_at) VALUES (?,?,?,?,?,1,?)",
-                  (sid, tid, "Radstation Schulhof", "Haupteingang", hash_token(display), now))
-        for i, k in enumerate("ABC", start=1):
-            c.execute("INSERT INTO slot (id, station_id, key, label, position) VALUES (?,?,?,?,?)", (new_id("sl"), sid, k, f"Platz {k}", i))
+                  (sid, tid, "Stellplatz Schulhof", "Haupteingang", hash_token(display), now))
+        c.execute("INSERT INTO slot (id, station_id, key, label, position) VALUES (?,?,?,?,?)",
+                  (new_id("sl"), sid, STALL_KEY, "Stellplatz", 1))
         c.execute("INSERT INTO device (id, tenant_id, station_id, name, token_prefix, token_hash, created_at, created_by) VALUES (?,?,?,?,?,?,?,?)",
                   (new_id("dev"), tid, sid, "Pi-Gateway", token[:10], hash_token(token), now, "cli"))
     core.audit("demo_created", tenant_id=tid, actor="cli", target=email)
