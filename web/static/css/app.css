@@ -205,3 +205,12 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h1[tabindex="-1"]:focus { outline: 
 .snapshot img { display: block; max-width: 100%; border-radius: var(--radius-md); border: 1px solid var(--line); }
 .qr { display: inline-block; background: #fff; padding: 12px; border-radius: var(--radius-md); border: 1px solid var(--line); }
 .qr svg { display: block; width: 200px; height: 200px; }
+.plain-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }
+.qr-img { image-rendering: pixelated; border: 8px solid #fff; outline: 1px solid var(--line); }
+.print-sticker { display: none; }
+@media print {
+  body.printing > *:not(.print-sticker) { display: none !important; }
+  body.printing .print-sticker { display: block; text-align: center; font-family: var(--font-sans); color: #000; padding: 24px; }
+  .print-sticker img { image-rendering: pixelated; }
+  .print-sticker__title { font-size: 28px; font-weight: 700; }
+}

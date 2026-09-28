@@ -42,6 +42,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
+from camera import Camera  # noqa: E402
 from gateway import Gateway, GatewayConfig, serial_lines  # noqa: E402
 
 VERSION = (HERE / "VERSION").read_text().strip() if (HERE / "VERSION").exists() else "0.0.0"
@@ -130,6 +131,16 @@ class Api:
             except Exception:
                 detail = None
             return e.code, {"detail": detail}
+
+    def upload(self, path: str, data: bytes, token: str, content_type: str = "image/jpeg") -> tuple[int, dict]:
+        url = self.base + path
+        req = urllib.request.Request(url, data=data, method="POST", headers={
+            "Content-Type": content_type, "Authorization": f"Bearer {token}", "User-Agent": f"bike-agent/{VERSION}"})
+        try:
+            with urllib.request.urlopen(req, timeout=max(self.timeout, 30), context=self.ctx if url.startswith("https") else None) as r:
+                return r.status, json.loads(r.read(65536) or b"{}")
+        except urllib.error.HTTPError as e:
+            return e.code, {}
 
 
 # ---------------------------------------------------------------------- Systeminfos
@@ -355,6 +366,10 @@ class Agent:
             state_dir=state.dir, source="simulated" if s.get("source") == "simulator" else "live",
         )
         self.gw = Gateway(self.cfg)
+        self.camera = Camera(simulated=s.get("source") == "simulator")
+        self.gw.uplink.on_response = self.on_uplink_response
+        self._last_capture = 0.0
+        self._capture_lock = threading.Lock()
 
     # ---- Steuerkanal
     def heartbeat_once(self) -> dict | None:
@@ -364,6 +379,7 @@ class Agent:
             "agent_version": VERSION, "hostname": safe_hostname(), "os_info": os_info(), "source": self.state.get("source", "serial"),
             "uptime_s": int(time.monotonic() - self.started), "serial_connected": serial_ok, "buffer_len": len(g.uplink.buffer),
             "api_online": g.uplink.online, "last_error": self.last_error[:300], "config_version": self.state.get("config_version", 0),
+            "camera": self.camera.kind,
             **system_health(),
         }
         status, resp = self.api.request("POST", "/api/v1/agent/heartbeat", body, token=self.cfg.token)
@@ -390,6 +406,8 @@ class Agent:
                 self.stop.set()
             elif cmd == "rotate_token":
                 self.rotate_token()
+            elif cmd == "snapshot":
+                threading.Thread(target=self.capture_and_upload, args=("manual",), daemon=True).start()
             else:
                 log.warning("Unbekannter Befehl ignoriert: %r", cmd)
         if self.clock() - self.state.get("token_issued_at", self.clock()) > TOKEN_MAX_AGE_S:
@@ -403,6 +421,25 @@ class Agent:
             except AgentError as exc:
                 self.last_error = str(exc)
                 log.error("Update fehlgeschlagen: %s", exc)
+
+    # ---- Kamera (nur wenn im Portal freigegeben; die Plattform lehnt sonst ab)
+    def on_uplink_response(self, resp: dict) -> None:
+        if resp.get("capture"):
+            threading.Thread(target=self.capture_and_upload, args=("alert", resp.get("event_id")), daemon=True).start()
+
+    def capture_and_upload(self, reason: str, event_id: str | None = None) -> int:
+        with self._capture_lock:
+            if time.monotonic() - self._last_capture < 10:
+                return 0  # höchstens ein Bild alle 10 s
+            self._last_capture = time.monotonic()
+            data = self.camera.capture()
+            if not data:
+                log.warning("Kein Kamerabild (%s)", self.camera.kind)
+                return 0
+            q = f"?reason={reason}" + (f"&event_id={event_id}" if event_id else "")
+            status, _ = self.api.upload(f"/api/v1/agent/snapshot{q}", data, self.cfg.token)
+            log.info("Kamerabild (%s, %d kB) hochgeladen: HTTP %s", reason, len(data) // 1024, status)
+            return status
 
     def rotate_token(self) -> bool:
         status, resp = self.api.request("POST", "/api/v1/agent/rotate-token", {}, token=self.cfg.token)

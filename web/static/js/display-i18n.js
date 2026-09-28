@@ -2,6 +2,12 @@
 // NL/EN vor der Vorführung von einer sprachkundigen Person prüfen lassen.
 window.I18N = {
   de: {
+    maintenance: "AUSSER BETRIEB – bitte einen anderen Stellplatz nutzen",
+    tap_checked_in: "Eingecheckt ✓", tap_checked_out: (p) => `Ausgecheckt ✓ · ${p}`,
+    tap_unknown_card: "Karte unbekannt – bitte bei der Betreuung freischalten lassen", tap_blocked: "Karte gesperrt",
+    tap_occupied_by_other: "Stellplatz bereits belegt", tap_open_elsewhere: "Karte noch an anderem Stellplatz eingecheckt", tap_maintenance: "Außer Betrieb",
+    session: (t, p) => `Belegt seit ${t} · bisher ${p}`,
+    camera: "Kamera aktiv: Einzelbild nur bei ungewöhnlicher Erschütterung, automatische Löschung.",
     invalidLink: "Dieser Anzeige-Link ist ungültig oder deaktiviert.",
     free: "FREI", occupied: "BELEGT", unknown: "STATUS UNBEKANNT",
     sub_free: "Stellplatz ist frei.", sub_occupied: "Ein Fahrrad steht im Stellplatz.",
@@ -17,6 +23,12 @@ window.I18N = {
     privacy: "Keine Kamera, keine Personendaten – nur Zustand und Zeit.",
   },
   nl: {
+    maintenance: "BUITEN GEBRUIK – gebruik een andere fietsplek",
+    tap_checked_in: "Ingecheckt ✓", tap_checked_out: (p) => `Uitgecheckt ✓ · ${p}`,
+    tap_unknown_card: "Kaart onbekend – laat hem vrijgeven door de begeleiding", tap_blocked: "Kaart geblokkeerd",
+    tap_occupied_by_other: "Fietsplek al bezet", tap_open_elsewhere: "Kaart nog bij andere fietsplek ingecheckt", tap_maintenance: "Buiten gebruik",
+    session: (t, p) => `Bezet sinds ${t} · tot nu toe ${p}`,
+    camera: "Camera actief: één foto alleen bij ongewone trilling, automatisch verwijderd.",
     invalidLink: "Deze weergavelink is ongeldig of uitgeschakeld.",
     free: "VRIJ", occupied: "BEZET", unknown: "STATUS ONBEKEND",
     sub_free: "De fietsplek is vrij.", sub_occupied: "Er staat een fiets op de fietsplek.",
@@ -32,6 +44,12 @@ window.I18N = {
     privacy: "Geen camera, geen persoonsgegevens – alleen status en tijd.",
   },
   en: {
+    maintenance: "OUT OF SERVICE – please use another stall",
+    tap_checked_in: "Checked in ✓", tap_checked_out: (p) => `Checked out ✓ · ${p}`,
+    tap_unknown_card: "Unknown card – please have it activated by staff", tap_blocked: "Card blocked",
+    tap_occupied_by_other: "Stall already occupied", tap_open_elsewhere: "Card still checked in at another stall", tap_maintenance: "Out of service",
+    session: (t, p) => `Occupied since ${t} · so far ${p}`,
+    camera: "Camera active: single picture only on unusual vibration, deleted automatically.",
     invalidLink: "This display link is invalid or disabled.",
     free: "FREE", occupied: "OCCUPIED", unknown: "STATUS UNKNOWN",
     sub_free: "The stall is free.", sub_occupied: "A bicycle is in the stall.",

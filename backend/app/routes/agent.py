@@ -25,7 +25,7 @@ HEARTBEAT_S = 60
 ONLINE_WITHIN_S = 3 * HEARTBEAT_S
 PREV_TOKEN_GRACE_S = 15 * 60
 MAX_DEVICES_PER_STATION = 5
-COMMANDS = ("restart", "rotate_token", "update")
+COMMANDS = ("restart", "rotate_token", "update", "snapshot")
 
 
 def new_code() -> str:
@@ -272,6 +272,7 @@ class HeartbeatIn(Strict):
     disk_free_mb: int | None = Field(default=None, ge=0, le=10**8)
     last_error: str = Field(default="", max_length=300)
     config_version: int = Field(default=0, ge=0)
+    camera: str = Field(default="", max_length=20, pattern=r"^[a-z-]*$")
 
 
 @router.post("/api/v1/agent/heartbeat")

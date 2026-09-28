@@ -11,7 +11,7 @@ from pathlib import Path
 
 AGENT_DIR = Path(__file__).resolve().parents[2] / "pi-gateway"
 TEMPLATE = Path(__file__).resolve().parent / "templates" / "install-agent.sh"
-FILES = ("VERSION", "agent.py", "gateway.py", "simulator.py")
+FILES = ("VERSION", "agent.py", "gateway.py", "simulator.py", "camera.py", "sim-camera.jpg")
 
 
 def version_tuple(v: str | None) -> tuple[int, ...]:

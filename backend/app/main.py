@@ -23,12 +23,15 @@ from .agent_bundle import AgentBundle
 from .tlsinfo import TlsInfo
 from .licensing import Licensing
 from .parking import Parking
-from .routes import agent, auth, org, parking, platform, stations
+from .routes import agent, auth, camera, org, parking, platform, stations
+from .snapshots import Snapshots
 from .service import Monitoring
 
 log = logging.getLogger("bike_station")
 WEB_DIR = Path(__file__).resolve().parents[2] / "web"
 MAX_BODY_BYTES = 64 * 1024
+# Ausnahmen mit größerem Limit (Kamerabild vom Gateway)
+PATH_BODY_LIMITS = {"/api/v1/agent/snapshot": 2 * 1024 * 1024}
 DEVICE_PATHS = ("/api/v1/measurements", "/api/v1/agent/enroll", "/api/v1/agent/heartbeat", "/api/v1/agent/rotate-token")
 UNSAFE = {"POST", "PUT", "PATCH", "DELETE"}
 
@@ -53,8 +56,9 @@ class BodyLimitMiddleware:
     async def __call__(self, scope: Scope, receive: Receive, send: Send):
         if scope["type"] != "http":
             return await self.app(scope, receive, send)
+        max_bytes = PATH_BODY_LIMITS.get(scope.get("path", ""), self.max_bytes)
         for k, v in scope.get("headers", []):
-            if k == b"content-length" and v.isdigit() and int(v) > self.max_bytes:
+            if k == b"content-length" and v.isdigit() and int(v) > max_bytes:
                 return await JSONResponse({"detail": "payload_too_large"}, 413)(scope, receive, send)
         received = 0
 
@@ -63,7 +67,7 @@ class BodyLimitMiddleware:
             msg = await receive()
             if msg["type"] == "http.request":
                 received += len(msg.get("body", b""))
-                if received > self.max_bytes:
+                if received > max_bytes:
                     raise HTTPException(413, "payload_too_large")
             return msg
 
@@ -75,17 +79,19 @@ def create_app(settings: Settings | None = None, clock: Callable[[], float] = ti
     core = Core(settings, clock=clock)
     monitoring = Monitoring(core)
     licensing = Licensing(core)
+    snapshots = Snapshots(core)
 
     async def maintenance_loop():
         while True:
             try:
                 licensing.record_usage()
                 d = monitoring.purge()
+                d["snapshots"] = snapshots.purge()
                 if any(d.values()):
                     log.info("Aufbewahrung: %s gelöscht", d)
             except Exception:
                 log.exception("Wartungslauf fehlgeschlagen")
-            await asyncio.sleep(3600)
+            await asyncio.sleep(600)  # alle 10 min: Aufbewahrung, Kamerabilder, Nutzungstage
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -99,6 +105,7 @@ def create_app(settings: Settings | None = None, clock: Callable[[], float] = ti
     app.state.core = core
     app.state.monitoring = monitoring
     app.state.licensing = licensing
+    app.state.snapshots = snapshots
     app.state.parking = Parking(core)
     monitoring.parking = app.state.parking
     app.state.tls = TlsInfo.load(settings.tls_cert_file) if settings.base_url.startswith("https://") else None
@@ -153,7 +160,7 @@ def create_app(settings: Settings | None = None, clock: Callable[[], float] = ti
         return JSONResponse({"detail": "internal_error"}, 500)
 
     # ------------------------------------------------------------------ Router
-    for r in (auth.router, org.router, stations.router, agent.router, platform.router, parking.router):
+    for r in (auth.router, org.router, stations.router, agent.router, platform.router, parking.router, camera.router):
         app.include_router(r)
 
     @app.get("/health", include_in_schema=False)
@@ -170,7 +177,7 @@ def create_app(settings: Settings | None = None, clock: Callable[[], float] = ti
 
     # ------------------------------------------------------------------ Weboberfläche
     if WEB_DIR.exists():
-        pages = {"/": "index.html", "/app": "app.html", "/display": "display.html"}
+        pages = {"/": "index.html", "/app": "app.html", "/display": "display.html", "/s": "stall.html"}
         for route, file in pages.items():
             def page(file=file):
                 return FileResponse(WEB_DIR / file)

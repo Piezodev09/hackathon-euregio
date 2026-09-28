@@ -187,3 +187,32 @@ def test_simulator_single_stall_lines():
     assert [m.get("occupied") for m in lines[:3]] == [False, True, None]
     assert lines[2]["sensor_state"] == "error"
     assert lines[3] == {"kind": "nfc", "uid": "04AABBCCDD"}
+
+
+def test_camera_detection_and_simulator_image(monkeypatch):
+    import camera
+
+    cam = camera.Camera(simulated=True)
+    assert cam.kind == "simulator" and cam.capture().startswith(b"\xff\xd8\xff")
+    monkeypatch.setattr(camera.shutil, "which", lambda n: None)
+    monkeypatch.setattr(camera.os.path, "exists", lambda p: False)
+    assert camera.detect() == "none" and camera.Camera().capture() is None
+    monkeypatch.setattr(camera.shutil, "which", lambda n: "/usr/bin/rpicam-still" if n == "rpicam-still" else None)
+    assert camera.detect() == "rpicam-still"
+    assert camera._cmd("fswebcam", "/tmp/x.jpg", "/dev/video0")[0] == "fswebcam"
+
+
+def test_agent_uploads_snapshot_on_alert_hint(tmp_path):
+    s = enrolled_state(tmp_path)
+    ag = A.Agent(s)
+    calls = []
+
+    class Up:
+        def upload(self, path, data, token, content_type="image/jpeg"):
+            calls.append((path, len(data), token))
+            return 201, {}
+
+    ag.api = Up()
+    assert ag.capture_and_upload("alert", "evt_1") == 201
+    assert calls[0][0] == "/api/v1/agent/snapshot?reason=alert&event_id=evt_1" and calls[0][2] == "bsd_alt"
+    assert ag.capture_and_upload("manual") == 0  # höchstens ein Bild alle 10 s

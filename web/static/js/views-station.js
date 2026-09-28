@@ -115,7 +115,8 @@ function eventsTable(events, reload, { showStation = true } = {}) {
       }
       return el("tr", { class: e.severity },
         el("td", {}, fmtDateTime(e.occurred_at)), showStation ? el("td", {}, e.station_name) : null,
-        el("td", {}, t("ev.k_" + e.kind), e.simulated ? [" ", el("span", { class: "badge sim" }, t("c.simulated"))] : null),
+        el("td", {}, t("ev.k_" + e.kind), e.simulated ? [" ", el("span", { class: "badge sim" }, t("c.simulated"))] : null,
+          e.kind === "user_report" && e.detail ? el("div", { class: "small muted" }, t("sv.cat_" + e.detail.category), e.detail.text ? ": " + e.detail.text : "") : null),
         el("td", {}, e.detector ? t("ev.d_" + e.detector) + (e.severity === "shadow" ? " " + t("ev.shadow") : "") : "–"),
         el("td", {}, ack));
     }))));
@@ -191,9 +192,19 @@ export function viewStation(id, setTitle) {
         list.push(el("li", { class: "sbb-alert sbb-alert--warn" }, icon("vib"),
           el("p", { class: "sbb-alert__title" }, t("st.w_movement", { t: fmtTime(a.occurred_at) }), a.simulated ? [" ", el("span", { class: "badge sim" }, t("c.simulated"))] : null),
           el("p", { class: "sbb-alert__text" }, t("st.w_movement_text")),
-          can("operator") && a.id ? el("div", { class: "sbb-alert__actions" }, el("button", { class: "btn small", type: "button", onclick: async () => {
-            try { await post(`/api/v1/events/${a.id}/ack`); await poll(); loadRecent(); warnings.querySelector("h2")?.focus(); } catch (e) { toast(describeError(e), "error"); }
-          } }, t("ev.ack_btn"))) : null));
+          el("div", { class: "sbb-alert__actions btn-row" },
+            can("operator") && a.id ? el("button", { class: "btn small", type: "button", onclick: async () => {
+              try { await post(`/api/v1/events/${a.id}/ack`); await poll(); loadRecent(); warnings.querySelector("h2")?.focus(); } catch (e) { toast(describeError(e), "error"); }
+            } }, t("ev.ack_btn")) : null,
+            last.camera_active && can("admin") ? el("button", { class: "btn small", type: "button", onclick: async (ev) => {
+              const holder = ev.target.closest(".sbb-alert").querySelector(".snapshot") || el("div", { class: "snapshot" });
+              ev.target.closest(".sbb-alert").append(holder);
+              try {
+                const { snapshots } = await get(`/api/v1/stations/${id}/snapshots`);
+                const s = snapshots.find((x) => x.event_id === a.id) || null;
+                clear(holder, s ? el("img", { src: `/api/v1/snapshots/${s.id}`, alt: t("cam.img_alt") }) : el("p", { class: "small" }, t("cam.none_yet")));
+              } catch (e) { toast(describeError(e), "error"); }
+            } }, icon("camera"), t("cam.show")) : null)));
       }
       clear(warnings, el("h2", { id: "warn-h", class: "sbb-card__title", tabindex: "-1" }, t("st.warnings"), " ",
         el("span", { class: "badge planned" }, t("st.warn_count", { n: list.length }))),
@@ -242,7 +253,7 @@ export function viewStationSettings(id, setTitle) {
     try {
       const st = await get(`/api/v1/stations/${id}`);
       setTitle(`${st.name} – ${t("st.settings")}`);
-      clear(node, general(st), operationCard(st), devicesCard(st), displayCard(st), dangerCard(st));
+      clear(node, general(st), operationCard(st), devicesCard(st), stallViewCard(st), displayCard(st), cameraCard(st), dangerCard(st));
     } catch (e) { clear(node, errorCard(e)); }
   };
 
@@ -405,6 +416,76 @@ export function viewStationSettings(id, setTitle) {
       el("div", { class: "field" }, el("label", { class: "check" }, toggle, el("span", {}, t("ss.display_on")))), rotate, reveal);
   }
 
+  function stallViewCard(st) {
+    const box = el("div");
+    const planOk = !!state.me.tenant.plan.stall_view;
+    const toggle = el("input", { type: "checkbox", checked: st.stall_view_enabled, disabled: !st.stall_view_configured });
+    toggle.addEventListener("change", async () => {
+      try { await patch(`/api/v1/stations/${id}`, { stall_view_enabled: toggle.checked }); toast(t("c.saved")); }
+      catch (e) { toggle.checked = !toggle.checked; toast(describeError(e), "error"); }
+    });
+    const show = (url) => {
+      const qr = window.qrcode ? (() => { const q = window.qrcode(0, "M"); q.addData(url); q.make(); return q.createDataURL(6, 2); })() : null;
+      clear(box, el("div", { class: "alert-box info" }, el("p", {}, t("sv.link_once")), el("p", { class: "secret-box mono" }, url),
+        el("div", { class: "btn-row" }, el("button", { class: "btn small", type: "button", onclick: () => copyText(url) }, t("c.copy")),
+          el("a", { class: "btn small", href: url, target: "_blank", rel: "noopener noreferrer" }, t("sv.open")),
+          qr ? el("button", { class: "btn small", type: "button", onclick: () => printSticker(st.name, qr) }, t("sv.print")) : null)),
+        qr ? el("p", {}, el("img", { class: "qr-img", src: qr, alt: t("sv.qr_alt"), width: "200", height: "200" })) : null);
+    };
+    const rotate = el("button", { class: "btn", type: "button", disabled: !planOk, onclick: async () => {
+      if (st.stall_view_configured && !(await confirmDialog(t("sv.rotate_confirm")))) return;
+      try {
+        const r = await post(`/api/v1/stations/${id}/stall-link`);
+        st.stall_view_configured = true; toggle.disabled = false; toggle.checked = true;
+        show(r.url);
+      } catch (e) { toast(describeError(e), "error"); }
+    } }, st.stall_view_configured ? t("sv.rotate") : t("sv.create"));
+    return el("section", { class: "card" }, el("h2", {}, t("sv.title")), el("p", { class: "muted" }, t("sv.hint")),
+      !planOk ? el("p", { class: "small muted" }, t("pk.feature_off", { f: t("feat.stall_view") })) : null,
+      el("div", { class: "field" }, el("label", { class: "check" }, toggle, el("span", {}, t("sv.enabled")))), rotate, box);
+  }
+
+  function cameraCard(st) {
+    const planOk = !!state.me.tenant.plan.camera;
+    const on = el("input", { type: "checkbox", checked: st.camera_enabled, disabled: !planOk });
+    const approved = el("input", { type: "text", maxlength: "200", value: st.camera_approved_by || "", placeholder: t("cam.approved_ph") });
+    const hours = el("input", { type: "number", min: "1", max: "72", value: String(st.camera_retention_h || 24) });
+    const list = el("div");
+    const loadList = async () => {
+      if (!st.camera_enabled) { clear(list); return; }
+      try {
+        const { snapshots } = await get(`/api/v1/stations/${id}/snapshots`);
+        clear(list, el("h3", {}, t("cam.images")), snapshots.length ? el("ul", { class: "plain-list" }, snapshots.map((s) => {
+          const holder = el("div", { class: "snapshot" });
+          return el("li", {}, el("div", { class: "btn-row" }, el("span", {}, fmtDateTime(s.taken_at), " · ", t("cam.r_" + s.reason),
+            s.simulated ? [" ", el("span", { class: "badge sim" }, t("c.simulated"))] : null),
+            el("button", { class: "btn small", type: "button", onclick: () => clear(holder, el("img", { src: `/api/v1/snapshots/${s.id}`, alt: t("cam.img_alt"), loading: "lazy" })) }, t("cam.show")),
+            el("button", { class: "btn small danger", type: "button", onclick: async () => {
+              try { await del(`/api/v1/snapshots/${s.id}`); loadList(); } catch (e) { toast(describeError(e), "error"); }
+            } }, t("c.delete"))), holder);
+        })) : el("p", { class: "muted small" }, t("cam.none")));
+      } catch (e) { clear(list, errorCard(e)); }
+    };
+    const form = el("form", {},
+      el("label", { class: "check" }, on, el("span", {}, t("cam.enable"), el("small", { class: "hint" }, t("cam.enable_hint")))),
+      el("div", { class: "grid cols-2" }, field(t("cam.approved"), approved, t("cam.approved_hint")), field(t("cam.retention"), hours, t("cam.retention_hint"))),
+      el("div", { class: "btn-row" }, el("button", { class: "btn primary", type: "submit", disabled: !planOk }, t("c.save")),
+        st.camera_enabled ? el("button", { class: "btn", type: "button", onclick: async () => {
+          try { await post(`/api/v1/stations/${id}/camera/snapshot`); toast(t("cam.requested")); } catch (e) { toast(describeError(e), "error"); }
+        } }, t("cam.test")) : null));
+    form.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      if (!on.checked && st.camera_enabled && !(await confirmDialog(t("cam.disable_confirm"), { danger: true }))) return;
+      try {
+        await put(`/api/v1/stations/${id}/camera`, { enabled: on.checked, retention_h: parseInt(hours.value, 10) || 24, approved_by: approved.value || null });
+        toast(t("c.saved")); load();
+      } catch (e) { toast(describeError(e), "error"); }
+    });
+    loadList();
+    return el("section", { class: "card" }, el("h2", {}, t("cam.title")), el("p", { class: "muted" }, t("cam.hint")),
+      !planOk ? el("p", { class: "small muted" }, t("pk.feature_off", { f: t("feat.camera") })) : null, form, list);
+  }
+
   function dangerCard(st) {
     return el("section", { class: "card" }, el("h2", {}, t("ss.danger")),
       el("button", { class: "btn danger", type: "button", onclick: async () => {
@@ -486,4 +567,18 @@ export function viewEvents() {
     el("div", { class: "btn-row" }, el("label", { class: "check" }, openOnly, el("span", {}, t("ev.open_only"))),
       el("label", { class: "check" }, shadow, el("span", {}, t("ev.show_shadow")))),
     el("p", { class: "small muted" }, t("st.disclaimer")), box);
+}
+
+// Druckansicht für den QR-Aufkleber am Stellplatz.
+function printSticker(name, qrDataUrl) {
+  const sheet = el("div", { class: "print-sticker" },
+    el("p", { class: "print-sticker__title" }, name),
+    el("img", { src: qrDataUrl, alt: "", width: "260", height: "260" }),
+    el("p", {}, t("sv.sticker_text")), el("p", { class: "small" }, "Smart Bicycle Box"));
+  document.body.append(sheet);
+  document.body.classList.add("printing");
+  const done = () => { sheet.remove(); document.body.classList.remove("printing"); window.removeEventListener("afterprint", done); };
+  window.addEventListener("afterprint", done);
+  window.print();
+  setTimeout(done, 1000);
 }

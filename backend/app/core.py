@@ -38,6 +38,8 @@ class Core:
         self.auth_limiter = RateLimiter(settings.auth_per_minute / 60.0, settings.auth_per_minute)
         # Registrierung, Passwort vergessen etc.: je IP höchstens 5 pro Stunde
         self.mail_limiter = RateLimiter(5 / 3600.0, 5)
+        # "Problem melden" in der öffentlichen Stellplatz-Ansicht: je IP 3 pro 10 Minuten
+        self.report_limiter = RateLimiter(3 / 600.0, 3)
 
     @property
     def cookie_name(self) -> str:

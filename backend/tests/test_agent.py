@@ -161,7 +161,7 @@ def test_install_script_and_bundle(env):
     assert hashlib.sha256(tgz.content).hexdigest() == b.sha256 == tgz.headers["x-content-sha256"]
     with tarfile.open(fileobj=io.BytesIO(tgz.content), mode="r:gz") as tar:
         names = sorted(m.name for m in tar.getmembers())
-        assert names == ["VERSION", "agent.py", "gateway.py", "simulator.py"]
+        assert names == ["VERSION", "agent.py", "camera.py", "gateway.py", "sim-camera.jpg", "simulator.py"]
         assert all(m.isfile() and m.mtime == 0 for m in tar.getmembers())
     assert b.sha256 in anon.get("/install/agent.sha256").text
     # Reproduzierbar

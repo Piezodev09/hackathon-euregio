@@ -37,6 +37,7 @@ class IngestResult:
     stored: bool
     duplicate: bool = False
     alert_created: bool = False
+    event_id: str | None = None
 
 
 class Monitoring:
@@ -86,6 +87,10 @@ class Monitoring:
         # Alte, nachträglich übertragene Daten dürfen keinen Live-Alarm auslösen.
         if m.sensor_state == "ok" and m.occupied and m.vibration_score > 0 and age_s <= self.core.s.window_s:
             result.alert_created = self._evaluate_movement(station, slot, t, m.source)
+            if result.alert_created:
+                result.event_id = self.db.scalar(
+                    "SELECT id FROM event WHERE slot_id = ? AND kind = 'unusual_movement' AND severity = 'warning' "
+                    "ORDER BY occurred_at DESC LIMIT 1", (slot["id"],))
         return result
 
     def _evaluate_movement(self, station, slot, t: float, source: str) -> bool:
