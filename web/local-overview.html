@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Smart Bicycle Box – Übersicht</title>
+  <link rel="icon" href="/static/img/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/css/fonts.css">
+  <link rel="stylesheet" href="/static/css/tokens.css">
+  <link rel="stylesheet" href="/static/css/components.css">
+  <link rel="stylesheet" href="/static/css/display.css">
+  <script src="/static/js/display-i18n.js" defer></script>
+  <script src="/static/js/local-overview.js" defer></script>
+</head>
+<body class="sbb-root local-overview">
+  <header class="top">
+    <div>
+      <h1 id="title">Smart Bicycle Box</h1>
+      <p id="count" class="loc" aria-live="polite"></p>
+    </div>
+    <nav aria-label="Sprache / Taal / Language" class="lang">
+      <button type="button" data-lang="de" lang="de">DE</button>
+      <button type="button" data-lang="nl" lang="nl">NL</button>
+      <button type="button" data-lang="en" lang="en">EN</button>
+    </nav>
+  </header>
+  <main>
+    <p id="offline" class="maint offline" hidden></p>
+    <ul id="stalls" class="ov-grid"></ul>
+  </main>
+</body>
+</html>

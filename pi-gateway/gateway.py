@@ -316,6 +316,8 @@ class Gateway:
         self.write_back: Callable[[str], None] | None = None
         self.uplink.on_status_change = self._net_status
         self.last_tap: dict | None = None
+        self.hello: dict | None = None  # Kennung der Firmware (erste Zeile nach dem Verbinden)
+        self.has_pn532 = False  # Arduino hat einen eigenen NFC-Leser (hello "nfc" oder erste NFC-Zeile)
         # Letzter Sensorzustand für die lokale Offline-Anzeige (agent.py LocalDisplay)
         self.last_local: dict | None = None
         # Taps werden sofort (nicht gepuffert) gesendet; eigener Thread, damit das Lesen weiterläuft.
@@ -342,15 +344,40 @@ class Gateway:
             return
         self.last_line_at = self.clock()
         if m is None:
+            self._hello(line)
             return
         if m.get("kind") == "nfc":
-            self.tap(m["uid"])
+            self.has_pn532 = True
+            self.tap(m["uid"], reader="pn532")
             return
         self._emit(m)
 
+    def _hello(self, line: str) -> None:
+        try:
+            d = json.loads(line)
+        except ValueError:
+            return
+        if isinstance(d, dict) and d.get("type") == "hello":
+            self.hello = {"fw": str(d.get("fw", ""))[:20], "name": str(d.get("name", "bike-stall"))[:40], "nfc": bool(d.get("nfc"))}
+            self.has_pn532 = self.has_pn532 or self.hello["nfc"]
+            log.info("Firmware erkannt: %s %s%s", self.hello["name"], self.hello["fw"], " mit NFC-Leser" if self.hello["nfc"] else "")
+
+    def identify(self) -> bool:
+        """LEDs am Stellplatz 10 s blinken lassen (Befehl aus dem Portal), damit man ihn vor Ort findet."""
+        if not self.write_back:
+            log.warning("Identifizieren nicht möglich: kein Arduino verbunden")
+            return False
+        try:
+            self.write_back("IDENT\n")
+            return True
+        except OSError:
+            return False
+
     # ---- NFC
-    def tap(self, uid: str) -> None:
+    def tap(self, uid: str, reader: str | None = None) -> None:
         body = {"station_id": self.cfg.station_id, "sequence": self.seq.next(), "uid": uid, "source": self.cfg.source}
+        if reader:
+            body["reader"] = reader[:80]
         log.info("NFC-Karte gelesen (…%s)", uid[-4:])
         self.run_async(self._send_tap, body, time.monotonic())
 

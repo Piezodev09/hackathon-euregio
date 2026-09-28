@@ -9,6 +9,8 @@ import * as M from "./views-admin.js";
 import * as P from "./views-parking.js";
 import * as X from "./views-more.js";
 import { startTour, tourRunning } from "./tour.js";
+import { helpButton } from "./help.js";
+import * as ST from "./views-stats.js";
 
 const root = document.getElementById("root");
 const PUBLIC = new Set(["login", "register", "check-email", "verify", "forgot", "reset", "invite"]);
@@ -24,9 +26,11 @@ function navItems() {
   const items = [];
   if (me.tenant) {
     items.push(["section", t("nav.s_monitor")], ["/", t("nav.overview")], ["/events", t("nav.events")], ["/sessions", t("nav.sessions")],
-      ["/reservations", t("nav.reservations")], ["/reports", t("nav.reports")]);
+      ["/reservations", t("nav.reservations")], ["/stats", t("nav.stats")], ["/reports", t("nav.reports")]);
     items.push(["section", t("nav.s_billing")], ["/cards", t("nav.cards")], ["/parking-billing", t("nav.parking_billing")]);
-    items.push(["section", t("nav.s_admin")], ["/stations", t("nav.stations")], ["/devices", t("nav.devices")], ["/team", t("nav.team")]);
+    items.push(["section", t("nav.s_admin")], ["/stations", t("nav.stations")], ["/devices", t("nav.devices")]);
+    if (can("admin")) items.push(["/readers", t("nav.readers")]);
+    items.push(["/team", t("nav.team")]);
     if (can("admin")) items.push(["/integrations", t("nav.integrations")], ["/org", t("nav.org")], ["/audit", t("nav.audit")]);
     items.push(["/billing", t("nav.billing")]);
   }
@@ -53,7 +57,8 @@ function layout(title, content, currentPath, actions) {
   sidebar.addEventListener("click", (e) => { if (e.target.closest("a")) sidebar.classList.remove("open"); });
   const h1 = el("h1", { tabindex: "-1", id: "page-title" }, title);
   const main = el("main", { class: "main", id: "main" },
-    el("div", { class: "topbar" }, el("div", { class: "btn-row" }, toggle, h1), actions || null),
+    el("div", { class: "topbar" }, el("div", { class: "btn-row" }, toggle, h1),
+      el("div", { class: "btn-row topbar-actions" }, actions || null, me.tenant ? helpButton() : null)),
     me.tenant && me.tenant.status !== "active" ? el("div", { class: "alert-box error" }, t("err.tenant_suspended")) : null,
     content);
   return { node: el("div", { class: "shell" }, el("a", { class: "skip", href: "#main" }, t("c.skip")), sidebar, main), h1 };
@@ -144,6 +149,8 @@ export async function route() {
   else if (name === "parking-billing") { title = t("nav.parking_billing"); view = P.viewParkingBilling(); }
   else if (name === "reservations") { title = t("nav.reservations"); view = X.viewReservations(); }
   else if (name === "reports") { title = t("nav.reports"); view = X.viewReports(); }
+  else if (name === "stats") { title = t("nav.stats"); view = ST.viewStats(); }
+  else if (name === "readers") { title = t("nav.readers"); view = can("admin") ? S.viewReaders() : deny(); }
   else if (name === "integrations") { title = t("nav.integrations"); view = X.viewIntegrations(); }
   else { title = t("err.not_found"); view = el("p", {}, el("a", { href: "#/" }, t("nav.overview"))); }
 
@@ -155,8 +162,8 @@ export async function route() {
   clear(root, node);
   setTitle(title);
   if (!tourRunning()) h1.focus({ preventScroll: true });
-  // Start-Tour automatisch beim ersten Besuch (nach der Registrierung)
-  if (!autoTourDone && me.tenant && !me.user.tour_done && can("admin") && name === "") {
+  // Start-Tour automatisch beim ersten Besuch (nach der Registrierung oder Einladung, für jede Rolle passend)
+  if (!autoTourDone && me.tenant && !me.user.tour_done && name === "") {
     autoTourDone = true;
     setTimeout(() => startTour(), 600);
   }

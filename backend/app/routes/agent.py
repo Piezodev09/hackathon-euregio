@@ -25,7 +25,8 @@ HEARTBEAT_S = 60
 ONLINE_WITHIN_S = 3 * HEARTBEAT_S
 PREV_TOKEN_GRACE_S = 15 * 60
 MAX_DEVICES_PER_STATION = 5
-COMMANDS = ("restart", "rotate_token", "update", "snapshot")
+COMMANDS = ("restart", "rotate_token", "update", "snapshot", "identify")
+MAX_STALLS_PER_GATEWAY = 16
 
 
 def new_code() -> str:
@@ -87,6 +88,8 @@ def device_out(core, d, latest: str) -> dict:
         "pending_command": d["pending_command"], "update_requested": bool(d["update_requested"]),
         "update_available": bool(d["agent_version"]) and version_tuple(latest) > version_tuple(d["agent_version"]),
         "managed": d["enrolled_at"] is not None, "token_rotated_at": iso(d["token_rotated_at"]),
+        "gateway_id": d["gateway_id"] or d["id"], "hw": json.loads(d["hw"]) if d["hw"] else None,
+        "assigned_port": d["port"], "assigned_reader": d["reader"],
     }
 
 
@@ -128,20 +131,42 @@ class EnrollmentIn(Strict):
     name: Name = "Pi-Gateway"
 
 
+class MultiEnrollmentIn(Strict):
+    name: Name = "Pi-Gateway"
+    station_ids: list[str] = Field(min_length=1, max_length=MAX_STALLS_PER_GATEWAY)
+
+
 @router.post("/api/v1/stations/{station_id}/enrollments", status_code=201)
 def create_enrollment(station_id: str, body: EnrollmentIn, request: Request, ctx: Ctx = Depends(require("admin"))):
+    return _enrollment(request, ctx, [station_id], body.name)
+
+
+@router.post("/api/v1/stations/enrollments", status_code=201)
+def create_multi_enrollment(body: MultiEnrollmentIn, request: Request, ctx: Ctx = Depends(require("admin"))):
+    """Ein Kopplungscode für einen Pi mit mehreren Stellplätzen (je Stellplatz ein Arduino/Leser am selben Pi)."""
+    if len(set(body.station_ids)) != len(body.station_ids):
+        raise HTTPException(422, "duplicate_station")
+    return _enrollment(request, ctx, body.station_ids, body.name)
+
+
+def _enrollment(request: Request, ctx: Ctx, station_ids: list[str], name: str) -> dict:
     core = core_of(request)
-    st = _station(core, ctx, station_id)
-    active = core.db.scalar("SELECT COUNT(*) FROM device WHERE station_id = ? AND revoked_at IS NULL", (st["id"],))
-    if active >= MAX_DEVICES_PER_STATION:
-        raise HTTPException(409, {"code": "plan_limit", "limit": "devices_per_station", "value": MAX_DEVICES_PER_STATION})
+    stations = [_station(core, ctx, sid) for sid in station_ids]
+    for st in stations:
+        active = core.db.scalar("SELECT COUNT(*) FROM device WHERE station_id = ? AND revoked_at IS NULL", (st["id"],))
+        if active >= MAX_DEVICES_PER_STATION:
+            raise HTTPException(409, {"code": "plan_limit", "limit": "devices_per_station", "value": MAX_DEVICES_PER_STATION})
     code = new_code()
     eid = new_id("enr")
     now = core.clock()
+    ids = [st["id"] for st in stations]
     core.db.execute(
-        "INSERT INTO enrollment (id, tenant_id, station_id, code_hash, name, created_by, created_at, expires_at) VALUES (?,?,?,?,?,?,?,?)",
-        (eid, ctx.tenant_id, st["id"], hash_token(code), body.name, ctx.actor, now, now + CODE_LIFETIME_S))
-    core.audit("enrollment_created", tenant_id=ctx.tenant_id, user_id=ctx.user["id"], actor=ctx.actor, ip=ctx.ip, target=st["id"])
+        "INSERT INTO enrollment (id, tenant_id, station_id, code_hash, name, created_by, created_at, expires_at, station_ids) "
+        "VALUES (?,?,?,?,?,?,?,?,?)",
+        (eid, ctx.tenant_id, ids[0], hash_token(code), name, ctx.actor, now, now + CODE_LIFETIME_S,
+         json.dumps(ids) if len(ids) > 1 else None))
+    core.audit("enrollment_created", tenant_id=ctx.tenant_id, user_id=ctx.user["id"], actor=ctx.actor, ip=ctx.ip, target=ids[0],
+               detail={"stations": ids} if len(ids) > 1 else None)
     info = install_info(request)
     info["commands"]["install"] = f"sudo sh agent.sh --code {code}{info['ca_arg']}"
     if info["tls"]:
@@ -149,15 +174,16 @@ def create_enrollment(station_id: str, body: EnrollmentIn, request: Request, ctx
                                         f" | sudo sh -s -- --code {code}")
     else:
         info["commands"]["oneliner"] = f"curl -fsSL {info['script_url']} | sudo sh -s -- --code {code}"
-    return {"id": eid, "code": code, "expires_at": iso(now + CODE_LIFETIME_S), "install": info}
+    return {"id": eid, "code": code, "expires_at": iso(now + CODE_LIFETIME_S), "install": info, "station_ids": ids}
 
 
 @router.get("/api/v1/stations/{station_id}/enrollments")
 def list_enrollments(station_id: str, request: Request, ctx: Ctx = Depends(require("admin"))):
     core = core_of(request)
     st = _station(core, ctx, station_id)
-    rows = core.db.all("SELECT * FROM enrollment WHERE station_id = ? AND used_at IS NULL AND expires_at > ? ORDER BY created_at DESC",
-                       (st["id"], core.clock()))
+    rows = core.db.all("SELECT * FROM enrollment WHERE tenant_id = ? AND used_at IS NULL AND expires_at > ? "
+                       "AND (station_id = ? OR station_ids LIKE ?) ORDER BY created_at DESC",
+                       (ctx.tenant_id, core.clock(), st["id"], f'%"{st["id"]}"%'))
     return {"enrollments": [{"id": r["id"], "name": r["name"], "created_by": r["created_by"], "expires_at": iso(r["expires_at"])}
                             for r in rows]}
 
@@ -166,7 +192,8 @@ def list_enrollments(station_id: str, request: Request, ctx: Ctx = Depends(requi
 def revoke_enrollment(station_id: str, enrollment_id: str, request: Request, ctx: Ctx = Depends(require("admin"))):
     core = core_of(request)
     st = _station(core, ctx, station_id)
-    cur = core.db.execute("DELETE FROM enrollment WHERE id = ? AND station_id = ? AND used_at IS NULL", (enrollment_id[:64], st["id"]))
+    cur = core.db.execute("DELETE FROM enrollment WHERE id = ? AND tenant_id = ? AND (station_id = ? OR station_ids LIKE ?) "
+                          "AND used_at IS NULL", (enrollment_id[:64], ctx.tenant_id, st["id"], f'%"{st["id"]}"%'))
     if cur.rowcount == 0:
         raise HTTPException(404, "not_found")
     return {"status": "revoked"}
@@ -194,7 +221,7 @@ def fleet(request: Request, ctx: Ctx = Depends(require("viewer"))):
 
 
 class CommandIn(Strict):
-    command: str = Field(pattern="^(restart|rotate_token|update)$")
+    command: str = Field(pattern="^(restart|rotate_token|update|identify)$")
 
 
 @router.post("/api/v1/stations/{station_id}/devices/{device_id}/command")
@@ -213,6 +240,81 @@ def device_command(station_id: str, device_id: str, body: CommandIn, request: Re
     core.audit("device_command", tenant_id=ctx.tenant_id, user_id=ctx.user["id"], actor=ctx.actor, ip=ctx.ip, target=d["id"],
                detail={"command": body.command})
     return {"status": "queued"}
+
+
+class AssignIn(Strict):
+    port: str | None = Field(default=None, max_length=160, pattern=r"^[A-Za-z0-9 _.:/@()+,#-]*$")
+    reader: str | None = Field(default=None, max_length=160, pattern=r"^[A-Za-z0-9 _.:/@()+,#-]*$")
+
+
+@router.put("/api/v1/devices/{device_id}/assign")
+def assign_hardware(device_id: str, body: AssignIn, request: Request, ctx: Ctx = Depends(require("admin"))):
+    """Port/Leser eines Pi einem Stellplatz fest zuordnen (leer = automatisch). Hat ein anderer Stellplatz desselben
+    Pi diesen Port/Leser, werden die beiden getauscht, damit nie zwei Stellplätze dieselbe Hardware lesen."""
+    core = core_of(request)
+    d = core.db.one("SELECT * FROM device WHERE id = ? AND tenant_id = ? AND revoked_at IS NULL", (device_id[:64], ctx.tenant_id))
+    if d is None:
+        raise HTTPException(404, "not_found")
+    gw = d["gateway_id"] or d["id"]
+    hw = json.loads(d["hw"]) if d["hw"] else {}
+    with core.db.tx() as c:
+        for col, value, current in (("port", body.port, hw.get("port")), ("reader", body.reader, hw.get("reader"))):
+            if value is None:
+                continue
+            value = value or None
+            other = c.execute(f"SELECT id, hw FROM device WHERE gateway_id = ? AND id != ? AND revoked_at IS NULL "  # noqa: S608
+                              f"AND ({col} = ? OR json_extract(hw, '$.{col}') = ?)", (gw, d["id"], value, value)).fetchone() if value else None
+            if other is not None:
+                c.execute(f"UPDATE device SET {col} = ? WHERE id = ?", (d[col] or current or None, other["id"]))  # noqa: S608
+            c.execute(f"UPDATE device SET {col} = ? WHERE id = ?", (value, d["id"]))  # noqa: S608
+    core.audit("device_assigned", tenant_id=ctx.tenant_id, user_id=ctx.user["id"], actor=ctx.actor, ip=ctx.ip, target=d["id"],
+               detail=body.model_dump(exclude_none=True))
+    return device_out(core, core.db.one("SELECT * FROM device WHERE id = ?", (d["id"],)), bundle(request).version)
+
+
+@router.get("/api/v1/readers")
+def readers(request: Request, ctx: Ctx = Depends(require("admin"))):
+    """Alle NFC-Leser je Pi (aus den Heartbeats) mit Stellplatz-Zuordnung und Taps der letzten 7 Tage."""
+    core = core_of(request)
+    since = core.clock() - 7 * 86400
+    devs = core.db.all("SELECT d.*, s.name AS station_name FROM device d JOIN station s ON s.id = d.station_id "
+                       "WHERE d.tenant_id = ? AND d.revoked_at IS NULL ORDER BY d.created_at", (ctx.tenant_id,))
+    stats = {(r["device_id"], r["reader"]): r for r in core.db.all(
+        "SELECT device_id, reader, COUNT(*) AS taps, SUM(result IN ('checked_in','checked_out','learned')) AS ok, MAX(at) AS last_at "
+        "FROM nfc_tap WHERE tenant_id = ? AND at >= ? AND result != 'duplicate' GROUP BY device_id, reader", (ctx.tenant_id, since))}
+    gateways: dict[str, dict] = {}
+    for d in devs:
+        hw = json.loads(d["hw"]) if d["hw"] else {}
+        gid = d["gateway_id"] or d["id"]
+        g = gateways.setdefault(gid, {"gateway_id": gid, "hostname": d["hostname"], "online": False, "readers": {}, "stalls": []})
+        g["online"] = g["online"] or bool(d["last_heartbeat_at"] and core.clock() - d["last_heartbeat_at"] <= ONLINE_WITHIN_S)
+        g["stalls"].append({"device_id": d["id"], "station_id": d["station_id"], "station_name": d["station_name"],
+                            "reader": hw.get("reader") or None, "assigned_reader": d["reader"]})
+        for r in hw.get("readers", []):
+            g["readers"].setdefault(r["id"], {**r, "station_id": None, "station_name": None, "device_id": None,
+                                              "taps": 0, "ok": 0, "last_at": None})
+        if hw.get("reader"):
+            rd = g["readers"].setdefault(hw["reader"], {"id": hw["reader"], "kind": hw["reader"].split(":")[0].split("@")[0],
+                                                        "name": hw["reader"], "taps": 0, "ok": 0, "last_at": None})
+            rd.update({"station_id": d["station_id"], "station_name": d["station_name"], "device_id": d["id"]})
+        for (dev_id, reader), st in stats.items():
+            if dev_id != d["id"]:
+                continue
+            key = reader or hw.get("reader") or "pn532"
+            rd = g["readers"].setdefault(key, {"id": key, "kind": key.split(":")[0].split("@")[0], "name": key,
+                                               "station_id": d["station_id"], "station_name": d["station_name"], "device_id": d["id"],
+                                               "taps": 0, "ok": 0, "last_at": None})
+            rd["taps"] += st["taps"]
+            rd["ok"] += st["ok"] or 0
+            rd["last_at"] = max(rd["last_at"] or 0, st["last_at"])
+    out = []
+    for g in gateways.values():
+        rl = []
+        for r in g["readers"].values():
+            rl.append({**r, "last_at": iso(r["last_at"]) if r["last_at"] else None,
+                       "success": round(r["ok"] / r["taps"], 3) if r["taps"] else None})
+        out.append({**g, "readers": rl})
+    return {"gateways": out, "learn": request.app.state.parking.learn_status(ctx.tenant_id)}
 
 
 # ---------------------------------------------------------------------- Agent-Endpunkte
@@ -238,24 +340,62 @@ def enroll(body: EnrollIn, request: Request):
         if e is None or e["tenant_status"] != "active":
             core.audit("enroll_failed", ip=ip)
             raise HTTPException(400, "invalid_or_expired_code")
-        token = new_token("bsd_")
-        did = new_id("dev")
-        name = (body.name or body.hostname or e["name"])[:100]
-        c.execute(
-            "INSERT INTO device (id, tenant_id, station_id, name, token_prefix, token_hash, created_at, created_by, "
-            "enrolled_at, hostname, agent_version, os_info, source, last_ip) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            (did, e["tenant_id"], e["station_id"], name, token[:10], hash_token(token), now, e["created_by"], now,
-             body.hostname or None, body.agent_version or None, body.os_info or None, body.source, ip))
-        c.execute("UPDATE enrollment SET used_at = ?, device_id = ? WHERE id = ?", (now, did, e["id"]))
-    core.audit("device_enrolled", tenant_id=e["tenant_id"], actor=e["created_by"], ip=ip, target=did,
-               detail={"hostname": body.hostname, "version": body.agent_version})
-    st = core.db.one("SELECT * FROM station WHERE id = ?", (e["station_id"],))
-    return {"device_id": did, "token": token, "station_id": st["id"], "station_name": st["name"],
-            "api_url": core.s.base_url, **_agent_config(core, st)}
+        ids = json.loads(e["station_ids"]) if e["station_ids"] else [e["station_id"]]
+        stations = [c.execute("SELECT * FROM station WHERE id = ? AND tenant_id = ?", (sid, e["tenant_id"])).fetchone() for sid in ids]
+        stations = [st for st in stations if st is not None]  # inzwischen gelöschte Stellplätze überspringen
+        if not stations:
+            raise HTTPException(400, "invalid_or_expired_code")
+        gateway_id = new_id("gw")
+        base_name = (body.name or body.hostname or e["name"])[:100]
+        stalls = []
+        for st in stations:
+            token = new_token("bsd_")
+            did = new_id("dev")
+            name = base_name if len(stations) == 1 else f"{base_name} · {st['name']}"[:100]
+            c.execute(
+                "INSERT INTO device (id, tenant_id, station_id, name, token_prefix, token_hash, created_at, created_by, "
+                "enrolled_at, hostname, agent_version, os_info, source, last_ip, gateway_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (did, e["tenant_id"], st["id"], name, token[:10], hash_token(token), now, e["created_by"], now,
+                 body.hostname or None, body.agent_version or None, body.os_info or None, body.source, ip, gateway_id))
+            stalls.append({"station_id": st["id"], "station_name": st["name"], "device_id": did, "token": token,
+                           **_agent_config(core, st)})
+        c.execute("UPDATE enrollment SET used_at = ?, device_id = ? WHERE id = ?", (now, stalls[0]["device_id"], e["id"]))
+    core.audit("device_enrolled", tenant_id=e["tenant_id"], actor=e["created_by"], ip=ip, target=stalls[0]["device_id"],
+               detail={"hostname": body.hostname, "version": body.agent_version, "stalls": len(stalls)})
+    first = stalls[0]
+    # Einzelfelder bleiben für ältere Agents (<1.4) erhalten; neue Agents lesen "stalls".
+    return {"device_id": first["device_id"], "token": first["token"], "station_id": first["station_id"],
+            "station_name": first["station_name"], "api_url": core.s.base_url, "gateway_id": gateway_id, "stalls": stalls,
+            **_agent_config(core, stations[0])}
 
 
 def _agent_config(core, st) -> dict:
     return {"config_version": st["config_version"], "heartbeat_s": HEARTBEAT_S}
+
+
+HwText = Field(default="", max_length=160, pattern=r"^[A-Za-z0-9 _.:/@()+,#-]*$")
+
+
+class HwPort(Strict):
+    path: str = HwText  # z. B. /dev/serial/by-id/usb-Arduino_Uno_...
+    kind: str = Field(default="", max_length=40, pattern=r"^[a-z0-9_-]*$")  # arduino | ch340 | ftdi | cp210x | acm | usb-serial
+    firmware: str = HwText  # aus der hello-Zeile des Sketches, sonst leer
+
+
+class HwReader(Strict):
+    id: str = HwText  # stabil: pn532@<port> | hid:<by-id> | pcsc:<name>
+    kind: str = Field(default="", max_length=20, pattern=r"^(pn532|hid|pcsc)?$")
+    name: str = HwText
+
+
+class HwIn(Strict):
+    ports: list[HwPort] = Field(default_factory=list, max_length=32)
+    readers: list[HwReader] = Field(default_factory=list, max_length=32)
+    port: str = HwText  # von diesem Stellplatz genutzter Port
+    reader: str = HwText  # von diesem Stellplatz genutzter Leser
+    camera: str = Field(default="", max_length=20, pattern=r"^[a-z-]*$")
+    kiosk: bool | None = None
+    stalls: int = Field(default=1, ge=1, le=MAX_STALLS_PER_GATEWAY)
 
 
 class HeartbeatIn(Strict):
@@ -273,6 +413,7 @@ class HeartbeatIn(Strict):
     last_error: str = Field(default="", max_length=300)
     config_version: int = Field(default=0, ge=0)
     camera: str = Field(default="", max_length=20, pattern=r"^[a-z-]*$")
+    hw: HwIn | None = None
 
 
 @router.get("/api/v1/agent/whoami")
@@ -295,7 +436,7 @@ def agent_status(request: Request, dev=Depends(require_device)):
 def heartbeat(body: HeartbeatIn, request: Request, dev=Depends(require_device)):
     core = core_of(request)
     now = core.clock()
-    health = body.model_dump(exclude={"agent_version", "hostname", "os_info", "source", "config_version"})
+    health = body.model_dump(exclude={"agent_version", "hostname", "os_info", "source", "config_version", "hw"})
     commands = []
     if dev["pending_command"]:
         commands.append(dev["pending_command"])
@@ -308,11 +449,13 @@ def heartbeat(body: HeartbeatIn, request: Request, dev=Depends(require_device)):
     core.db.execute(
         "UPDATE device SET last_heartbeat_at = ?, health = ?, agent_version = ?, hostname = COALESCE(NULLIF(?, ''), hostname), "
         "os_info = COALESCE(NULLIF(?, ''), os_info), source = ?, pending_command = NULL, "
-        "update_requested = CASE WHEN ? THEN 0 ELSE update_requested END WHERE id = ?",
+        "update_requested = CASE WHEN ? THEN 0 ELSE update_requested END, hw = COALESCE(?, hw) WHERE id = ?",
         (now, json.dumps(health), body.agent_version or None, body.hostname, body.os_info, body.source,
-         int(not newer), dev["id"]))
+         int(not newer), json.dumps(body.hw.model_dump()) if body.hw else None, dev["id"]))
+    # Zuordnung aus dem Portal (None = automatisch durch den Agent)
     return {"station_id": st["id"], **_agent_config(core, st), "commands": commands, "update": update,
-            "latest_version": latest.version, "server_time": iso(now)}
+            "latest_version": latest.version, "server_time": iso(now),
+            "assign": {"port": dev["port"], "reader": dev["reader"]}}
 
 
 @router.post("/api/v1/agent/rotate-token")

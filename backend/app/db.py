@@ -12,7 +12,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS tenant (
@@ -282,6 +282,18 @@ CREATE TABLE IF NOT EXISTS snapshot (
 CREATE INDEX IF NOT EXISTS idx_snapshot_station ON snapshot (station_id, taken_at);
 
 -- Reservierung: Stellplatz für X Minuten freihalten (optional nur für eine bestimmte Karte).
+-- Anlern-Modus: die nächste Karte an einem Leser der Organisation wird benannt und freigegeben (je Organisation einer).
+CREATE TABLE IF NOT EXISTS card_learn (
+    tenant_id   TEXT PRIMARY KEY REFERENCES tenant(id) ON DELETE CASCADE,
+    label       TEXT NOT NULL,
+    created_by  TEXT,
+    created_at  REAL NOT NULL,
+    expires_at  REAL NOT NULL,
+    card_id     TEXT,
+    station_id  TEXT,
+    outcome     TEXT            -- learned | known
+);
+
 CREATE TABLE IF NOT EXISTS reservation (
     id          TEXT PRIMARY KEY,
     tenant_id   TEXT NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
@@ -405,7 +417,7 @@ class Database:
             single_stall = version == 3
             if single_stall:
                 version = 4
-            if version in (4, 5):
+            if version in (4, 5, 6):
                 version = SCHEMA_VERSION  # nur neue Tabellen/Spalten (werden unten angelegt)
             if version not in (0, SCHEMA_VERSION):
                 raise RuntimeError(
@@ -440,11 +452,13 @@ class Database:
 
     # Spalten, die nach Schema 4 dazukamen (idempotent, auch für neue Datenbanken).
     EXTRA_COLUMNS = {
-        "tenant": ["tariff TEXT", "payment_mode TEXT NOT NULL DEFAULT 'statement'", "onboarding_hidden INTEGER NOT NULL DEFAULT 0"],
+        "tenant": ["tariff TEXT", "payment_mode TEXT NOT NULL DEFAULT 'statement'", "onboarding_hidden INTEGER NOT NULL DEFAULT 0",
+                   "trial_started_at REAL"],
         "user": ["notify TEXT", "tour_done_at REAL"],
         "card": ["balance_cents INTEGER NOT NULL DEFAULT 0"],
-        "device": ["offline_notified_at REAL"],
-        "nfc_tap": ["balance_cents INTEGER"],
+        "device": ["offline_notified_at REAL", "gateway_id TEXT", "hw TEXT", "port TEXT", "reader TEXT"],
+        "enrollment": ["station_ids TEXT"],
+        "nfc_tap": ["balance_cents INTEGER", "reader TEXT"],
         "station": ["tariff TEXT", "camera_enabled INTEGER NOT NULL DEFAULT 0", "camera_retention_h INTEGER NOT NULL DEFAULT 24",
                     "camera_approved_by TEXT", "stall_token_hash TEXT", "stall_view_enabled INTEGER NOT NULL DEFAULT 0",
                     "maintenance INTEGER NOT NULL DEFAULT 0", "hours TEXT", "demo_sim INTEGER NOT NULL DEFAULT 0"],

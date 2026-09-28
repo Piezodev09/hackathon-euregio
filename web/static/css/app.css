@@ -229,6 +229,7 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h1[tabindex="-1"]:focus { outline: 
 .calc-row { display: flex; flex-wrap: wrap; gap: 16px 24px; }
 .calc-row input { width: 6em; }
 .calc-result { font-size: 24px; font-weight: 700; margin: 16px 0 4px; }
+.calc-note { margin: 8px 0 0; padding: 10px 12px; border-radius: var(--radius-md); background: var(--surface-raised); border: 1px solid var(--line-strong); }
 .faq { display: grid; gap: 8px; max-width: 80ch; }
 .faq details { background: var(--surface-raised); border: 1px solid var(--line); border-radius: var(--radius-md); padding: 4px 16px; }
 .faq details[open] { padding-bottom: 12px; }
@@ -342,3 +343,44 @@ fieldset.field legend { font-weight: 700; margin-bottom: 8px; }
 .cta-band { background: var(--petrol-soft); border-top: 1px solid var(--line); text-align: center; }
 .cta-band .section-inner { display: grid; justify-items: center; gap: 8px; }
 .cta-band .lead { margin: 0 auto 8px; }
+
+/* ---------- Statistiken ---------- */
+.chart { width: 100%; height: auto; display: block; overflow: visible; }
+.chart .grid-line { stroke: var(--line); stroke-width: 1; }
+.chart .axis { fill: var(--ink-muted); font-size: 12px; font-family: inherit; }
+.chart .line { fill: none; stroke: var(--petrol); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
+.chart .dot { fill: var(--surface-raised); stroke: var(--petrol); stroke-width: 2; }
+.chart .bar { fill: var(--petrol); }
+.chart .nodata { fill: url(#sx-hatch); }
+.chart .hatch-bg { fill: var(--surface-sunken); }
+.chart .hatch-line { stroke: var(--line); stroke-width: 3; }
+.chart-legend { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 8px; color: var(--ink-muted); }
+.chart-legend .key { display: inline-block; width: 18px; height: 12px; vertical-align: middle; border-radius: 2px; }
+.chart-legend .key.line { height: 3px; background: var(--petrol); }
+.key.nodata, .heat-c.nodata { background: repeating-linear-gradient(45deg, var(--surface-sunken) 0 3px, var(--line) 3px 5px); }
+.heat-scroll { overflow-x: auto; padding-bottom: 4px; }
+.heat { display: grid; grid-template-columns: 44px repeat(24, minmax(16px, 1fr)); gap: 2px; min-width: 520px; font-size: 12px; }
+.heat-h { color: var(--ink-muted); text-align: left; }
+.heat-d { color: var(--ink-muted); align-self: center; }
+.heat-c { display: inline-block; min-height: 22px; min-width: 16px; border-radius: 3px; vertical-align: middle; }
+.heat-c.q0 { background: color-mix(in srgb, var(--petrol) 8%, var(--surface-raised)); border: 1px solid var(--line); }
+.heat-c.q1 { background: color-mix(in srgb, var(--petrol) 30%, var(--surface-raised)); }
+.heat-c.q2 { background: color-mix(in srgb, var(--petrol) 52%, var(--surface-raised)); }
+.heat-c.q3 { background: color-mix(in srgb, var(--petrol) 76%, var(--surface-raised)); }
+.heat-c.q4 { background: var(--petrol); }
+.heat-legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 10px; color: var(--ink-muted); }
+.heat-legend .heat-c { min-height: 14px; min-width: 14px; }
+.hbars { display: grid; gap: 8px; }
+.hbar-row { display: grid; grid-template-columns: 88px 1fr 40px; gap: 8px; align-items: center; }
+.hbar-l { color: var(--ink-muted); font-size: 14px; white-space: nowrap; }
+.hbar-track { height: 18px; background: var(--surface-sunken); border-radius: 3px; overflow: hidden; }
+.hbar { display: block; height: 100%; background: var(--petrol); }
+.hbar-v { font-weight: 700; text-align: right; }
+
+/* ---------- Hilfe-Menü ---------- */
+.topbar-actions { margin-left: auto; }
+.help-wrap { position: relative; }
+.help-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 60; min-width: 280px; display: flex; flex-direction: column;
+  background: var(--surface-raised); border: 2px solid var(--line-strong); border-radius: var(--radius-md); box-shadow: var(--shadow-card); padding: 6px; }
+.help-item { text-align: left; font: inherit; color: var(--ink); background: none; border: 0; border-radius: 6px; padding: 10px 12px; min-height: 44px; cursor: pointer; }
+.help-item:hover, .help-item:focus-visible { background: var(--petrol-soft); color: var(--ink); }

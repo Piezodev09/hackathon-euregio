@@ -28,10 +28,15 @@ class Licensing:
             n += 1
         return n
 
+    @staticmethod
+    def trial_start(tenant: sqlite3.Row) -> float:
+        """Beginn der Testphase: erster Wechsel in einen kostenpflichtigen Tarif (ältere Konten: Anlagedatum)."""
+        return tenant["trial_started_at"] or tenant["created_at"]
+
     def license(self, tenant: sqlite3.Row) -> dict:
         plan = get_plan(tenant["plan"])
         lic = self.db.one("SELECT * FROM license WHERE tenant_id = ?", (tenant["id"],))
-        valid_until = lic["valid_until"] if lic else (tenant["created_at"] + plan.trial_days * 86400 if plan.trial_days else None)
+        valid_until = lic["valid_until"] if lic else (self.trial_start(tenant) + plan.trial_days * 86400 if plan.trial_days else None)
         now = self.core.clock()
         return {
             "plan": plan.id,
@@ -45,6 +50,7 @@ class Licensing:
             "base_month_cents": lic["base_month_cents"] if lic and lic["base_month_cents"] is not None else plan.base_month_cents,
             "custom": lic is not None and (lic["price_per_stall_day_cents"] is not None or lic["base_month_cents"] is not None),
             "notes": lic["notes"] if lic else "",
+            "trial_used": tenant["trial_started_at"] is not None or bool(plan.trial_days),
         }
 
     def billable_from(self, tenant: sqlite3.Row) -> str | None:
@@ -53,7 +59,7 @@ class Licensing:
         plan = get_plan(tenant["plan"])
         if not plan.trial_days:
             return None
-        end = tenant["created_at"] + plan.trial_days * 86400
+        end = self.trial_start(tenant) + plan.trial_days * 86400
         lic = self.db.one("SELECT valid_from FROM license WHERE tenant_id = ?", (tenant["id"],))
         if lic:
             end = min(end, lic["valid_from"])
@@ -78,14 +84,23 @@ class Licensing:
                 total += sum(1 for c in stations if billing.day_str(c) <= d)
         return total, len(days)
 
+    def base_days(self, tenant: sqlite3.Row, month: str) -> tuple[int, int]:
+        """(abrechenbare Tage bis heute, Tage des ganzen Monats) für die anteilige Grundgebühr.
+        Nicht abrechenbar sind Tage vor der Anlage der Organisation und in der Testphase."""
+        first = max(self.billable_from(tenant) or "", billing.day_str(tenant["created_at"]))
+        active = [d for d in billing.days_of_month(month, until=self.core.clock()) if d >= first]
+        return len(active), len(billing.days_of_month(month))
+
     def preview(self, tenant: sqlite3.Row, month: str) -> dict:
         lic = self.license(tenant)
         plan = get_plan(tenant["plan"])
         stall_days, days = self.stall_days(tenant, month)
         lines = []
         if lic["base_month_cents"] and stall_days:
-            lines.append({"text": f"Grundgebühr {plan.name} {month}", "qty": 1, "unit_cents": lic["base_month_cents"],
-                          "total_cents": lic["base_month_cents"]})
+            active, month_days = self.base_days(tenant, month)
+            base = round(lic["base_month_cents"] * active / month_days)
+            text = f"Grundgebühr {plan.name} {month}" + ("" if active == month_days else f" (anteilig {active}/{month_days} Tage)")
+            lines.append({"text": text, "qty": 1, "unit_cents": base, "total_cents": base})
         if lic["price_per_stall_day_cents"] and stall_days:
             lines.append({"text": f"Stellplatz-Tage {month}", "qty": stall_days, "unit_cents": lic["price_per_stall_day_cents"],
                           "total_cents": stall_days * lic["price_per_stall_day_cents"]})

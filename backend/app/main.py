@@ -27,8 +27,9 @@ from .licensing import Licensing
 from .notify import Notifier
 from .parking import Parking
 from .reports import Reports
+from .stats import Stats
 from .reservations import Reservations
-from .routes import agent, auth, camera, integrations, onboarding, ops, org, parking, platform, reports, stations
+from .routes import agent, auth, camera, integrations, onboarding, ops, org, parking, platform, reports, stations, stats
 from .snapshots import Snapshots
 from .service import Monitoring
 
@@ -145,6 +146,7 @@ def create_app(settings: Settings | None = None, clock: Callable[[], float] = ti
     app.state.reservations = reservations
     app.state.notifier = notifier
     app.state.reports = reports_
+    app.state.stats = Stats(core, monitoring)
     app.state.integrations = integrations_
     app.state.demo = demo
     app.state.tls = TlsInfo.load(settings.tls_cert_file) if settings.base_url.startswith("https://") else None
@@ -200,7 +202,7 @@ def create_app(settings: Settings | None = None, clock: Callable[[], float] = ti
 
     # ------------------------------------------------------------------ Router
     for r in (auth.router, org.router, stations.router, agent.router, platform.router, parking.router, camera.router,
-              ops.router, reports.router, integrations.router, onboarding.router):
+              ops.router, reports.router, integrations.router, onboarding.router, stats.router):
         app.include_router(r)
 
     @app.get("/health", include_in_schema=False)

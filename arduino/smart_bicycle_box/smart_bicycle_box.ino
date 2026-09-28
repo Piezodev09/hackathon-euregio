@@ -14,6 +14,8 @@
  *
  * Eingabe vom Pi:  "NET 1" / "NET 0"  -> Netzstatus-LED
  *                  "NFC checked_in|checked_out|…" -> kurze Rückmeldung per LED (grün = ok, rot = Fehler)
+ *                  "IDENT"  -> beide LEDs blinken 10 s (Stellplatz vor Ort finden, Befehl aus dem Portal)
+ * Erste Zeile:     {"type":"hello","name":"bike-stall","fw":"0.4.0","nfc":true|false} – daran erkennt der Pi den Arduino
  *
  * !!! ACHTUNG – VOR DER VERDRAHTUNG PRÜFEN !!!
  *   Alle Pinnummern, Sensortypen und Schwellwerte unten sind PLATZHALTER.
@@ -166,8 +168,16 @@ void setLed(uint8_t pin, bool on) {
   else digitalWrite(pin, on ? HIGH : LOW);
 }
 
+unsigned long identUntil = 0;
+
 void updateLeds(unsigned long now) {
   // Nur lokale Zusatzanzeige; der Zustand steht als Wort + Symbol auf dem Display.
+  if (now < identUntil) {  // Identifizieren: beide LEDs abwechselnd, gut sichtbar
+    bool phase = (now / 250) % 2;
+    setLed(LED_FREE_PIN, phase);
+    setLed(LED_OCCUPIED_PIN, !phase);
+    return;
+  }
   if (now < feedbackUntil) {  // kurze NFC-Rückmeldung
     bool blink = (now / 100) % 2;
     setLed(LED_FREE_PIN, feedbackOk && blink);
@@ -195,6 +205,7 @@ void readCommands() {
         feedbackOk = rxLine == "NFC checked_in" || rxLine == "NFC checked_out";
         feedbackUntil = millis() + 1500;
       }
+      else if (rxLine == "IDENT") identUntil = millis() + 10000;
       rxLine = "";
     } else if (rxLine.length() < 32) {
       rxLine += c;
@@ -249,7 +260,12 @@ void setup() {
   if (nfcReady) nfc.SAMConfig();
   Serial.println(nfcReady ? F("{\"type\":\"info\",\"nfc\":\"ok\"}") : F("{\"type\":\"info\",\"nfc\":\"missing\"}"));
 #endif
-  Serial.println(F("{\"type\":\"hello\",\"fw\":\"0.3.0\"}"));
+#ifdef NFC_ENABLED
+  Serial.println(nfcReady ? F("{\"type\":\"hello\",\"name\":\"bike-stall\",\"fw\":\"0.4.0\",\"nfc\":true}")
+                          : F("{\"type\":\"hello\",\"name\":\"bike-stall\",\"fw\":\"0.4.0\",\"nfc\":false}"));
+#else
+  Serial.println(F("{\"type\":\"hello\",\"name\":\"bike-stall\",\"fw\":\"0.4.0\",\"nfc\":false}"));
+#endif
 }
 
 unsigned long lastPresenceRead = 0;

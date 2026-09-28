@@ -32,3 +32,11 @@ footer p { margin: 2px 0; }
 #camera { font-weight: 700; color: var(--warn-ink); }
 .maint.closed { border-color: var(--reserved-line); }
 .maint.offline { border-color: var(--warn-line); background: var(--warn-bg); color: var(--warn-ink); }
+
+/* Übersicht mehrerer Stellplätze am Pi (local-overview.html) */
+.ov-grid { list-style: none; margin: 0; padding: 0; display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); }
+.ov-card { display: grid; grid-template-columns: auto 1fr; grid-template-areas: "sym name" "sym word"; align-items: center; gap: 4px 16px;
+  text-decoration: none; min-height: 0; padding: 20px; }
+.ov-sym { grid-area: sym; font-size: 48px; font-weight: 700; line-height: 1; }
+.ov-name { grid-area: name; font-size: 22px; font-weight: 700; }
+.ov-card .sbb-status__word { grid-area: word; font-size: 30px; margin: 0; }

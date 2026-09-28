@@ -161,11 +161,12 @@ def test_install_script_and_bundle(env):
     assert hashlib.sha256(tgz.content).hexdigest() == b.sha256 == tgz.headers["x-content-sha256"]
     with tarfile.open(fileobj=io.BytesIO(tgz.content), mode="r:gz") as tar:
         names = sorted(m.name for m in tar.getmembers())
-        assert names == sorted(["VERSION", "agent.py", "camera.py", "gateway.py", "sim-camera.jpg", "simulator.py",
+        assert names == sorted(["VERSION", "agent.py", "camera.py", "gateway.py", "hardware.py", "sim-camera.jpg", "simulator.py",
                                 # lokale Offline-Anzeige, flach abgelegt (ältere Agents entpacken nur flache Pakete)
                                 "display.html", "display.js", "display-i18n.js", "display.css", "tokens.css",
                                 "components.css", "fonts.css", "AtkinsonHyperlegible-400.woff2", "AtkinsonHyperlegible-700.woff2",
-                                "AtkinsonHyperlegibleMono.woff2", "OFL-AtkinsonHyperlegible.txt", "icon.svg"])
+                                "AtkinsonHyperlegibleMono.woff2", "OFL-AtkinsonHyperlegible.txt", "icon.svg",
+                                "local-overview.html", "local-overview.js"])
         assert all(m.isfile() and m.mtime == 0 for m in tar.getmembers())
     assert b.sha256 in anon.get("/install/agent.sha256").text
     # Reproduzierbar
@@ -191,7 +192,7 @@ def test_migration_from_schema_2(tmp_path):
     db = Database(p)
     cols = {r[1] for r in db.all("PRAGMA table_info(device)")}
     assert {"hostname", "prev_token_hash", "last_heartbeat_at"} <= cols
-    assert db.scalar("PRAGMA user_version") == 6
+    assert db.scalar("PRAGMA user_version") == 7
 
 
 def test_migration_to_single_stall(tmp_path):
@@ -211,7 +212,7 @@ def test_migration_to_single_stall(tmp_path):
     con.close()
     db = Database(p)
     rows = [tuple(r) for r in db.all("SELECT id, key, position FROM slot")]
-    assert rows == [("b", "A", 1)] and db.scalar("PRAGMA user_version") == 6
+    assert rows == [("b", "A", 1)] and db.scalar("PRAGMA user_version") == 7
 
 
 def test_pinned_install_commands_for_self_signed_cert(env, tmp_path):
@@ -276,3 +277,53 @@ def test_agent_status_for_local_display(env):
     body = c.get("/api/v1/agent/status", headers=h).json()
     assert body["state"] == "free" and "ai" not in body
     assert c.get("/api/v1/agent/status").status_code == 401
+
+
+def test_one_pi_for_several_stalls(env):
+    owner = env.register(plan="school")
+    a, _ = env.station(owner, name="Platz 1")
+    b, _ = env.station(owner, name="Platz 2")
+    r = owner.post("/api/v1/stations/enrollments", {"name": "Pi Hof", "station_ids": [a, b]})
+    assert r.status_code == 201, r.text
+    code = r.json()["code"]
+    # Code erscheint bei beiden Stellplätzen
+    assert owner.get(f"/api/v1/stations/{b}/enrollments").json()["enrollments"][0]["id"] == r.json()["id"]
+    res = env.client().c.post("/api/v1/agent/enroll", json={"code": code, "hostname": "raspi-hof", "agent_version": "1.4.0"}).json()
+    assert [s["station_id"] for s in res["stalls"]] == [a, b] and res["device_id"] == res["stalls"][0]["device_id"]
+    assert res["stalls"][0]["token"] != res["stalls"][1]["token"] and res["gateway_id"].startswith("gw")
+    devs = owner.get("/api/v1/devices").json()["devices"]
+    managed = [d for d in devs if d["managed"]]
+    assert len(managed) == 2 and len({d["gateway_id"] for d in managed}) == 1
+    # jedes Token darf nur seinen Stellplatz beschreiben
+    t1, t2 = res["stalls"][0]["token"], res["stalls"][1]["token"]
+    c = env.client().c
+    assert c.post("/api/v1/measurements", json={"station_id": b, "sequence": 1, "occupied": True, "vibration_score": 0,
+                                                 "sensor_state": "ok"}, headers={"Authorization": f"Bearer {t1}"}).status_code == 403
+    # Heartbeat mit erkannter Hardware, Portal ordnet um (Tausch)
+    hw = {"ports": [{"path": "/dev/serial/by-id/usb-Arduino_A", "kind": "arduino", "firmware": "bike-stall 2.1"},
+                    {"path": "/dev/serial/by-id/usb-1a86_B", "kind": "ch340", "firmware": "bike-stall 2.1"}],
+          "readers": [{"id": "hid:usb-Reader_X", "kind": "hid", "name": "USB Reader"}],
+          "port": "/dev/serial/by-id/usb-Arduino_A", "reader": "hid:usb-Reader_X", "stalls": 2, "kiosk": True}
+    r1 = hb(env, t1, agent_version="1.4.0", hw=hw)
+    assert r1.status_code == 200 and r1.json()["assign"] == {"port": None, "reader": None}
+    r2 = hb(env, t2, agent_version="1.4.0", hw={**hw, "port": "/dev/serial/by-id/usb-1a86_B", "reader": ""})
+    assert r2.status_code == 200
+    d2 = res["stalls"][1]["device_id"]
+    d1 = res["stalls"][0]["device_id"]
+    out = owner.put(f"/api/v1/devices/{d2}/assign", {"port": "/dev/serial/by-id/usb-Arduino_A"})
+    assert out.status_code == 200 and out.json()["assigned_port"] == "/dev/serial/by-id/usb-Arduino_A"
+    assert hb(env, t1, agent_version="1.4.0").json()["assign"]["port"] == "/dev/serial/by-id/usb-1a86_B"
+    assert hb(env, t2, agent_version="1.4.0").json()["assign"]["port"] == "/dev/serial/by-id/usb-Arduino_A"
+    rd = owner.get("/api/v1/readers").json()
+    g = [x for x in rd["gateways"] if x["gateway_id"] == res["gateway_id"]][0]
+    assert g["hostname"] == "raspi-hof" and g["online"] and len(g["stalls"]) == 2
+    assert g["readers"][0]["id"] == "hid:usb-Reader_X" and g["readers"][0]["station_id"] == a
+    # Identifizieren
+    assert owner.post(f"/api/v1/stations/{a}/devices/{d1}/command", {"command": "identify"}).status_code == 200
+    assert "identify" in hb(env, t1, agent_version="1.4.0").json()["commands"]
+    # ungültige Hardware-Angaben werden abgelehnt
+    assert hb(env, t1, hw={"ports": [{"path": "$(reboot)"}]}).status_code == 422
+    assert owner.post("/api/v1/stations/enrollments", {"station_ids": [a, a]}).status_code == 422
+    other = env.register(org="Fremd", email="f@example.org", plan="school")
+    assert other.post("/api/v1/stations/enrollments", {"station_ids": [a]}).status_code == 404
+    assert other.put(f"/api/v1/devices/{d1}/assign", {"port": ""}).status_code == 404

@@ -11,11 +11,13 @@ from pathlib import Path
 
 AGENT_DIR = Path(__file__).resolve().parents[2] / "pi-gateway"
 TEMPLATE = Path(__file__).resolve().parent / "templates" / "install-agent.sh"
-FILES = ("VERSION", "agent.py", "gateway.py", "simulator.py", "camera.py", "sim-camera.jpg")
+FILES = ("VERSION", "agent.py", "gateway.py", "hardware.py", "simulator.py", "camera.py", "sim-camera.jpg")
 # Lokale Anzeige am Pi (Offline-Modus): dieselbe Kiosk-Anzeige wie im Portal, flach im Paket abgelegt.
 WEB_DIR = Path(__file__).resolve().parents[2] / "web"
 DISPLAY_FILES = {
     "display.html": "display.html",
+    "local-overview.html": "local-overview.html",
+    "local-overview.js": "static/js/local-overview.js",
     "display.js": "static/js/display.js",
     "display-i18n.js": "static/js/display-i18n.js",
     "display.css": "static/css/display.css",
