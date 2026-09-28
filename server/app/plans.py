@@ -35,6 +35,8 @@ PLANS: dict[str, Plan] = {
     )
 }
 DEFAULT_PLAN = "free"
+# The operator's own organisation of a self-hosted installation gets every feature.
+SELF_HOSTED_PLAN = "pro"
 
 
 def get_plan(plan_id: str) -> Plan:

@@ -1,4 +1,11 @@
-"""Outgoing e-mail: 'console' for development (log + memory), 'smtp' for production (TLS enforced)."""
+"""Outgoing e-mail.
+
+Backends:
+  * ``console`` - development: logged and kept in memory (tests read ``outbox``)
+  * ``smtp``    - production with a mail server (TLS enforced, sent in the background)
+  * ``none``    - self-hosting without a mail server: nothing is sent, the attempt is audited.
+                  Invitation and reset links are then handed over by an admin (link / QR code).
+"""
 
 from __future__ import annotations
 
@@ -8,6 +15,7 @@ import ssl
 import threading
 from dataclasses import dataclass
 from email.message import EmailMessage
+from typing import Callable
 
 from .config import Settings
 
@@ -22,21 +30,33 @@ class Mail:
 
 
 class Mailer:
-    def __init__(self, settings: Settings):
+    def __init__(self, settings: Settings, audit: Callable[..., None] | None = None):
         self.s = settings
+        self.audit = audit
         self.outbox: list[Mail] = []  # 'console' only: for tests and local development
         self._lock = threading.Lock()
 
-    def send(self, to: str, subject: str, body: str) -> None:
+    @property
+    def enabled(self) -> bool:
+        return self.s.mail_backend != "none"
+
+    def send(self, to: str, subject: str, body: str) -> bool:
+        """Queue an e-mail. Returns False if no e-mail can be delivered (backend ``none``)."""
         mail = Mail(to, subject, body)
+        if self.s.mail_backend == "none":
+            # The body may contain secret links - never log it.
+            if self.audit:
+                self.audit("mail_not_sent", actor="system", target=to, detail={"subject": subject[:120]})
+            return False
         if self.s.mail_backend == "smtp":
             # Send in the background so response times reveal nothing.
             threading.Thread(target=self._smtp, args=(mail,), daemon=True).start()
-            return
+            return True
         with self._lock:
             self.outbox.append(mail)
             del self.outbox[:-100]
         log.info("E-mail (console) to %s: %s\n%s", to, subject, body)
+        return True
 
     def _smtp(self, mail: Mail) -> None:
         msg = EmailMessage()

@@ -9,8 +9,9 @@ environment = "development"
 base_url = "http://127.0.0.1:8000"
 # Allowed Host headers (protection against host header attacks). "*" only for development.
 allowed_hosts = ["127.0.0.1", "localhost"]
-# Allow customers to sign up on their own.
-signup_enabled = true
+# Customer sign-up: "open" (e-mail verification), "approval" (the platform admin approves new
+# organisations) or "closed". Without e-mail (mail.backend = "none") "open" becomes "approval".
+signup = "open"
 product_name = "Smart Bike Station"
 
 [auth]
@@ -31,7 +32,8 @@ reset_token_hours = 1
 invite_token_hours = 72
 
 [mail]
-# "console" (development: e-mails in the log) or "smtp".
+# "console" (development: e-mails in the log), "smtp" or "none" (no mail server: invitation and
+# password-reset links are handed over by an admin as link / QR code).
 backend = "console"
 from = "Smart Bike Station <no-reply@example.org>"
 smtp_host = ""
@@ -67,3 +69,7 @@ device_burst = 60
 auth_per_minute = 10
 # Only set to true behind a trusted reverse proxy that sets X-Forwarded-For.
 trust_proxy = false
+# Certificate of the own CA of a self-hosted installation (agents pin it). Set by install-server.sh.
+ca_file = ""
+# Allow webhooks to private/loopback addresses (LAN self-hosting, e.g. a local Home Assistant).
+webhook_allow_private = false

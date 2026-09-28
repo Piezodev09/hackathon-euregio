@@ -222,3 +222,9 @@ dialog::backdrop { background: rgba(0,0,0,.45); }
 .cmd { display: block; flex: 1 1 320px; white-space: pre-wrap; word-break: break-all; }
 details.advanced { margin-top: 18px; border-top: 1px solid var(--border); padding-top: 12px; }
 details summary { cursor: pointer; font-weight: 600; }
+
+/* ---------- link / QR handover (no mail server) ---------- */
+.handover .handover-body { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-start; }
+.handover .handover-body > div { flex: 1 1 16rem; min-width: 0; }
+.handover .secret-box { overflow-wrap: anywhere; }
+img.qr { background: #fff; padding: 6px; border-radius: 6px; width: 180px; height: 180px; image-rendering: pixelated; }

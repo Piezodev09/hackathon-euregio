@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sqlite3
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable
 
 from fastapi import HTTPException, Request, Response
@@ -30,7 +32,7 @@ class Core:
         self.s = settings
         self.clock = clock
         self.db = Database(settings.db_path)
-        self.mailer = Mailer(settings)
+        self.mailer = Mailer(settings, audit=self.audit)
         self.box = SecretBox(settings.data_key)
         self.ml = MlDetector(settings.model_path)
         self.read_limiter = RateLimiter(settings.read_rate_per_s, settings.read_burst)
@@ -113,6 +115,49 @@ class Core:
             "SELECT * FROM auth_token WHERE token_hash = ? AND purpose = ? AND used_at IS NULL AND expires_at > ?",
             (hash_token(token), purpose, self.clock()),
         )
+
+    # ------------------------------------------------------------------ first-run setup
+    @property
+    def setup_token_path(self) -> Path:
+        return self.s.data_dir / ".setup-token"
+
+    def setup_needed(self) -> bool:
+        return not self.db.scalar("SELECT 1 FROM user WHERE is_platform_admin = 1 LIMIT 1")
+
+    def ensure_setup_token(self) -> str | None:
+        """While no platform admin exists, keep a one-time setup token in the data directory.
+
+        The token lets the operator create the first admin + organisation in the browser
+        (``/app#/setup``) without shell access. It is printed to the log and by install-server.sh
+        and becomes invalid as soon as a platform admin exists.
+        """
+        path = self.setup_token_path
+        if not self.setup_needed():
+            path.unlink(missing_ok=True)
+            return None
+        try:
+            token = path.read_text().strip()
+        except OSError:
+            token = ""
+        if len(token) < 32:
+            token = new_token("bss_")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w") as f:
+                f.write(token + "\n")
+        return token
+
+    def check_setup_token(self, token: str) -> bool:
+        if not self.setup_needed() or not token or len(token) > 200:
+            return False
+        try:
+            expected = self.setup_token_path.read_text().strip()
+        except OSError:
+            return False
+        return bool(expected) and safe_equals(token, expected)
+
+    def finish_setup(self) -> None:
+        self.setup_token_path.unlink(missing_ok=True)
 
     # ------------------------------------------------------------------ tenants
     def tenant_usage(self, tenant_id: str) -> dict:
@@ -219,6 +264,8 @@ def require(min_role: str | None = "viewer", *, platform: bool = False, allow_mf
             return ctx
         if ctx.tenant is None:
             raise HTTPException(403, "forbidden")
+        if ctx.tenant["status"] == "pending":
+            raise HTTPException(403, "tenant_pending")
         if ctx.tenant["status"] != "active":
             raise HTTPException(403, "tenant_suspended")
         if ctx.tenant["mfa_required"] and not u["totp_enabled"] and not allow_mfa_setup:

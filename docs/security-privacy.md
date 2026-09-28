@@ -17,7 +17,10 @@ NIST SP 800-63B for passwords.
 | Two-factor (TOTP) | RFC 6238, ±1 time step, **replay protection** (last step stored), 10 recovery codes (hashed only), can be required per organisation, mandatory for platform admins | `totp_verify`, `mfa/*` |
 | 2FA secret at rest | AES-256-GCM with associated data (user ID) – stealing the database alone is not enough | `SecretBox` |
 | Password reset | one-time token, valid 1 h, ends all sessions, notification | `password/reset` |
-| Security notifications | e-mails on lock-out, password change, 2FA on/off, use of a recovery code | |
+| Security notifications | e-mails on lock-out, password change, 2FA on/off, use of a recovery code (without a mail server: audited as `mail_not_sent`) | |
+| First-run setup | one-time setup token (256 bit, file mode 0600 in the data directory, printed by the installer); invalid as soon as a platform admin exists; the first admin must set up 2FA | `routes/auth.py::setup` |
+| Links without e-mail | invitation / reset links are shown only to the admin who created them (reset: admins only for lower roles, owners for everybody but themselves), single use, audited; 2FA stays active after a reset | `routes/org.py` |
+| Sign-up approval | without verifiable e-mail new organisations stay `pending` until the platform admin approves them | `routes/platform.py` |
 
 ### Sessions
 | Measure | Implementation |
@@ -47,7 +50,9 @@ NIST SP 800-63B for passwords.
 ### Transport, headers, input
 | Measure | Implementation |
 |---|---|
-| TLS | HTTPS mandatory in `production` (start is refused otherwise); HSTS 2 years incl. subdomains |
+| TLS | HTTPS mandatory in `production` (start is refused otherwise); HSTS 2 years incl. subdomains. Self-hosted: own CA (EC P-256), server certificate with IP SANs; agents pin the CA (embedded in the install script or verified by SHA-256 fingerprint) |
+| Several access hosts | the origin check accepts exactly the configured hosts (IP, host name, `bikestation.local`) with the scheme/port of the base URL |
+| HTTP | port 80 only redirects to HTTPS, to allowed hosts only (no open redirect) |
 | Content Security Policy | `default-src 'none'; script-src 'self'; style-src 'self'; frame-ancestors 'none'; base-uri 'none'; object-src 'none'` – no inline JS/CSS |
 | Other headers | `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Permissions-Policy` (camera, microphone, location … off), COOP/CORP `same-origin`, `Cache-Control: no-store` for API and pages, `X-Request-ID` |
 | Host header | `TrustedHostMiddleware` with an allow list |
@@ -59,7 +64,8 @@ NIST SP 800-63B for passwords.
 | `security.txt` | `/.well-known/security.txt` for vulnerability reports |
 
 ### Operation
-- Insecure configurations are rejected in `production` (HTTP, `*` hosts, weak scrypt factor, missing data key).
+- Insecure configurations are rejected in `production` (HTTP, `*` hosts, console mail, SMTP without host, weak scrypt factor, missing data key, base URL host not allowed). IP URLs, an own CA and `mail_backend = "none"` are allowed.
+- The service only has `CAP_NET_BIND_SERVICE` (port 443) and writes only to its data directory.
 - Database file `0600`, `secure_delete`, systemd hardening (`NoNewPrivileges`, `ProtectSystem=strict`, …), nftables example.
 - Audit log per tenant (sign-ins, failures, roles, tokens, plan, export, acknowledgements …) and platform-wide.
 - Automatic deletion: measurements/events after the plan period (7/30/90 days), audit log after 365 days, expired sessions/tokens.

@@ -8,7 +8,7 @@ import * as S from "./views-station.js";
 import * as M from "./views-admin.js";
 
 const root = document.getElementById("root");
-const PUBLIC = new Set(["login", "register", "check-email", "verify", "forgot", "reset", "invite"]);
+const PUBLIC = new Set(["login", "register", "check-email", "pending", "verify", "forgot", "reset", "invite", "setup"]);
 
 function parseHash() {
   const raw = location.hash.replace(/^#\/?/, "");
@@ -79,9 +79,10 @@ export async function route() {
     const rerender = () => route();
     const views = { login: () => A.viewLogin(rerender), register: () => A.viewRegister(rerender), "check-email": () => A.viewCheckEmail(rerender),
       verify: () => A.viewVerify(params, rerender), forgot: () => A.viewForgot(rerender), reset: () => A.viewReset(params, rerender),
-      invite: () => A.viewInvite(params, rerender) };
+      invite: () => A.viewInvite(params, rerender), pending: () => A.viewPending(params, rerender),
+      setup: () => A.viewSetup(params, rerender) };
     clear(root, views[name]());
-    document.title = t("auth." + (name === "login" ? "login_title" : name === "register" ? "register_title" : "login_title"));
+    document.title = `${root.querySelector("h1")?.textContent || t("auth.login_title")} · ${A.getMeta().product_name}`;
     root.querySelector("h1")?.focus();
     return;
   }
@@ -156,4 +157,7 @@ setAuthLostHandler((err) => {
 
 window.addEventListener("hashchange", route);
 document.documentElement.lang = getLang();
-A.loadMeta().then(() => { if (!location.hash) location.hash = "#/"; else route(); });
+A.loadMeta().then((m) => {
+  if (!location.hash) location.hash = m.setup_required ? "#/setup" : "#/";
+  else route();
+});

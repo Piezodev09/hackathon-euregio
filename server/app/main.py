@@ -19,7 +19,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from .config import Settings, load_settings
 from .core import Core
-from .agent_bundle import AgentBundle
+from .agent_bundle import AgentBundle, ca_fingerprint
 from .routes import agent, auth, org, platform, stations
 from .service import Monitoring
 
@@ -93,10 +93,19 @@ def create_app(settings: Settings | None = None, clock: Callable[[], float] = ti
                   docs_url=None, redoc_url=None, openapi_url=None)  # no public API docs / debug output
     app.state.core = core
     app.state.monitoring = monitoring
-    app.state.agent_bundle = AgentBundle.build(settings.base_url)
+    ca_pem = settings.ca_file.read_text() if settings.ca_file else ""
+    app.state.ca_pem = ca_pem
+    app.state.ca_fingerprint = ca_fingerprint(ca_pem) if ca_pem else None
+    app.state.agent_bundle = AgentBundle.build(settings.base_url, ca_pem=ca_pem)
     log.info("Agent package %s ready (sha256 %s)", app.state.agent_bundle.version, app.state.agent_bundle.sha256[:12])
+    setup_token = core.ensure_setup_token()
+    if setup_token:
+        log.warning("No platform admin yet. Finish the setup in the browser: %s/app#/setup?token=%s "
+                    "(token file: %s)", settings.base_url, setup_token, core.setup_token_path)
 
-    # ------------------------------------------------------------------ Middlewares
+    allowed_origins = settings.allowed_origins
+
+    # ------------------------------------------------------------------ middlewares
     @app.middleware("http")
     async def security_middleware(request: Request, call_next):
         request_id = secrets.token_hex(8)
@@ -105,7 +114,7 @@ def create_app(settings: Settings | None = None, clock: Callable[[], float] = ti
         if request.method in UNSAFE and path.startswith("/api/") and not path.startswith(DEVICE_PATHS):
             origin = request.headers.get("origin")
             site = request.headers.get("sec-fetch-site")
-            if (origin and origin != settings.origin) or site == "cross-site":
+            if (origin and origin not in allowed_origins) or site == "cross-site":
                 return JSONResponse({"detail": "origin_rejected"}, 403)
         try:
             response = await call_next(request)
@@ -143,7 +152,7 @@ def create_app(settings: Settings | None = None, clock: Callable[[], float] = ti
         log.exception("Unhandled error at %s %s", request.method, request.url.path)
         return JSONResponse({"detail": "internal_error"}, 500)
 
-    # ------------------------------------------------------------------ Router
+    # ------------------------------------------------------------------ routers
     for r in (auth.router, org.router, stations.router, agent.router, platform.router):
         app.include_router(r)
 
@@ -156,8 +165,10 @@ def create_app(settings: Settings | None = None, clock: Callable[[], float] = ti
     def meta():
         from .plans import PLANS
 
-        return {"product_name": settings.product_name, "signup_enabled": settings.signup_enabled,
-                "plans": [p.to_dict() for p in PLANS.values()], "password_min_length": settings.password_min_length}
+        return {"product_name": settings.product_name, "signup": settings.signup,
+                "signup_enabled": settings.signup != "closed", "mail_enabled": settings.mail_enabled,
+                "setup_required": core.setup_needed(), "plans": [p.to_dict() for p in PLANS.values()],
+                "password_min_length": settings.password_min_length}
 
     # ------------------------------------------------------------------ web pages
     if WEB_DIR.exists():

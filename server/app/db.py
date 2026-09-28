@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS tenant (
     id              TEXT PRIMARY KEY,
     name            TEXT NOT NULL,
     plan            TEXT NOT NULL DEFAULT 'free',
-    status          TEXT NOT NULL DEFAULT 'active',      -- active | suspended
+    status          TEXT NOT NULL DEFAULT 'active',      -- active | pending (awaiting approval) | suspended
     mfa_required    INTEGER NOT NULL DEFAULT 0,
     created_at      REAL NOT NULL
 );

@@ -46,13 +46,21 @@ def install_info(request: Request) -> dict:
     core = core_of(request)
     b = bundle(request)
     url = f"{core.s.base_url}/install/agent.sh"
+    fingerprint = request.app.state.ca_fingerprint
+    # With an own CA the Pi does not trust the platform yet: the script is fetched without TLS
+    # verification, but the checksum below (shown over the admin's HTTPS session) pins it, and the
+    # script itself embeds the CA for every further connection.
+    download = f"curl -fsSLk -o agent.sh {url}" if fingerprint else f"curl -fsSLO {url}"
     return {
         "version": b.version,
         "script_url": url,
         "script_sha256": b.script_sha256,
         "bundle_sha256": b.sha256,
+        "ca_fingerprint": fingerprint,
+        "ca_url": f"{core.s.base_url}/install/ca.crt" if fingerprint else None,
+        "platform_url": core.s.base_url,
         "commands": {
-            "download": f"curl -fsSLO {url}",
+            "download": download,
             "verify": f"echo '{b.script_sha256}  agent.sh' | sha256sum -c -",
         },
     }
@@ -91,6 +99,17 @@ def install_bundle(request: Request):
                              "X-Content-SHA256": b.sha256, "X-Agent-Version": b.version})
 
 
+@router.get("/install/ca.crt", include_in_schema=False)
+def install_ca(request: Request):
+    """CA certificate of a self-hosted platform (public data). Verify its fingerprint before trusting it."""
+    pem = request.app.state.ca_pem
+    if not pem:
+        raise HTTPException(404, "not_found")
+    return Response(pem, media_type="application/x-pem-file",
+                    headers={"Content-Disposition": 'attachment; filename="bike-station-ca.crt"',
+                             "X-Certificate-SHA256": request.app.state.ca_fingerprint.replace(":", "").lower()})
+
+
 @router.get("/install/agent.sha256", include_in_schema=False)
 def install_sha(request: Request):
     b = bundle(request)
@@ -118,7 +137,10 @@ def create_enrollment(station_id: str, body: EnrollmentIn, request: Request, ctx
     core.audit("enrollment_created", tenant_id=ctx.tenant_id, user_id=ctx.user["id"], actor=ctx.actor, ip=ctx.ip, target=st["id"])
     info = install_info(request)
     info["commands"]["install"] = f"sudo sh agent.sh --code {code}"
-    info["commands"]["oneliner"] = f"curl -fsSL {info['script_url']} | sudo sh -s -- --code {code}"
+    if info["ca_fingerprint"]:
+        info["commands"]["oneliner"] = None  # an unverified pipe into sh would defeat the pinning
+    else:
+        info["commands"]["oneliner"] = f"curl -fsSL {info['script_url']} | sudo sh -s -- --code {code}"
     return {"id": eid, "code": code, "expires_at": iso(now + CODE_LIFETIME_S), "install": info}
 
 

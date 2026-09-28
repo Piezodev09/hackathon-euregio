@@ -1,8 +1,9 @@
 // Administration: team, account & security, organisation, plan, audit log, platform.
 import { api, get, post, patch, del, describeError, setCsrf } from "./api.js";
-import { getLang, setLang, t, STRINGS } from "./i18n.js";
-import { el, clear, field, toast, confirmDialog, fmtDateTime, fmtMoney, copyText, passwordMeter } from "./ui.js";
+import { getLang, setLang, t, LANGS } from "./i18n.js";
+import { el, clear, field, toast, confirmDialog, fmtDateTime, fmtMoney, copyText, passwordMeter, linkHandover } from "./ui.js";
 import { state, can, go } from "./state.js";
+import { getMeta } from "./views-auth.js";
 
 const errorCard = (e) => el("div", { class: "alert-box error", role: "alert" }, describeError(e));
 const th = (...hs) => el("thead", {}, el("tr", {}, hs.map((h) => el("th", { scope: "col" }, h))));
@@ -37,7 +38,10 @@ async function refreshMe() {
 export function viewTeam() {
   const users = el("div", { class: "card" }, t("c.loading"));
   const invites = el("div");
+  const handover = el("div");
   const myRank = RANK[state.me.user.role];
+  // Admins may reset lower roles, owners anybody (except themselves - they use "change password").
+  const resettable = (u) => RANK[u.role] < myRank || state.me.user.role === "owner";
 
   const load = async () => {
     try {
@@ -57,10 +61,19 @@ export function viewTeam() {
             el("td", {}, u.email), el("td", {}, role),
             el("td", {}, u.mfa_enabled ? el("span", { class: "badge ok" }, "✓ 2FA") : el("span", { class: "badge warn" }, "–")),
             el("td", {}, fmtDateTime(u.last_login_at)),
-            el("td", {}, manageable ? el("button", { class: "btn small danger", type: "button", onclick: async () => {
-              if (!(await confirmDialog(t("tm.remove_confirm", { email: u.email }), { danger: true }))) return;
-              try { await del(`/api/v1/org/users/${u.id}`); load(); } catch (e) { toast(describeError(e), "error"); }
-            } }, t("tm.remove")) : "–"));
+            el("td", {}, manageable ? el("div", { class: "btn-row" },
+              resettable(u) ? el("button", { class: "btn small", type: "button", onclick: async () => {
+                if (!(await confirmDialog(t("tm.reset_confirm", { email: u.email })))) return;
+                try {
+                  const r = await post(`/api/v1/org/users/${u.id}/reset-link`);
+                  clear(handover, linkHandover(t("tm.reset_title", { email: u.email }), r, t("tm.reset_hint")));
+                  handover.scrollIntoView({ block: "nearest" });
+                } catch (e) { toast(describeError(e), "error"); }
+              } }, t("tm.reset_link")) : null,
+              el("button", { class: "btn small danger", type: "button", onclick: async () => {
+                if (!(await confirmDialog(t("tm.remove_confirm", { email: u.email }), { danger: true }))) return;
+                try { await del(`/api/v1/org/users/${u.id}`); load(); } catch (e) { toast(describeError(e), "error"); }
+              } }, t("tm.remove"))) : "–"));
         })))));
       if (can("admin")) {
         const { invitations } = await get("/api/v1/org/invitations");
@@ -80,15 +93,20 @@ export function viewTeam() {
     const role = el("select", {}, ["viewer", "operator", "admin"].filter((r) => RANK[r] <= myRank)
       .map((r) => el("option", { value: r }, `${t("role." + r)} – ${t("role.d_" + r)}`)));
     inviteForm = onSubmit(el("form", { class: "card" }, el("h2", {}, t("tm.invite")), el("div", { class: "grid cols-2" },
-      field(t("c.email"), email), field(t("c.role"), role)), el("button", { class: "btn primary", type: "submit" }, t("tm.invite_btn"))), async () => {
-      await post("/api/v1/org/invitations", { email: email.value, role: role.value });
-      toast(t("tm.invited"));
+      field(t("c.email"), email), field(t("c.role"), role)), el("button", { class: "btn primary", type: "submit" }, t(getMeta().mail_enabled ? "tm.invite_btn" : "tm.invite_btn_link"))), async () => {
+      const r = await post("/api/v1/org/invitations", { email: email.value, role: role.value });
+      if (r.delivery === "link") {
+        clear(handover, linkHandover(t("tm.invite_link_title", { email: email.value }), r, t("tm.invite_link_hint")));
+      } else {
+        clear(handover);
+        toast(t("tm.invited"));
+      }
       email.value = "";
       load();
     });
   }
   load();
-  return el("div", {}, users, invites, inviteForm);
+  return el("div", {}, handover, users, invites, inviteForm);
 }
 
 // ---------------------------------------------------------------------- account & security
@@ -97,11 +115,12 @@ export function viewSecurity(rerender) {
   const node = el("div");
   const minLen = 12;
 
-  const banner = me.mfa_setup_required ? el("div", { class: "alert-box warn", role: "alert" }, t("sec.banner")) : null;
+  const platformRule = me.user.is_platform_admin && !me.tenant?.mfa_required;
+  const banner = me.mfa_setup_required ? el("div", { class: "alert-box warn", role: "alert" }, t(platformRule ? "sec.banner_platform" : "sec.banner")) : null;
 
   // profile
   const name = el("input", { type: "text", value: me.user.name, maxlength: "100", required: true });
-  const lang = el("select", {}, Object.keys(STRINGS).map((l) => el("option", { value: l, selected: l === getLang() }, l.toUpperCase())));
+  const lang = el("select", {}, LANGS.map((l) => el("option", { value: l, selected: l === getLang() }, l.toUpperCase())));
   const profile = onSubmit(el("form", { class: "card" }, el("h2", {}, t("sec.profile")),
     el("p", { class: "muted" }, `${me.user.email} · ${t("role." + me.user.role)}`),
     el("div", { class: "grid cols-2" }, field(t("c.name"), name), field(t("c.language"), lang)),
@@ -317,32 +336,48 @@ export function viewAudit() {
 // ---------------------------------------------------------------------- platform
 export function viewPlatform() {
   const kpis = el("div", { class: "grid cols-4" });
+  const handover = el("div");
   const table = el("div", { class: "card" }, t("c.loading"));
+  const setStatus = async (tn, status, confirmText) => {
+    if (confirmText && !(await confirmDialog(confirmText, { danger: status === "suspended" }))) return;
+    try { await patch(`/api/v1/platform/tenants/${tn.id}`, { status }); toast(t("c.saved")); load(); }
+    catch (e) { toast(describeError(e), "error"); }
+  };
+  const statusBadge = (s) => s === "active" ? el("span", { class: "badge ok" }, t("pf.active_s"))
+    : s === "pending" ? el("span", { class: "badge warn" }, t("pf.pending_s")) : el("span", { class: "badge err" }, t("pf.suspended"));
   const load = async () => {
     try {
       const [stats, { tenants }] = await Promise.all([get("/api/v1/platform/stats"), get("/api/v1/platform/tenants")]);
       const k = (v, l) => el("div", { class: "card kpi" }, el("span", { class: "value" }, String(v)), el("span", { class: "label" }, l));
-      clear(kpis, k(stats.tenants, t("pf.tenants")), k(stats.active_tenants, t("pf.active")), k(fmtMoney(stats.mrr_eur), t("pf.mrr")),
-        k(stats.users, t("pf.users")), k(stats.stations, t("ov.stations")), k(stats.devices_online, t("pf.devices_online")),
-        k(stats.measurements_24h, t("pf.meas24")));
+      clear(kpis, k(stats.tenants, t("pf.tenants")), k(stats.active_tenants, t("pf.active")), k(stats.pending_tenants, t("pf.pending")),
+        k(fmtMoney(stats.mrr_eur), t("pf.mrr")), k(stats.users, t("pf.users")), k(stats.stations, t("ov.stations")),
+        k(stats.devices_online, t("pf.devices_online")), k(stats.measurements_24h, t("pf.meas24")));
+      const own = state.me.tenant?.id;
       clear(table, el("h2", {}, t("pf.tenants")), el("div", { class: "table-wrap" }, el("table", {},
         th(t("org.name"), t("pf.owner"), t("pf.plan"), t("c.status"), t("ov.stations"), t("pf.users"), t("c.created"), t("c.actions")),
         el("tbody", {}, tenants.map((tn) => el("tr", {},
           el("td", {}, tn.name, el("div", { class: "mono small muted" }, tn.id)), el("td", {}, tn.owner_email || "–"),
-          el("td", {}, el("select", { "aria-label": t("pf.plan"), onchange: async (ev) => {
+          el("td", {}, el("select", { "aria-label": `${t("pf.plan")} ${tn.name}`, onchange: async (ev) => {
             try { await patch(`/api/v1/platform/tenants/${tn.id}`, { plan: ev.target.value }); toast(t("c.saved")); } catch (e) { toast(describeError(e), "error"); }
             load();
           } }, ["free", "school", "pro"].map((p) => el("option", { value: p, selected: p === tn.plan }, p)))),
-          el("td", {}, tn.status === "active" ? el("span", { class: "badge ok" }, t("pf.active_s")) : el("span", { class: "badge err" }, t("pf.suspended"))),
+          el("td", {}, statusBadge(tn.status)),
           el("td", {}, String(tn.usage.stations)), el("td", {}, String(tn.usage.users)), el("td", {}, fmtDateTime(tn.created_at)),
-          el("td", {}, el("button", { class: `btn small${tn.status === "active" ? " danger" : ""}`, type: "button", onclick: async () => {
-            const suspend = tn.status === "active";
-            if (suspend && !(await confirmDialog(t("pf.suspend_confirm", { name: tn.name }), { danger: true }))) return;
-            try { await patch(`/api/v1/platform/tenants/${tn.id}`, { status: suspend ? "suspended" : "active" }); load(); }
-            catch (e) { toast(describeError(e), "error"); }
-          } }, tn.status === "active" ? t("pf.suspend") : t("pf.activate")))))))));
+          el("td", {}, el("div", { class: "btn-row" },
+            tn.status === "pending" ? el("button", { class: "btn small primary", type: "button",
+              onclick: () => setStatus(tn, "active", t("pf.approve_confirm", { name: tn.name })) }, t("pf.approve")) : null,
+            tn.status === "active" && tn.id !== own ? el("button", { class: "btn small danger", type: "button",
+              onclick: () => setStatus(tn, "suspended", t("pf.suspend_confirm", { name: tn.name })) }, t("pf.suspend")) : null,
+            tn.status === "suspended" ? el("button", { class: "btn small", type: "button", onclick: () => setStatus(tn, "active") }, t("pf.activate")) : null,
+            tn.owner_email && tn.id !== own ? el("button", { class: "btn small", type: "button", onclick: async () => {
+              if (!(await confirmDialog(t("tm.reset_confirm", { email: tn.owner_email })))) return;
+              try {
+                const r = await post(`/api/v1/platform/tenants/${tn.id}/owner-reset-link`);
+                clear(handover, linkHandover(t("tm.reset_title", { email: r.email }), r, t("tm.reset_hint")));
+              } catch (e) { toast(describeError(e), "error"); }
+            } }, t("tm.reset_link")) : null))))))));
     } catch (e) { clear(table, errorCard(e)); }
   };
   load();
-  return el("div", {}, kpis, table);
+  return el("div", {}, kpis, handover, table);
 }

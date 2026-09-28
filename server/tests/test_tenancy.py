@@ -19,7 +19,7 @@ def test_tenants_cannot_see_each_other(env):
     for url in (f"/api/v1/stations/{sid_a}", f"/api/v1/stations/{sid_a}/status", f"/api/v1/stations/{sid_a}/devices",
                 f"/api/v1/stations/{sid_a}/occupancy"):
         assert b.get(url).status_code == 404, url
-    assert b.patch(f"/api/v1/stations/{sid_a}", {"name": "gekapert"}).status_code == 404
+    assert b.patch(f"/api/v1/stations/{sid_a}", {"name": "hijacked"}).status_code == 404
     assert b.delete(f"/api/v1/stations/{sid_a}").status_code == 404
     assert b.post(f"/api/v1/stations/{sid_a}/devices", {"name": "x"}).status_code == 404
     env.core.db.execute("INSERT INTO event (id, tenant_id, station_id, slot_id, kind, severity, occurred_at) "

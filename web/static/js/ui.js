@@ -1,5 +1,5 @@
 // DOM helpers without innerHTML (XSS-safe: all content as text/nodes), toasts, dialogs, formatting.
-import { getLang, setLang, t, STRINGS } from "./i18n.js";
+import { getLang, setLang, t, LANGS } from "./i18n.js";
 
 export function el(tag, attrs, ...children) {
   const e = document.createElement(tag);
@@ -61,7 +61,7 @@ export async function copyText(text) {
 
 export function langSwitcher(onChange) {
   const nav = el("div", { class: "lang", role: "group", "aria-label": "Sprache / Taal / Language" });
-  const render = () => clear(nav, Object.keys(STRINGS).map((l) =>
+  const render = () => clear(nav, LANGS.map((l) =>
     el("button", { type: "button", lang: l, "aria-pressed": String(l === getLang()),
       onclick: () => { setLang(l); render(); onChange && onChange(l); } }, l.toUpperCase())));
   render();
@@ -97,4 +97,17 @@ export function field(labelText, input, hint) {
 
 export function slotSymbol(state) {
   return { free: "✓", occupied: "■", unknown: "?" }[state] || "?";
+}
+
+// One-time link handed over in person (no mail server): link, copy button and QR code to scan.
+export function linkHandover(title, data, hint) {
+  const img = el("img", { class: "qr", src: data.qr, alt: t("c.qr_alt"), width: "180", height: "180" });
+  return el("div", { class: "alert-box info handover", role: "status" },
+    el("h3", {}, title),
+    hint ? el("p", {}, hint) : null,
+    el("div", { class: "handover-body" }, img,
+      el("div", {},
+        el("p", { class: "secret-box mono small" }, data.link),
+        el("div", { class: "btn-row" }, el("button", { class: "btn small", type: "button", onclick: () => copyText(data.link) }, t("c.copy"))),
+        data.expires_at ? el("p", { class: "small muted" }, t("c.valid_until", { t: fmtDateTime(data.expires_at) })) : null)));
 }

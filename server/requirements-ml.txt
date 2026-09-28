@@ -1,0 +1,3 @@
+# Only for the AI feature (loading the Isolation Forest model). Everything else works without these.
+scikit-learn>=1.3
+joblib>=1.3

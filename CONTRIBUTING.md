@@ -18,7 +18,8 @@ Shell scripts must pass `sh -n` / `bash -n` and [ShellCheck](https://www.shellch
 (`pip install shellcheck-py`):
 
 ```bash
-shellcheck scripts/*.sh deploy/*.sh
+shellcheck scripts/*.sh deploy/*.sh deploy/proxmox/*.sh
+bash deploy/proxmox/selftest.sh     # create-lxc.sh against fake Proxmox commands
 ```
 
 The install script for the Pi is a template; render and check it with:
@@ -52,10 +53,10 @@ Run everything locally without hardware: `scripts/dev.sh` (see README).
 - Portal and landing page: `web/static/js/i18n.js`. English (`en`) is the reference; every key must
   exist in `en`, `de` and `nl`. Missing keys fall back to English.
 - Kiosk display: `web/static/js/display-i18n.js` (same rule).
-- Check that all languages have the same keys:
+- Check that all languages have the same keys and every `t("…")` used in the code exists:
 
   ```bash
-  node -e 'import("./web/static/js/i18n.js").then(({STRINGS})=>{const k=Object.keys(STRINGS.en);for(const[l,s]of Object.entries(STRINGS))console.log(l,k.filter(x=>!(x in s)))})'
+  node scripts/check-i18n.mjs
   ```
 
 - A new language: add a block to both files and the language code to `Locale` in

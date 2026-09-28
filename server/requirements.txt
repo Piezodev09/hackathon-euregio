@@ -1,7 +1,6 @@
 fastapi>=0.110,<1
 uvicorn>=0.27
-# AES-GCM for encrypted 2FA secrets (required)
+# AES-GCM for encrypted 2FA / webhook secrets (required)
 cryptography>=41
-# Only for the AI feature (loading the model). Everything except the AI works without these.
-scikit-learn>=1.3
-joblib>=1.3
+# QR codes (pure Python, MIT) for handing over links without e-mail
+segno>=1.5

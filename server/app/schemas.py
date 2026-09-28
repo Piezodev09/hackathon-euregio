@@ -118,6 +118,15 @@ class PasswordConfirmIn(Strict):
     password: Password
 
 
+class SetupIn(Strict):
+    token: Token
+    org_name: Name
+    name: Name
+    email: Email
+    password: Password
+    locale: Locale = "en"
+
+
 class InviteAcceptIn(Strict):
     token: Token
     name: Name
@@ -184,5 +193,5 @@ class DeviceIn(Strict):
 
 # ---------------------------------------------------------------------- platform
 class TenantPatch(Strict):
-    status: Literal["active", "suspended"] | None = None
+    status: Literal["active", "suspended"] | None = None  # "active" also approves a pending organisation
     plan: Annotated[str, Field(pattern=r"^[a-z]{1,20}$")] | None = None

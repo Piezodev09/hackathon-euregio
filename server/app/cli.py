@@ -40,6 +40,7 @@ def create_platform_admin(core: Core, email: str, name: str) -> None:
         "VALUES (?, NULL, ?, ?, 'platform', ?, ?, 1, ?, ?)",
         (new_id("usr"), email, name, _password(core, email, name), now, now, now))
     core.audit("platform_admin_created", actor="cli", target=email)
+    core.finish_setup()  # the browser setup link is no longer needed
     print(f"Platform admin {email} created. Two-factor sign-in must be set up at the first login.")
 
 

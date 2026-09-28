@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 
 from ..core import Core, Ctx, client_ip, core_of, limit, load_ctx, require
 from ..mailer import link
-from ..plans import DEFAULT_PLAN, get_plan
+from ..plans import DEFAULT_PLAN, SELF_HOSTED_PLAN, get_plan
 from ..schemas import (
     CodeIn,
     EmailIn,
@@ -21,6 +21,7 @@ from ..schemas import (
     ProfilePatch,
     RegisterIn,
     ResetIn,
+    SetupIn,
     TokenIn,
 )
 from ..security import (
@@ -127,9 +128,12 @@ def _register_failure(core: Core, user, ip: str) -> None:
 @router.post("/register", status_code=202, dependencies=[mail_limit])
 def register(body: RegisterIn, request: Request):
     core = core_of(request)
-    if not core.s.signup_enabled:
+    mode = core.s.signup
+    if mode == "closed":
         raise HTTPException(403, "signup_disabled")
     check_password(core, body.password, body.email, body.name)
+    # The response only depends on the configuration, never on whether the address exists.
+    result = {"status": "pending_approval" if mode == "approval" else "check_email", "verify_email": core.mailer.enabled}
     existing = core.db.one("SELECT id FROM user WHERE email = ?", (body.email,))
     if existing:
         # No account enumeration: same response, a notice goes to the account owner instead.
@@ -140,28 +144,30 @@ def register(body: RegisterIn, request: Request):
             "Someone tried to sign up with this e-mail address, but an account already exists.\n"
             f"If you forgot your password: {core.s.base_url}/app#/forgot",
         )
-        return {"status": "check_email"}
+        return result
     now = core.clock()
     tenant_id = new_id("org")
     user_id = new_id("usr")
     pw = hash_password(body.password, core.s.scrypt_n)
     with core.db.tx() as c:
         c.execute("INSERT INTO tenant (id, name, plan, status, created_at) VALUES (?,?,?,?,?)",
-                  (tenant_id, body.org_name, DEFAULT_PLAN, "active", now))
+                  (tenant_id, body.org_name, DEFAULT_PLAN, "pending" if mode == "approval" else "active", now))
         c.execute(
             "INSERT INTO user (id, tenant_id, email, name, role, password_hash, locale, created_at, password_changed_at) "
             "VALUES (?,?,?,?,?,?,?,?,?)",
             (user_id, tenant_id, body.email, body.name, "owner", pw, body.locale, now, now),
         )
-    token = core.issue_token("verify", core.s.verify_token_s, user_id=user_id, email=body.email)
-    core.mailer.send(
-        body.email,
-        f"{core.s.product_name}: confirm your e-mail address",
-        f"Welcome to {core.s.product_name}!\n\nPlease confirm your e-mail address:\n"
-        f"{link(core.s, 'verify', token)}\n\nThe link is valid for {int(core.s.verify_token_s // 3600)} hours.",
-    )
-    core.audit("tenant_registered", tenant_id=tenant_id, user_id=user_id, actor=body.email, ip=client_ip(request))
-    return {"status": "check_email"}
+    if core.mailer.enabled:
+        token = core.issue_token("verify", core.s.verify_token_s, user_id=user_id, email=body.email)
+        core.mailer.send(
+            body.email,
+            f"{core.s.product_name}: confirm your e-mail address",
+            f"Welcome to {core.s.product_name}!\n\nPlease confirm your e-mail address:\n"
+            f"{link(core.s, 'verify', token)}\n\nThe link is valid for {int(core.s.verify_token_s // 3600)} hours.",
+        )
+    core.audit("tenant_registered", tenant_id=tenant_id, user_id=user_id, actor=body.email, ip=client_ip(request),
+               detail={"approval_required": mode == "approval"})
+    return result
 
 
 @router.post("/verify-email", dependencies=[auth_limit])
@@ -179,7 +185,7 @@ def verify_email(body: TokenIn, request: Request):
 def resend_verification(body: EmailIn, request: Request):
     core = core_of(request)
     user = core.db.one("SELECT * FROM user WHERE email = ?", (body.email.strip().lower(),))
-    if user and not user["email_verified_at"]:
+    if user and not user["email_verified_at"] and core.mailer.enabled:
         token = core.issue_token("verify", core.s.verify_token_s, user_id=user["id"], email=user["email"])
         core.mailer.send(user["email"], f"{core.s.product_name}: confirm your e-mail address",
                          f"Please confirm your e-mail address:\n{link(core.s, 'verify', token)}")
@@ -205,6 +211,9 @@ def login(body: LoginIn, request: Request, response: Response):
         else:
             core.audit("login_blocked_locked", tenant_id=user["tenant_id"], user_id=user["id"], actor=user["email"], ip=ip)
         raise HTTPException(401, "invalid_credentials")  # same response, also when locked
+    # Only revealed after the correct password: the organisation still awaits approval.
+    if user["tenant_id"] and core.db.scalar("SELECT status FROM tenant WHERE id = ?", (user["tenant_id"],)) == "pending":
+        raise HTTPException(403, "pending_approval")
     if not user["email_verified_at"]:
         raise HTTPException(403, "email_not_verified")
     if needs_rehash(user["password_hash"], core.s.scrypt_n):
@@ -295,6 +304,9 @@ def delete_account(body: PasswordConfirmIn, request: Request, response: Response
 @router.post("/password/forgot", status_code=202, dependencies=[mail_limit])
 def forgot_password(body: EmailIn, request: Request):
     core = core_of(request)
+    if not core.mailer.enabled:
+        # Without e-mail an administrator creates a reset link in the team area.
+        return {"status": "ask_admin"}
     user = core.db.one("SELECT * FROM user WHERE email = ?", (body.email.strip().lower(),))
     if user:
         token = core.issue_token("reset", core.s.reset_token_s, user_id=user["id"], email=user["email"])
@@ -489,3 +501,35 @@ def invite_accept(body: InviteAcceptIn, request: Request, response: Response):
                detail={"role": tok["role"]})
     user = core.db.one("SELECT * FROM user WHERE id = ?", (uid,))
     return _finish_login(core, request, response, user)
+
+
+# ---------------------------------------------------------------------- first-run setup
+@router.post("/setup", dependencies=[auth_limit])
+def setup(body: SetupIn, request: Request, response: Response):
+    """Create the first platform admin together with the first organisation (owner) - once.
+
+    Protected by the setup token from the data directory (printed by install-server.sh and in the log).
+    """
+    core = core_of(request)
+    ip = client_ip(request)
+    if not core.check_setup_token(body.token):
+        core.audit("setup_failed", ip=ip)
+        raise HTTPException(400, "invalid_or_expired_token")
+    check_password(core, body.password, body.email, body.name)
+    if core.db.one("SELECT 1 FROM user WHERE email = ?", (body.email,)):
+        raise HTTPException(409, "email_in_use")
+    now = core.clock()
+    tid, uid = new_id("org"), new_id("usr")
+    with core.db.tx() as c:
+        # Re-check inside the transaction: exactly one request can win the setup.
+        if c.execute("SELECT 1 FROM user WHERE is_platform_admin = 1").fetchone():
+            raise HTTPException(400, "invalid_or_expired_token")
+        c.execute("INSERT INTO tenant (id, name, plan, status, created_at) VALUES (?,?,?,?,?)",
+                  (tid, body.org_name, SELF_HOSTED_PLAN, "active", now))
+        c.execute(
+            "INSERT INTO user (id, tenant_id, email, name, role, password_hash, email_verified_at, is_platform_admin, locale, "
+            "created_at, password_changed_at) VALUES (?,?,?,?,?,?,?,1,?,?,?)",
+            (uid, tid, body.email, body.name, "owner", hash_password(body.password, core.s.scrypt_n), now, body.locale, now, now))
+    core.finish_setup()
+    core.audit("platform_setup", tenant_id=tid, user_id=uid, actor=body.email, ip=ip)
+    return _finish_login(core, request, response, core.db.one("SELECT * FROM user WHERE id = ?", (uid,)))

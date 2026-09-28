@@ -291,12 +291,15 @@ export function viewStationSettings(id, setTitle) {
           el("p", { class: "small muted" }, t("ag.code_expires", { t: fmtDateTime(r.expires_at) })),
           el("ol", { class: "steps" },
             el("li", {}, t("ag.step_os")),
-            el("li", {}, cmdRow(t("ag.step_download"), c.download)),
+            el("li", {}, cmdRow(t("ag.step_download"), c.download),
+              r.install.ca_fingerprint ? el("p", { class: "small muted" }, t("ag.ca_download_hint")) : null),
             el("li", {}, cmdRow(t("ag.step_verify"), c.verify)),
             el("li", {}, cmdRow(t("ag.step_install"), c.install)),
             el("li", {}, t("ag.step_done"))),
-          el("details", {}, el("summary", {}, t("ag.oneliner")), el("p", { class: "small muted" }, t("ag.oneliner_hint")),
-            cmdRow("", c.oneliner)),
+          r.install.ca_fingerprint ? el("div", { class: "small" }, el("p", {}, t("ag.ca_pinned")),
+            el("p", { class: "mono small" }, "SHA-256 ", r.install.ca_fingerprint)) : null,
+          c.oneliner ? el("details", {}, el("summary", {}, t("ag.oneliner")), el("p", { class: "small muted" }, t("ag.oneliner_hint")),
+            cmdRow("", c.oneliner)) : null,
           el("p", { class: "small muted" }, t("ag.simulator_hint"), " ", el("code", { class: "mono" }, "--source simulator"))));
         loadAll();
       } catch (e) { toast(describeError(e), "error"); }

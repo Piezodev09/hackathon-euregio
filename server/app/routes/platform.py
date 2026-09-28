@@ -8,6 +8,7 @@ from ..core import Ctx, core_of, require
 from ..plans import PLANS, get_plan
 from ..schemas import TenantPatch
 from ..service import iso
+from .org import issue_reset_link
 
 router = APIRouter(prefix="/api/v1/platform", tags=["platform"])
 
@@ -16,7 +17,7 @@ router = APIRouter(prefix="/api/v1/platform", tags=["platform"])
 def list_tenants(request: Request, ctx: Ctx = Depends(require(platform=True))):
     core = core_of(request)
     out = []
-    for t in core.db.all("SELECT * FROM tenant ORDER BY created_at DESC"):
+    for t in core.db.all("SELECT * FROM tenant ORDER BY status = 'pending' DESC, created_at DESC"):
         owner = core.db.one("SELECT email FROM user WHERE tenant_id = ? AND role = 'owner' ORDER BY created_at LIMIT 1", (t["id"],))
         out.append({"id": t["id"], "name": t["name"], "plan": t["plan"], "status": t["status"], "created_at": iso(t["created_at"]),
                     "owner_email": owner["email"] if owner else None, "usage": core.tenant_usage(t["id"]),
@@ -35,11 +36,30 @@ def patch_tenant(tenant_id: str, body: TenantPatch, request: Request, ctx: Ctx =
         raise HTTPException(422, "unknown_plan")
     for k, v in changes.items():
         core.db.execute(f"UPDATE tenant SET {k} = ? WHERE id = ?", (v, t["id"]))
+    if changes.get("status") == "active" and t["status"] == "pending":
+        # Approval: the platform admin vouches for the organisation, so its owner's address counts as
+        # verified (there may be no mail server to verify it).
+        core.db.execute("UPDATE user SET email_verified_at = COALESCE(email_verified_at, ?) WHERE tenant_id = ?",
+                        (core.clock(), t["id"]))
+        changes["approved"] = True
     if changes.get("status") == "suspended":
         # End all sessions of the tenant immediately.
         core.db.execute("DELETE FROM session WHERE user_id IN (SELECT id FROM user WHERE tenant_id = ?)", (t["id"],))
     core.audit("platform_tenant_updated", tenant_id=t["id"], user_id=ctx.user["id"], actor=ctx.actor, ip=ctx.ip, detail=changes)
     return {"status": "ok"}
+
+
+@router.post("/tenants/{tenant_id}/owner-reset-link")
+def owner_reset_link(tenant_id: str, request: Request, ctx: Ctx = Depends(require(platform=True))):
+    """Password reset link for the (first) owner of an organisation - for installations without e-mail."""
+    core = core_of(request)
+    owner = core.db.one("SELECT * FROM user WHERE tenant_id = ? AND role = 'owner' ORDER BY created_at LIMIT 1",
+                        (tenant_id[:64],))
+    if owner is None:
+        raise HTTPException(404, "not_found")
+    if owner["id"] == ctx.user["id"]:
+        raise HTTPException(409, "use_password_change")
+    return issue_reset_link(core, owner, ctx, tenant_id=owner["tenant_id"])
 
 
 @router.get("/stats")
@@ -50,6 +70,7 @@ def stats(request: Request, ctx: Ctx = Depends(require(platform=True))):
     return {
         "tenants": len(tenants),
         "active_tenants": sum(1 for t in tenants if t["status"] == "active"),
+        "pending_tenants": sum(1 for t in tenants if t["status"] == "pending"),
         "mrr_eur": sum(get_plan(t["plan"]).price_eur_month for t in tenants if t["status"] == "active"),
         "users": db.scalar("SELECT COUNT(*) FROM user WHERE tenant_id IS NOT NULL"),
         "stations": db.scalar("SELECT COUNT(*) FROM station"),

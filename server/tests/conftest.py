@@ -119,18 +119,37 @@ class Env:
 
 
 @pytest.fixture
-def env(tmp_path, monkeypatch):
-    monkeypatch.setenv("BIKE_DB_PATH", str(tmp_path / "test.db"))
-    monkeypatch.setenv("BIKE_SCRYPT_N", "1024")
-    monkeypatch.setenv("BIKE_ALLOWED_HOSTS", "testserver")
-    monkeypatch.setenv("BIKE_BASE_URL", "http://testserver")
-    monkeypatch.setenv("BIKE_DATA_KEY", base64.urlsafe_b64encode(b"k" * 32).decode())
-    settings = load_settings()
-    object.__setattr__(settings, "model_path", tmp_path / "missing.joblib")
-    clock = Clock()
-    app = create_app(settings, clock=clock)
-    with TestClient(app):
-        yield Env(app, clock)
+def make_env(tmp_path, monkeypatch):
+    """Factory: ``make_env(BIKE_MAIL_BACKEND="none", ...)`` builds an app with extra environment variables."""
+    apps = []
+
+    def build(**extra) -> Env:
+        base = {
+            "BIKE_DB_PATH": str(tmp_path / f"test{len(apps)}.db"),
+            "BIKE_SCRYPT_N": "1024",
+            "BIKE_ALLOWED_HOSTS": "testserver",
+            "BIKE_BASE_URL": "http://testserver",
+            "BIKE_DATA_KEY": base64.urlsafe_b64encode(b"k" * 32).decode(),
+        }
+        for k, v in {**base, **extra}.items():
+            monkeypatch.setenv(k, v)
+        settings = load_settings()
+        object.__setattr__(settings, "model_path", tmp_path / "missing.joblib")
+        clock = Clock()
+        app = create_app(settings, clock=clock)
+        client = TestClient(app)
+        client.__enter__()
+        apps.append(client)
+        return Env(app, clock)
+
+    yield build
+    for c in apps:
+        c.__exit__(None, None, None)
+
+
+@pytest.fixture
+def env(make_env):
+    return make_env()
 
 
 class Device:

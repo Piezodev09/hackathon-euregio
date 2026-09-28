@@ -21,6 +21,14 @@ def version_tuple(v: str | None) -> tuple[int, ...]:
         return ()
 
 
+def ca_fingerprint(pem: str) -> str:
+    """SHA-256 fingerprint of a PEM certificate (DER bytes), as shown by browsers: ``AB:CD:...``."""
+    import ssl
+
+    digest = hashlib.sha256(ssl.PEM_cert_to_DER_cert(pem.strip())).hexdigest().upper()
+    return ":".join(digest[i:i + 2] for i in range(0, 64, 2))
+
+
 def package_files(agent_dir: Path) -> list[str]:
     """Files shipped in the tarball: ``VERSION`` plus every module of the ``bikeagent`` package."""
     return ["VERSION", *sorted(f"{PACKAGE}/{p.name}" for p in (agent_dir / PACKAGE).glob("*.py"))]

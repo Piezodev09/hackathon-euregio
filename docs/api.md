@@ -24,7 +24,7 @@ Arduino → Pi (JSON lines): `{"slot_id":"A","presence":1,"vibration":12,"seq":1
 
 | Method/path | Purpose | Auth |
 |---|---|---|
-| `GET /install/agent.sh` · `/install/agent.tar.gz` · `/install/agent.sha256` | install script, package, checksums | public |
+| `GET /install/agent.sh` · `/install/agent.tar.gz` · `/install/agent.sha256` · `/install/ca.crt` | install script (embeds the CA), package, checksums, platform CA | public |
 | `POST /agent/enroll` `{code, hostname, agent_version, os_info, source}` | pairing → `{device_id, token, station_id, slot_map, config_version}` | one-time code |
 | `POST /agent/heartbeat` `{agent_version, serial_connected, buffer_len, cpu_temp_c, …}` | report health → `{slot_map, config_version, commands, update}` | device token |
 | `POST /agent/rotate-token` | new token (old one valid for 15 min) | device token |
@@ -48,6 +48,11 @@ Arduino → Pi (JSON lines): `{"slot_id":"A","presence":1,"vibration":12,"seq":1
 | `GET /auth/sessions` · `DELETE /auth/sessions/{id}` · `POST /auth/sessions/revoke-others` | sessions |
 | `POST /auth/mfa/setup` · `/enable` · `/disable` · `/recovery-codes` | 2FA |
 | `POST /auth/invite/info` · `/invite/accept` | accept an invitation |
+| `POST /auth/setup` `{token, org_name, name, email, password}` | first-run setup: platform admin + first organisation, once (setup token from the data directory) |
+
+Sign-up modes (`BIKE_SIGNUP`): `open`, `approval` (organisation stays `pending` until the platform
+admin approves it; `POST /auth/login` answers `403 pending_approval`), `closed`. Without a mail
+server `POST /auth/password/forgot` answers `{"status": "ask_admin"}`.
 
 ## Organisation (`/org`)
 
@@ -57,7 +62,8 @@ Arduino → Pi (JSON lines): `{"slot_id":"A","presence":1,"vibration":12,"seq":1
 | `PATCH /org` `{name, mfa_required}` | admin (`mfa_required`: owner) |
 | `GET /org/plans` · `POST /org/plan` | viewer · owner |
 | `GET /org/users` · `PATCH/DELETE /org/users/{id}` | viewer · admin |
-| `GET/POST /org/invitations` · `DELETE /org/invitations/{id}` | admin |
+| `GET/POST /org/invitations` · `DELETE /org/invitations/{id}` | admin – without a mail server the response contains `link`, `qr` (SVG data URI) and `expires_at`, shown only to the inviting admin |
+| `POST /org/users/{id}/reset-link` | admin (lower roles) / owner (everybody but themselves) → `{link, qr, expires_at}` |
 | `GET /org/audit` | admin (plan with audit log) |
 | `GET /org/export` · `POST /org/delete` | owner |
 
@@ -76,11 +82,13 @@ Arduino → Pi (JSON lines): `{"slot_id":"A","presence":1,"vibration":12,"seq":1
 
 ## Platform operator (`/platform`, platform admin with 2FA)
 
-`GET /platform/tenants`, `PATCH /platform/tenants/{id}` `{status, plan}`, `GET /platform/stats`, `GET /platform/audit`.
+`GET /platform/tenants`, `PATCH /platform/tenants/{id}` `{status, plan}` (`status: active` also approves a
+pending organisation), `POST /platform/tenants/{id}/owner-reset-link`, `GET /platform/stats`, `GET /platform/audit`.
 
 ## Other
 
-`GET /meta` (product name, plans, password length), `GET /health`, `/.well-known/security.txt`, `/robots.txt`.
+`GET /meta` (product name, plans, password length, `signup`, `mail_enabled`, `setup_required`), `GET /health`,
+`GET /install/ca.crt` (CA of a self-hosted platform, header `X-Certificate-SHA256`), `/.well-known/security.txt`, `/robots.txt`.
 
 ## Status response (shortened)
 

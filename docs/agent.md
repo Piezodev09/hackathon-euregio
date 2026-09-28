@@ -32,6 +32,25 @@ Script options: `--source simulator` (test without an Arduino), `--serial-port /
 `--ca-file ca.crt`, `--name …`, `--no-systemd`, `--prefix/--etc-dir/--state-dir`. Without `--code`
 the code is prompted for or read from `BIKE_ENROLL_CODE`.
 
+### Self-hosted platform with its own CA (no domain)
+
+A platform installed with `deploy/install-server.sh` uses its own small certificate authority. The Pi
+does not trust it yet, so the portal shows slightly different commands:
+
+```bash
+curl -fsSLk -o agent.sh https://192.168.1.50/install/agent.sh   # -k: no trust yet …
+echo '<checksum>  agent.sh' | sha256sum -c -                      # … the checksum pins the script
+sudo sh agent.sh --code XXXXX-XXXXX
+```
+
+The checksum is shown in the portal over the admin's HTTPS session, so a manipulated script is
+detected. The script **embeds the CA certificate** and uses it for the package download and the
+pairing; the agent stores it (`/etc/bike-agent/ca.crt`, `ca_file` in `agent.json`) and verifies every
+later connection against it – a man in the middle with any other certificate is rejected. The
+one-line `curl | sh` variant is not offered in this mode, because it would skip the checksum.
+Agents without the install script (Home Assistant add-on, Docker) pin the CA via its SHA-256
+fingerprint (`--ca-fingerprint`, shown in the portal).
+
 The one-line command (`curl … | sudo sh -s -- --code …`) is more convenient but does not verify the
 script first.
 

@@ -4,7 +4,8 @@ import { t } from "./i18n.js";
 import { el, clear, field, langSwitcher, passwordMeter } from "./ui.js";
 import { state, go } from "./state.js";
 
-let meta = { password_min_length: 12, signup_enabled: true, product_name: "Smart Bike Station" };
+let meta = { password_min_length: 12, signup: "open", signup_enabled: true, mail_enabled: true, setup_required: false, product_name: "Smart Bike Station" };
+export const getMeta = () => meta;
 export async function loadMeta() {
   try { meta = await api("GET", "/api/v1/meta"); } catch (_) {}
   return meta;
@@ -76,7 +77,7 @@ export function viewLogin(rerender) {
       afterLogin(r);
     } catch (e) {
       err.show(describeError(e));
-      if (e.code === "email_not_verified") {
+      if (e.code === "email_not_verified" && meta.mail_enabled) {
         extra.append(el("p", {}, el("button", { class: "btn small", type: "button", onclick: async () => {
           await post("/api/v1/auth/resend-verification", { email: fd.get("email") }).catch(() => {});
           err.show(t("auth.resent"));
@@ -85,7 +86,7 @@ export function viewLogin(rerender) {
     }
   });
 
-  const wrap = el("div", {}, form,
+  const wrap = el("div", {}, meta.setup_required ? el("div", { class: "alert-box info" }, t("setup.login_hint")) : null, form,
     el("div", { class: "auth-links" },
       el("a", { href: "#/forgot" }, t("auth.forgot")),
       meta.signup_enabled ? el("a", { href: "#/register" }, t("auth.no_account")) : null));
@@ -124,18 +125,28 @@ export function viewRegister(rerender) {
     el("button", { class: "btn primary", type: "submit" }, t("auth.register_btn"))), async (fd) => {
     err.hide();
     try {
-      await post("/api/v1/auth/register", { org_name: fd.get("org_name"), name: fd.get("name"), email: fd.get("email"),
+      const r = await post("/api/v1/auth/register", { org_name: fd.get("org_name"), name: fd.get("name"), email: fd.get("email"),
         password: fd.get("password"), accept_terms: fd.get("terms") === "on", locale: document.documentElement.lang || "en" });
-      go("/check-email");
+      go(r.status === "pending_approval" ? `/pending?mail=${r.verify_email ? 1 : 0}` : "/check-email");
     } catch (e) { err.show(describeError(e)); }
   });
-  return authCard(t("auth.register_title"), el("div", {}, form,
+  if (!meta.signup_enabled) {
+    return authCard(t("auth.register_title"), el("div", {}, el("div", { class: "alert-box info" }, t("err.signup_disabled")),
+      el("a", { class: "btn", href: "#/login" }, t("auth.login_btn"))), rerender);
+  }
+  return authCard(t("auth.register_title"), el("div", {}, meta.signup === "approval" ? el("p", { class: "alert-box info" }, t("auth.approval_note")) : null, form,
     el("div", { class: "auth-links" }, el("a", { href: "#/login" }, t("auth.have_account")))), rerender);
 }
 
 export function viewCheckEmail(rerender) {
   return authCard(t("auth.check_title"), el("div", {}, el("p", {}, t("auth.check_text")),
     el("a", { class: "btn", href: "#/login" }, t("auth.login_btn"))), rerender);
+}
+
+export function viewPending(params, rerender) {
+  const mail = params.get("mail") === "1";
+  return authCard(t("auth.pending_title"), el("div", {}, el("p", {}, t("auth.pending_text")),
+    mail ? el("p", {}, t("auth.check_text")) : null, el("a", { class: "btn", href: "#/login" }, t("auth.login_btn"))), rerender);
 }
 
 export function viewVerify(params, rerender) {
@@ -150,6 +161,10 @@ export function viewVerify(params, rerender) {
 }
 
 export function viewForgot(rerender) {
+  if (!meta.mail_enabled) {
+    return authCard(t("auth.forgot_title"), el("div", {}, el("p", {}, t("auth.forgot_no_mail")),
+      el("div", { class: "auth-links" }, el("a", { href: "#/login" }, t("c.back")))), rerender);
+  }
   const msg = el("div", { role: "status" });
   const form = submitting(el("form", {}, msg, field(t("c.email"), input("email", "email", { autocomplete: "email", autofocus: true })),
     el("button", { class: "btn primary", type: "submit" }, t("auth.forgot_btn"))), async (fd) => {
@@ -203,4 +218,35 @@ export function viewInvite(params, rerender) {
     clear(body, form);
   }).catch((e) => clear(body, el("div", { class: "alert-box error", role: "alert" }, describeError(e))));
   return authCard(t("auth.invite_title"), body, rerender);
+}
+
+// ---------------------------------------------------------------------- first-run setup
+export function viewSetup(params, rerender) {
+  const token = takeToken(params, "setup");
+  keepToken("setup", token);
+  if (!meta.setup_required) {
+    return authCard(t("setup.title"), el("div", {}, el("div", { class: "alert-box ok" }, t("setup.done_already")),
+      el("a", { class: "btn primary", href: "#/login" }, t("auth.login_btn"))), rerender);
+  }
+  const err = errorBox();
+  const tok = input("text", "token", { value: token, autocomplete: "off", spellcheck: "false", class: "mono" });
+  const pw = input("password", "password", { autocomplete: "new-password", minlength: String(meta.password_min_length), maxlength: "128" });
+  const form = submitting(el("form", {},
+    el("p", { class: "muted" }, t("setup.lead")), err,
+    field(t("setup.token"), tok, t("setup.token_hint")),
+    field(t("setup.org_name"), input("text", "org_name", { maxlength: "100", autocomplete: "organization", autofocus: true })),
+    field(t("auth.your_name"), input("text", "name", { maxlength: "100", autocomplete: "name" })),
+    field(t("c.email"), input("email", "email", { autocomplete: "email", maxlength: "254" })),
+    field(t("c.password"), pw, t("auth.pw_hint", { n: meta.password_min_length })), passwordMeter(pw, meta.password_min_length),
+    el("button", { class: "btn primary", type: "submit" }, t("setup.btn"))), async (fd) => {
+    err.hide();
+    try {
+      const me = await post("/api/v1/auth/setup", { token: fd.get("token").trim(), org_name: fd.get("org_name"), name: fd.get("name"),
+        email: fd.get("email"), password: fd.get("password"), locale: document.documentElement.lang || "en" });
+      keepToken("setup", null);
+      meta.setup_required = false;
+      afterLogin(me);
+    } catch (e) { err.show(describeError(e)); }
+  });
+  return authCard(t("setup.title"), form, rerender);
 }

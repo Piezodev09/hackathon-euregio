@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from ..core import ROLE_RANK, Ctx, core_of, require
 from ..mailer import link
 from ..plans import PLANS, get_plan
+from ..qr import qr_data_uri
 from ..schemas import DeleteOrgIn, InviteIn, OrgPatch, PlanIn, RoleIn
 from ..security import verify_password
 from ..service import iso
@@ -125,6 +126,31 @@ def remove_user(user_id: str, request: Request, ctx: Ctx = Depends(require("admi
     return {"status": "removed"}
 
 
+@router.post("/users/{user_id}/reset-link")
+def user_reset_link(user_id: str, request: Request, ctx: Ctx = Depends(require("admin"))):
+    """One-time password reset link for a team member (works without a mail server).
+
+    Admins may reset lower roles; owners may reset anybody but themselves. Two-factor sign-in stays
+    active, so a reset link alone never grants access to a 2FA-protected account.
+    """
+    core = core_of(request)
+    target = _target_user(core, ctx, user_id)
+    if target["id"] == ctx.user["id"]:
+        raise HTTPException(409, "use_password_change")
+    if ROLE_RANK[target["role"]] > ROLE_RANK[ctx.role] or (target["role"] == ctx.role and ctx.role != "owner"):
+        raise HTTPException(403, "forbidden")
+    return issue_reset_link(core, target, ctx, tenant_id=ctx.tenant_id)
+
+
+def issue_reset_link(core, target, ctx: Ctx, tenant_id=None) -> dict:
+    token = core.issue_token("reset", core.s.reset_token_s, user_id=target["id"], email=target["email"], created_by=ctx.actor)
+    url = link(core.s, "reset", token)
+    core.audit("reset_link_created", tenant_id=tenant_id, user_id=ctx.user["id"], actor=ctx.actor, ip=ctx.ip,
+               target=target["email"])
+    return {"link": url, "qr": qr_data_uri(url), "expires_at": iso(core.clock() + core.s.reset_token_s),
+            "email": target["email"]}
+
+
 @router.get("/invitations")
 def list_invitations(request: Request, ctx: Ctx = Depends(require("admin"))):
     core = core_of(request)
@@ -147,15 +173,20 @@ def invite(body: InviteIn, request: Request, ctx: Ctx = Depends(require("admin")
         raise HTTPException(409, "email_in_use")
     token = core.issue_token("invite", core.s.invite_token_s, tenant_id=ctx.tenant_id, email=body.email, role=body.role,
                              created_by=ctx.actor)
-    core.mailer.send(
+    url = link(core.s, "invite", token)
+    sent = core.mailer.send(
         body.email,
         f"{core.s.product_name}: invitation to {ctx.tenant['name']}",
         f"{ctx.user['name']} invites you to the organisation \"{ctx.tenant['name']}\" (role: {body.role}).\n\n"
-        f"Accept the invitation:\n{link(core.s, 'invite', token)}\n\nThe link is valid for {int(core.s.invite_token_s // 3600)} hours.",
+        f"Accept the invitation:\n{url}\n\nThe link is valid for {int(core.s.invite_token_s // 3600)} hours.",
     )
     core.audit("user_invited", tenant_id=ctx.tenant_id, user_id=ctx.user["id"], actor=ctx.actor, ip=ctx.ip, target=body.email,
-               detail={"role": body.role})
-    return {"status": "invited"}
+               detail={"role": body.role, "delivery": "email" if sent else "link"})
+    if sent:
+        return {"status": "invited", "delivery": "email"}
+    # No mail server: only the inviting admin sees the link once and hands it over (link or QR code).
+    return {"status": "invited", "delivery": "link", "link": url, "qr": qr_data_uri(url),
+            "expires_at": iso(core.clock() + core.s.invite_token_s)}
 
 
 @router.delete("/invitations/{invite_id}")

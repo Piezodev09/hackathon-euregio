@@ -25,8 +25,8 @@ flowchart LR
 | `firmware/` | Arduino sketch + bill of materials and wiring | `firmware/smart_bike_station/smart_bike_station.ino` |
 | `web/` | landing page, customer portal, kiosk display (plain HTML/CSS/JS modules, no framework) | `web/index.html`, `web/app.html`, `web/display.html` |
 | `ml/` | data export, training, honest comparison rule vs. AI | `ml/train.py` |
-| `deploy/` | systemd unit, server environment example, firewall example, backup | `deploy/backup.sh` |
-| `scripts/` | local development without hardware | `scripts/dev.sh` |
+| `deploy/` | Proxmox one-liner, server installer (own CA, no mail needed), systemd units, backup, firewall example | `deploy/proxmox/create-lxc.sh`, `deploy/install-server.sh` |
+| `scripts/` | local development without hardware, translation check | `scripts/dev.sh`, `scripts/check-i18n.mjs` |
 | `docs/` | architecture, agent, API, security/privacy, AI fact sheet, tests, operations | `docs/architecture.md` |
 
 ## What the platform offers
@@ -48,6 +48,21 @@ account lock-out and rate limits, server-side sessions with `__Host-`/HttpOnly/S
 cookies, CSRF token + origin check, strict tenant isolation, hashed device tokens per station, strict
 CSP and security headers, trusted hosts, size limits, audit log, data export and deletion,
 secure-by-default checks for `production`.
+
+## Self-hosting on Proxmox (no domain, no mail server)
+
+On the Proxmox host, in a copy of this repository:
+
+```bash
+bash deploy/proxmox/create-lxc.sh            # or: --ip 192.168.1.50/24 --gw 192.168.1.1
+```
+
+One command creates an unprivileged Debian 12 container and installs everything: HTTPS on
+`https://<IP>` and `https://bikestation.local` with its own certificate authority (pinned by the
+agents), HTTP→HTTPS redirect, daily backups. It ends with the URL, the CA fingerprint and a
+**one-time setup link** for the first admin. Without a mail server, invitations and password
+resets are handed over as link/QR code and new organisations need approval.
+Details: [docs/operations.md](docs/operations.md). Other Debian 12 hosts: `sudo deploy/install-server.sh`.
 
 ## Quick start without hardware
 

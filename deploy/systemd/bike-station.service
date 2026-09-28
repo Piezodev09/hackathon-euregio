@@ -1,0 +1,37 @@
+# Smart Bike Station platform (API + portal + AI) on HTTPS.
+# Installed by deploy/install-server.sh (placeholders @PREFIX@ @ETC@ @DATA@ @USER@ @PORT@ are replaced).
+[Unit]
+Description=Smart Bike Station - platform
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=@USER@
+Group=@USER@
+WorkingDirectory=@PREFIX@/server
+# Secrets live in the environment files (mode 640), never in this unit.
+EnvironmentFile=@ETC@/server.env
+EnvironmentFile=-@ETC@/server.env.local
+ExecStart=@PREFIX@/venv/bin/uvicorn app.main:_app_factory --factory \
+    --host 0.0.0.0 --port @PORT@ \
+    --ssl-keyfile @ETC@/tls/server.key --ssl-certfile @ETC@/tls/server.crt \
+    --no-server-header --no-access-log
+Restart=on-failure
+RestartSec=3
+
+# Hardening: the only privilege is binding a port below 1024.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=@DATA@
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictSUIDSGID=true
+LockPersonality=true
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
