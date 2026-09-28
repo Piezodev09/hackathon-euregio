@@ -1,10 +1,10 @@
-// Öffentliche Seiten: Anmelden (inkl. 2FA), Registrieren, E-Mail bestätigen, Passwort, Einladung.
+// Public pages: sign-in (incl. 2FA), sign-up, e-mail verification, password, invitation.
 import { api, post, describeError, setCsrf } from "./api.js";
 import { t } from "./i18n.js";
 import { el, clear, field, langSwitcher, passwordMeter } from "./ui.js";
 import { state, go } from "./state.js";
 
-let meta = { password_min_length: 12, signup_enabled: true, product_name: "Smarte Radstation" };
+let meta = { password_min_length: 12, signup_enabled: true, product_name: "Smart Bike Station" };
 export async function loadMeta() {
   try { meta = await api("GET", "/api/v1/meta"); } catch (_) {}
   return meta;
@@ -41,7 +41,7 @@ function submitting(form, fn) {
   return form;
 }
 
-// Token aus dem URL-Fragment lesen und sofort aus Adresszeile/Verlauf entfernen.
+// Read the token from the URL fragment and remove it from the address bar/history at once.
 export function takeToken(params, route) {
   const token = params.get("token");
   if (token) history.replaceState(null, "", `/app#/${route}`);
@@ -59,7 +59,7 @@ export function afterLogin(me) {
   go(me.mfa_setup_required ? "/security" : me.user.is_platform_admin && !me.tenant ? "/platform" : target);
 }
 
-// ---------------------------------------------------------------------- Anmelden
+// ---------------------------------------------------------------------- sign-in
 export function viewLogin(rerender) {
   const err = errorBox();
   const extra = el("div");
@@ -109,7 +109,7 @@ export function viewLogin(rerender) {
   return authCard(t("auth.login_title"), wrap, rerender);
 }
 
-// ---------------------------------------------------------------------- Registrieren
+// ---------------------------------------------------------------------- sign-up
 export function viewRegister(rerender) {
   const err = errorBox();
   const pw = input("password", "password", { autocomplete: "new-password", minlength: String(meta.password_min_length), maxlength: "128" });
@@ -125,7 +125,7 @@ export function viewRegister(rerender) {
     err.hide();
     try {
       await post("/api/v1/auth/register", { org_name: fd.get("org_name"), name: fd.get("name"), email: fd.get("email"),
-        password: fd.get("password"), accept_terms: fd.get("terms") === "on", locale: document.documentElement.lang || "de" });
+        password: fd.get("password"), accept_terms: fd.get("terms") === "on", locale: document.documentElement.lang || "en" });
       go("/check-email");
     } catch (e) { err.show(describeError(e)); }
   });

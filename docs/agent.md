@@ -1,103 +1,105 @@
-# Agent für Raspberry Pi – Installation, Kopplung, Betrieb
+# Agent for the Raspberry Pi – installation, pairing, operation
 
-Der **Agent** läuft auf dem Raspberry Pi jeder Station. Er liest den Arduino über USB aus, überträgt
-die Messungen verschlüsselt an die Plattform und wird zentral aus dem Portal verwaltet.
+The **agent** (`agent/bikeagent/`) runs on the Raspberry Pi of every station. It reads the Arduino
+over USB, sends the measurements encrypted to the platform and is managed centrally from the portal.
 
 ```
-Portal: "Gateway einrichten"  ──►  Kopplungscode (einmalig, 30 min)
+Portal: "Set up gateway"  ──►  pairing code (single use, 30 min)
                                         │
-Pi:  curl …/install/agent.sh ─► Prüfsumme ─► sudo sh agent.sh --code XXXXX-XXXXX
+Pi:  curl …/install/agent.sh ─► checksum ─► sudo sh agent.sh --code XXXXX-XXXXX
                                         │
-     Skript: Paket laden + SHA-256 prüfen ─► Benutzer bike-agent ─► Kopplung ─► systemd-Dienst
+     script: download package + verify SHA-256 ─► user bike-agent ─► pairing ─► systemd service
                                         │
-Agent ◄──── Heartbeat (60 s): Konfiguration, Befehle, Updates ────► Plattform
-      ─────  Messungen (Belegung, Vibration) ─────────────────────►
+Agent ◄──── heartbeat (60 s): configuration, commands, updates ────► platform
+      ─────  measurements (occupancy, vibration) ─────────────────►
 ```
 
-## Einrichtung (5 Minuten)
+## Setup (5 minutes)
 
-Voraussetzungen: Raspberry Pi mit **Raspberry Pi OS Bookworm** oder neuer (Python ≥ 3.11), Netzwerk,
-Arduino mit dem Sketch aus `arduino/` per USB.
+Requirements: Raspberry Pi with **Raspberry Pi OS Bookworm** or newer (Python ≥ 3.11), network,
+Arduino with the sketch from `firmware/` connected over USB.
 
-1. Portal → **Stationen** → Station → **Einstellungen** → **Gateway einrichten**.
-2. Auf dem Pi die drei angezeigten Befehle ausführen:
+1. Portal → **Stations** → station → **Settings** → **Set up gateway**.
+2. Run the three commands shown there on the Pi:
    ```bash
-   curl -fsSLO https://<plattform>/install/agent.sh
-   echo '<prüfsumme>  agent.sh' | sha256sum -c -     # muss "OK" ausgeben
+   curl -fsSLO https://<platform>/install/agent.sh
+   echo '<checksum>  agent.sh' | sha256sum -c -     # must print "OK"
    sudo sh agent.sh --code XXXXX-XXXXX
    ```
-3. Nach etwa einer Minute steht das Gateway im Portal auf **online**.
+3. After about a minute the gateway is shown as **online** in the portal.
 
-Optionen des Skripts: `--source simulator` (ohne Arduino testen), `--serial-port /dev/ttyUSB0`,
-`--ca-file ca.crt` (selbst signiertes Zertifikat der Plattform), `--name …`, `--no-systemd`,
-`--prefix/--etc-dir/--state-dir`. Ohne `--code` wird der Code abgefragt oder aus `BIKE_ENROLL_CODE` gelesen.
+Script options: `--source simulator` (test without an Arduino), `--serial-port /dev/ttyUSB0`,
+`--ca-file ca.crt`, `--name …`, `--no-systemd`, `--prefix/--etc-dir/--state-dir`. Without `--code`
+the code is prompted for or read from `BIKE_ENROLL_CODE`.
 
-Der Ein-Zeilen-Befehl (`curl … | sudo sh -s -- --code …`) ist bequemer, prüft das Skript aber nicht vorher.
+The one-line command (`curl … | sudo sh -s -- --code …`) is more convenient but does not verify the
+script first.
 
-## Was das Skript tut
+## What the script does
 
-| Schritt | Details |
+| Step | Details |
 |---|---|
-| Prüfungen | root, Python ≥ 3.11, HTTPS-URL (HTTP nur für `localhost` oder mit `--allow-http`) |
-| Pakete | `python3-serial`, `ca-certificates` (apt) |
-| Benutzer | Systembenutzer `bike-agent` ohne Login, Gruppe `dialout` (USB-Seriell) |
-| Paket | `/install/agent.tar.gz` laden, **SHA-256 gegen den im Skript eingebauten Wert prüfen** |
-| Ablage | `/opt/bike-agent/releases/<version>`, Symlink `/opt/bike-agent/current` |
-| Kopplung | `agent.py enroll` – Code per Umgebungsvariable (nicht in der Prozessliste) |
-| Zustand | `/var/lib/bike-agent/agent.json`, Rechte `0600`, enthält das Geräte-Token |
-| Dienst | `bike-agent.service`, gehärtet (`NoNewPrivileges`, `ProtectSystem=strict`, keine Capabilities, nur tty-Geräte) |
-| Hilfsbefehl | `bike-agent status` · `bike-agent rollback` |
+| Checks | root, Python ≥ 3.11, HTTPS URL (HTTP only for `localhost` or with `--allow-http`) |
+| Packages | `python3-serial`, `ca-certificates`, `curl` (apt) |
+| User | system user `bike-agent` without login, group `dialout` (USB serial) |
+| Package | download `/install/agent.tar.gz`, **verify SHA-256 against the value built into the script** |
+| Layout | `/opt/bike-agent/releases/<version>/{VERSION,bikeagent/}`, symlink `/opt/bike-agent/current` |
+| Pairing | `python3 -m bikeagent enroll` – the code travels via an environment variable (not visible in the process list) |
+| State | `/var/lib/bike-agent/agent.json`, mode `0600`, contains the device token |
+| Service | `bike-agent.service`, hardened (`NoNewPrivileges`, `ProtectSystem=strict`, no capabilities, tty devices only) |
+| Helper | `sudo bike-agent status` · `sudo bike-agent rollback` |
 
-Das Skript ist wiederholbar; eine Neuinstallation mit neuem Code koppelt das Gerät neu.
+The script can be run repeatedly; reinstalling with a new code pairs the device again.
 
-## Verwaltung im Portal
+## Management in the portal
 
-- **Gateways** (Navigation): alle Geräte der Organisation mit Status, Version, Zustand.
-- **Zustand**: Arduino verbunden, simulierte Quelle, CPU-Temperatur, gepufferte Nachrichten,
-  freier Speicher, Laufzeit, letzter Fehler. *Offline* nach 3 Minuten ohne Heartbeat.
-- **Befehle** (werden beim nächsten Heartbeat ausgeführt): *Neu starten*, *Token erneuern*,
-  *Aktualisieren*. Es gibt bewusst **keine** Möglichkeit, beliebige Befehle auszuführen.
-- **Sperren**: Token sofort ungültig, Gerät kann keine Daten mehr senden.
-- **Updates automatisch einspielen** (je Station, Standard: an).
-- **Konfiguration**: Neue oder entfernte Stellplätze gelangen mit dem nächsten Heartbeat zum Agenten.
+- **Gateways** (navigation): every device of the organisation with status, version and health.
+- **Health**: Arduino connected, simulated source, CPU temperature, buffered messages, free disk
+  space, uptime, last error. *Offline* after 3 minutes without a heartbeat.
+- **Commands** (executed with the next heartbeat): *Restart*, *Renew token*, *Update*. There is
+  deliberately **no** way to run arbitrary commands.
+- **Revoke**: the token becomes invalid immediately, the device cannot send data any more.
+- **Install updates automatically** (per station, default: on).
+- **Configuration**: added or removed spaces reach the agent with the next heartbeat.
 
-## Sicherheit
+## Security
 
-| Thema | Umsetzung |
+| Topic | Implementation |
 |---|---|
-| Kopplungscode | 10 Zeichen (~50 Bit), einmalig, 30 min gültig, nur gehasht gespeichert, Endpunkt rate-limitiert |
-| Geräte-Token | 256 Bit, nur gehasht auf der Plattform, gilt nur für **eine** Station |
-| Token-Rotation | automatisch alle 30 Tage und auf Befehl; altes Token bleibt 15 min gültig (keine Aussperrung bei Verbindungsabbruch) und wird ungültig, sobald das neue benutzt wurde |
-| Transport | HTTPS mit Zertifikatsprüfung (eigene CA möglich); Downloads nur von der eigenen Plattform |
-| Updates | Prüfsumme kommt über den authentifizierten Kanal; sicheres Entpacken (nur Dateien, keine Pfade/Links); Versionsprüfung; kein Downgrade |
-| Rollback | startet eine neue Version 3-mal ohne erfolgreichen Heartbeat, schaltet der Agent auf die vorherige zurück; manuell: `bike-agent rollback` |
-| Rechte | eigener Benutzer, schreibt nur in `/var/lib/bike-agent` und `/opt/bike-agent` |
-| Paket | reproduzierbar gebaut (gleicher Inhalt → gleiche Prüfsumme), Prüfsummen unter `/install/agent.sha256` |
+| Pairing code | 10 characters (~50 bit), single use, valid 30 min, stored only as a hash, rate-limited endpoint |
+| Device token | 256 bit, stored only as a hash on the platform, valid for **one** station only |
+| Token rotation | automatically every 30 days and on request; the old token stays valid for 15 min (no lock-out if the response is lost) and becomes invalid as soon as the new one is used |
+| Transport | HTTPS with certificate verification (own CA possible); downloads only from the own platform |
+| Updates | checksum delivered over the authenticated channel; safe extraction (known files only, no paths/links); version check; no downgrade |
+| Rollback | if a new version starts 3 times without a successful heartbeat, the agent switches back to the previous one; manually: `sudo bike-agent rollback` |
+| Privileges | own user, writes only to `/var/lib/bike-agent` and `/opt/bike-agent` |
+| Package | built reproducibly (same content → same checksum), checksums at `/install/agent.sha256` |
 
-Bekannte Grenze: Die Prüfsumme sichert die Integrität gegenüber der Plattform ab. Eine zusätzliche
-Signatur der Releases mit einem offline gehaltenen Schlüssel (z. B. Ed25519) wäre der nächste Schritt,
-damit selbst eine kompromittierte Plattform keine Updates einschleusen kann.
+Known limitation: the checksum protects integrity relative to the platform. Signing releases with an
+offline key (e.g. Ed25519) would be the next step so that even a compromised platform could not
+push updates.
 
-## Neue Agent-Version ausrollen (Betreiber)
+## Rolling out a new agent version (operator)
 
-1. Änderungen in `pi-gateway/` vornehmen, Tests laufen lassen (`python3 -m pytest -q tests`).
-2. Versionsnummer in `pi-gateway/VERSION` erhöhen.
-3. Plattform neu starten – das Paket wird beim Start gebaut.
-4. Agenten mit automatischen Updates aktualisieren sich beim nächsten Heartbeat; andere zeigen
-   „Update verfügbar“ und lassen sich per Knopfdruck aktualisieren.
+1. Change `agent/bikeagent/`, run the tests (`cd agent && python3 -m pytest -q`).
+2. Increase the version in `agent/VERSION`.
+3. Restart the platform – the package is built at start-up.
+4. Agents with automatic updates update themselves with the next heartbeat; others show
+   "update available" and can be updated with one click.
 
-## Fehlersuche
+## Troubleshooting
 
-| Symptom | Prüfen |
+| Symptom | Check |
 |---|---|
-| Gateway bleibt offline | `systemctl status bike-agent`, `journalctl -u bike-agent -f`; Netz/Firewall zur Plattform (Port 443) |
-| „Arduino ✗“ | USB-Kabel, `ls /dev/ttyACM* /dev/ttyUSB*`, Port in `bike-agent status`; neu koppeln mit `--serial-port` |
-| „Token abgelehnt“ | Gerät im Portal gesperrt? Neu koppeln: neuen Code erzeugen, `sudo sh agent.sh --code …` |
-| Kopplung schlägt fehl | Code abgelaufen/benutzt → neuen Code erzeugen; Uhrzeit des Pi ist unkritisch |
-| Update hängt | `bike-agent rollback`, dann `sudo systemctl restart bike-agent` |
+| Gateway stays offline | `systemctl status bike-agent`, `journalctl -u bike-agent -f`; network/firewall to the platform (port 443) |
+| "Arduino ✗" | USB cable, `ls /dev/ttyACM* /dev/ttyUSB*`, port in `sudo bike-agent status`; pair again with `--serial-port` |
+| "token rejected" | device revoked in the portal? Pair again: create a new code, `sudo sh agent.sh --code …` |
+| Pairing fails | code expired/used → create a new one; the Pi's clock does not matter |
+| Update hangs | `sudo bike-agent rollback`, then `sudo systemctl restart bike-agent` |
 
-## Entwicklung ohne Pi
+## Development without a Pi
 
-`scripts/dev.sh` startet Plattform + Demo-Kunde und koppelt einen lokalen Agenten mit Simulator.
-Das Gerät erscheint im Portal unter *Gateways*; Befehle und Updates lassen sich dort ausprobieren.
-`scripts/dev.sh --interactive` nutzt stattdessen den tastaturgesteuerten Simulator.
+`scripts/dev.sh` starts the platform with a demo customer and pairs a local agent with the built-in
+simulator. The device appears in the portal under *Gateways*; commands and updates can be tried
+there. `scripts/dev.sh --interactive` pipes the keyboard-controlled simulator into the agent
+(`python3 -m bikeagent.simulator | python3 -m bikeagent run --source stdin`).

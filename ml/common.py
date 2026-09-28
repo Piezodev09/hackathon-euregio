@@ -1,4 +1,4 @@
-"""Gemeinsame Hilfen für die ML-Skripte. Nutzt DIESELBE Merkmalsberechnung wie das Backend."""
+"""Shared helpers for the ML scripts. Uses the SAME feature computation as the server."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from pathlib import Path
 
 ML_DIR = Path(__file__).resolve().parent
 REPO = ML_DIR.parent
-sys.path.insert(0, str(REPO / "backend"))
+sys.path.insert(0, str(REPO / "server"))
 
 from app.anomaly import FEATURE_NAMES, DetectorParams, features_at, rule_decision  # noqa: E402
 
@@ -31,7 +31,7 @@ DEFAULT_MODEL = ML_DIR / "models" / "vibration_iforest.joblib"
 def load_params(config: str | Path | None = None) -> DetectorParams:
     import tomllib
 
-    path = Path(config) if config else REPO / "backend" / "config.toml"
+    path = Path(config) if config else REPO / "server" / "config.toml"
     with open(path, "rb") as f:
         an = tomllib.load(f).get("anomaly", {})
     return DetectorParams(
@@ -43,7 +43,7 @@ def load_params(config: str | Path | None = None) -> DetectorParams:
 
 
 def trigger_rows(history, params: DetectorParams):
-    """Wie im Live-Betrieb: bewertet wird jede Messung an einem belegten Platz mit Vibration > 0."""
+    """As in live operation: every measurement at an occupied space with vibration > 0 is evaluated."""
     for i, (t, occ, score) in enumerate(history):
         if occ and score > 0:
             yield t, features_at(history, i, params)
@@ -64,6 +64,10 @@ def read_rows(paths: list[Path]) -> list[dict]:
     for p in paths:
         with open(p, newline="") as f:
             for r in csv.DictReader(f):
+                if r["label"] == "anomal":  # label used by older exports
+                    r["label"] = "anomalous"
+                if r["label"] not in ("normal", "anomalous"):
+                    raise SystemExit(f"{p}: unknown label {r['label']!r} (expected normal or anomalous)")
                 for k in ("t", *FEATURE_NAMES):
                     r[k] = float(r[k])
                 rows.append(r)

@@ -1,108 +1,104 @@
-# Smarte Radstation – Hackathon Euregio
+# Smart Bike Station – Hackathon Euregio
 
-Kleine, vorführbare Fahrradstation für den Schulkontext: erkennt die Belegung einzelner
-Stellplätze, zeigt freie Plätze an, empfiehlt einen freien Platz und meldet auffällige
-Bewegungen als **Verdacht, nicht als Diebstahlnachweis**. Arduino, Raspberry Pi und
-Proxmox sind jeweils mit einer klaren Aufgabe eingebunden.
+Every bike space, live – no more searching. The Smart Bike Station detects the occupancy of each
+bike space, shows free spaces, recommends one and reports unusual movement as a **suspicion, never
+as proof of theft**. Arduino, Raspberry Pi and Proxmox each have one clear job.
 
-> Leitsatz: Eine zuverlässig funktionierende Kette von Sensor bis Dashboard ist wichtiger
-> als viele halb fertige Funktionen.
+> Guiding principle: a reliably working chain from sensor to dashboard matters more than many
+> half-finished features.
 
+```mermaid
+flowchart LR
+  S["Sensors"] --> A["Arduino<br/>debounce, LEDs"]
+  A -- "USB serial" --> P["Raspberry Pi<br/>agent"]
+  P -- "HTTPS" --> SRV["Platform on Proxmox<br/>API · SQLite · AI"]
+  SRV -- "HTTPS" --> B["Browser<br/>portal · kiosk"]
 ```
-Sensoren ─► Arduino ──USB-Seriell──► Raspberry Pi ──HTTPS──► Debian-VM (Proxmox) ──HTTPS──► Browser
-            entprellen,              validieren, puffern,    API + SQLite + KI            Dashboard
-            LEDs                     Sequenznummern          + Dashboard                  DE/NL/EN
-```
 
-## Die Plattform (SaaS)
+## Code map
 
-Kunden (Schulen, Unternehmen, Kommunen) registrieren sich selbst, legen eine Organisation an und
-verwalten darin Stationen, Stellplätze, Gateways und ihr Team. Der Betreiber sieht alle Kunden
-in der Plattform-Ansicht.
+| Folder | Responsibility | Entry point |
+|---|---|---|
+| `server/` | FastAPI platform: auth, tenants, stations, telemetry, AI evaluation, platform admin | `server/app/main.py` (`create_app`), CLI `python3 -m app.cli` |
+| `server/app/routes/` | HTTP endpoints, one module per area (auth, org, stations, agent, platform) | `router` in each module |
+| `agent/` | Raspberry Pi agent: Arduino → validated measurements → buffered HTTPS upload, heartbeat, self-update | `python3 -m bikeagent` (`agent/bikeagent/agent.py`) |
+| `firmware/` | Arduino sketch + bill of materials and wiring | `firmware/smart_bike_station/smart_bike_station.ino` |
+| `web/` | landing page, customer portal, kiosk display (plain HTML/CSS/JS modules, no framework) | `web/index.html`, `web/app.html`, `web/display.html` |
+| `ml/` | data export, training, honest comparison rule vs. AI | `ml/train.py` |
+| `deploy/` | systemd unit, server environment example, firewall example, backup | `deploy/backup.sh` |
+| `scripts/` | local development without hardware | `scripts/dev.sh` |
+| `docs/` | architecture, agent, API, security/privacy, AI fact sheet, tests, operations | `docs/architecture.md` |
 
-| Bereich | Inhalt |
+## What the platform offers
+
+| Area | Content |
 |---|---|
-| **Landingpage** `/` | Funktionen, Ablauf, Sicherheit, Tarife (Free · Schule · Pro), Registrierung |
-| **Kundenportal** `/app` | Übersicht mit Kennzahlen, Live-Ansicht je Station (Belegung, Empfehlung, Warnungen, Heatmap, KI-Status), Stationsverwaltung (Plätze, Geräte-Tokens, Anzeige-Link, Gateway-Konfiguration), Meldungen mit Quittieren, Team mit Rollen und Einladungen, Konto & Sicherheit (2FA, Sitzungen, Passwort), Organisation (2FA-Pflicht, Export, Löschung), Tarif & Nutzung, Audit-Log |
-| **Kiosk-Anzeige** `/display#<token>` | öffentliche Nur-Lese-Anzeige für Bildschirme an der Station (DE/NL/EN) |
-| **Plattform** `/app#/platform` | Betreiber: Kunden, Tarife, Sperren, MRR, Kennzahlen |
-| **Agent für Raspberry Pi** `/install/agent.sh` | Installation per Kopplungscode aus dem Portal, Heartbeat mit Zustand, Konfiguration aus der Cloud, Fernbefehle, Token-Rotation, Selbst-Update mit Prüfsumme und Rollback – siehe [docs/agent.md](docs/agent.md) |
+| **Landing page** `/` | features, how it works, security, plans, sign-up |
+| **Customer portal** `/app` | overview, live view per station (occupancy, recommendation, warnings, heatmap, AI status), station management (spaces, pairing, display link), events with acknowledgement, team with roles and invitations, account & security (2FA, sessions), organisation (2FA requirement, export, deletion), plan & usage, audit log |
+| **Kiosk display** `/display#<token>` | public read-only display for screens at the station (EN/DE/NL) |
+| **Platform** `/app#/platform` | operator view: customers, plans, suspension, key figures |
+| **Agent for the Raspberry Pi** `/install/agent.sh` | installation with a pairing code from the portal, heartbeat, remote configuration and commands, token rotation, self-update with checksum and rollback – see [docs/agent.md](docs/agent.md) |
 
-Rollen: **Inhaber** (alles inkl. Tarif/Export/Löschung) · **Administrator** (Stationen, Geräte, Team) ·
-**Betreuer** (Live-Daten, Meldungen quittieren) · **Lesend**.
+Roles: **owner** (everything incl. plan/export/deletion) · **admin** (stations, devices, team) ·
+**operator** (live data, acknowledge events) · **viewer**.
 
-Sicherheit (Details: [docs/security-privacy.md](docs/security-privacy.md)): scrypt-Passwörter mit
-Richtlinie, E-Mail-Bestätigung, TOTP-2FA mit Wiederherstellungscodes (verschlüsselt gespeichert,
-per Organisation erzwingbar), Kontosperre und Ratenbegrenzung, serverseitige Sessions mit
-`__Host-`/HttpOnly/Secure/SameSite=Strict-Cookie, CSRF-Token + Origin-Prüfung, strikte
-Mandantentrennung, gehashte Geräte-Tokens je Station, strenge CSP und Sicherheits-Header,
-Trusted Hosts, Größenlimits, Audit-Log, Datenexport und Löschung, Secure-by-default-Prüfung
-für `production`.
+Security highlights (details: [docs/security-privacy.md](docs/security-privacy.md)): scrypt passwords
+with a policy, TOTP 2FA with recovery codes (encrypted at rest, enforceable per organisation),
+account lock-out and rate limits, server-side sessions with `__Host-`/HttpOnly/Secure/SameSite=Strict
+cookies, CSRF token + origin check, strict tenant isolation, hashed device tokens per station, strict
+CSP and security headers, trusted hosts, size limits, audit log, data export and deletion,
+secure-by-default checks for `production`.
 
-Noch **nicht** enthalten: Zahlungsanbindung (Abrechnung manuell), echte Datenschutzerklärung/Impressum
-(Platzhalter), externer Penetrationstest.
+## Quick start without hardware
 
-## Schnellstart ohne Hardware
-
-Voraussetzung: Python ≥ 3.11.
+Requirement: Python ≥ 3.11.
 
 ```bash
-pip install -r backend/requirements-dev.txt pyserial
+pip install -r server/requirements-dev.txt -r agent/requirements.txt
 scripts/dev.sh
 ```
 
-Das Skript legt beim ersten Start einen Demo-Kunden mit Station an, startet die Plattform und
-koppelt einen lokalen Agenten (wie auf dem Pi) mit eingebautem Simulator. Dann:
+The script creates a demo customer with a station on the first start, starts the platform and pairs
+a local agent (exactly as on the Pi) with its built-in simulator. Then:
 
-- Portal: <http://127.0.0.1:8000/app> – Login `demo@example.org` / `Fahrradplatz-Euregio-2026!`
-- Kiosk-Link: steht in der Konsole (`Kiosk-Anzeige: …`)
-- Eigene Registrierung: <http://127.0.0.1:8000/app#/register> – der Bestätigungslink erscheint im Log
-- Gateway im Portal unter **Gateways**: Status, Neustart, Token erneuern, Updates
-- Tastaturgesteuerter Simulator: `scripts/dev.sh --interactive`, dann `p A` (belegen/freigeben), `b A` (anstoßen), `s A` (rütteln), `e A` (Sensorfehler), `q`
+- Portal: <http://127.0.0.1:8000/app> – sign in with `demo@example.org` / `Bike-Parking-Euregio-2026!`
+- Kiosk link: printed in the console (`Kiosk display: …`)
+- Own sign-up: <http://127.0.0.1:8000/app#/register> – the confirmation link appears in the log
+- Gateway in the portal under **Gateways**: status, restart, renew token, updates
+- Keyboard-controlled simulator: `scripts/dev.sh --interactive`, then `p A` (park/remove), `b A` (bump), `s A` (shake), `e A` (sensor fault), `q`
 
-Echten Raspberry Pi einbinden: Portal → Station → Einstellungen → **Gateway einrichten** und die
-angezeigten drei Befehle auf dem Pi ausführen ([docs/agent.md](docs/agent.md)).
+Connect a real Raspberry Pi: portal → station → Settings → **Set up gateway** and run the three
+commands shown on the Pi ([docs/agent.md](docs/agent.md)).
 
-Plattform-Admin anlegen: `cd backend && python3 -m app.cli create-platform-admin --email ops@example.org`
+Create a platform admin: `cd server && python3 -m app.cli create-platform-admin --email ops@example.org`
 
-KI-Modell für die Pipeline-Probe (simulierte Daten): `python3 ml/generate_synthetic.py && python3 ml/train.py ml/data/synthetic.csv`
+AI model for the pipeline check (simulated data): `python3 ml/generate_synthetic.py && python3 ml/train.py ml/data/synthetic.csv`
 
 ## Tests
 
 ```bash
-cd backend && python3 -m pytest -q          # 54 Tests: Abnahmetests, Auth, 2FA, CSRF, Mandantentrennung, Rollen, Tarife, Header, Agent-Verwaltung
-cd pi-gateway && python3 -m pytest -q tests # 33 Tests: Parser, Puffer, Watchdog, Sequenzen, Agent (Zustand, Updates, Rollback, Befehle)
+cd server && python3 -m pytest -q    # acceptance tests, auth, 2FA, CSRF, tenant isolation, roles, plans, headers, agent management
+cd agent && python3 -m pytest -q     # parser, buffer, watchdog, sequences, agent (state, updates, rollback, commands)
 ```
 
-## Verzeichnisse
+## Documentation
 
-| Pfad | Inhalt |
-|---|---|
-| `arduino/` | Arduino-Sketch |
-| `pi-gateway/` | Agent (`agent.py`), Gateway, Simulator, `VERSION` des Agent-Pakets |
-| `backend/` | FastAPI-Plattform (Auth, Mandanten, Stationen, Telemetrie, Plattform-Admin), CLI, Tests |
-| `web/` | Landingpage, Kundenportal, Kiosk-Anzeige (HTML/CSS/JS-Module ohne Framework) |
-| `ml/` | Datenexport, Training, Vergleich Regel vs. KI |
-| `deploy/` | systemd-Units, Installationsskripte, Firewall-Beispiel, Backup, Löschen |
-| `docs/` | Architektur, API, Hardware, Sicherheit/Datenschutz, KI-Steckbrief, Tests, Betrieb, Demo |
+- [Architecture and data flow](docs/architecture.md)
+- [Agent for the Raspberry Pi: installation, pairing, updates](docs/agent.md)
+- [API and data format](docs/api.md)
+- [Firmware, bill of materials and wiring](firmware/README.md)
+- [Security and privacy](docs/security-privacy.md)
+- [AI fact sheet](docs/ai-factsheet.md)
+- [Test report](docs/test-report.md)
+- [Operations: installation, restart, logs, backup, deletion](docs/operations.md)
+- [Contributing: tests, versions, translations](CONTRIBUTING.md)
 
-## Dokumentation
+## Principles
 
-- [Architektur und Datenfluss](docs/architecture.md)
-- [Agent für Raspberry Pi: Installation, Kopplung, Updates](docs/agent.md)
-- [API und Datenformat](docs/api.md)
-- [Hardware und Aufbau](docs/hardware.md) – Inventur vor der Verdrahtung ausfüllen!
-- [Sicherheit und Datenschutz](docs/security-privacy.md)
-- [KI-Steckbrief](docs/ki-steckbrief.md)
-- [Testprotokoll](docs/test-report.md)
-- [Betrieb: Installation, Neustart, Logs, Backup, Löschen](docs/betrieb.md)
-- [Regieplan Abschlussdemo](docs/demo-script.md)
-
-## Wichtige Grundsätze
-
-- **Kein „frei“ bei unbekanntem Sensorstatus.** Fehlende, veraltete (> 30 s) oder fehlerhafte
-  Daten ergeben „unbekannt“ – im Backend *und* zusätzlich im Browser bei Verbindungsverlust.
-- **Keine KI-Behauptung ohne Test.** `ml/train.py` vergleicht Modell und Regel auf denselben
-  Testläufen; die sichtbare Warnung kommt aus dem besseren Verfahren (`alert_source`).
-- **Keine personenbezogene Diebstahlbehauptung.** Keine Kameras, keine Namen, kein RFID.
-- **Keine Geheimnisse im Repository.** Datenschlüssel und SMTP-Passwort nur über Umgebungsvariablen; Geräte-Tokens entstehen im Portal und werden nur gehasht gespeichert.
+- **Never "free" for an unknown sensor state.** Missing, stale (> 30 s) or faulty data means
+  "unknown" – on the platform *and* additionally in the browser when the connection is lost.
+- **No AI claim without a test.** `ml/train.py` compares model and rule on the same test runs; the
+  visible warning comes from the better method (`alert_source`).
+- **No accusation of persons.** No cameras, no names, no RFID.
+- **No secrets in the repository.** Data key and SMTP password only via environment variables;
+  device tokens are created in the portal and stored only as hashes.

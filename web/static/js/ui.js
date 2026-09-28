@@ -1,4 +1,4 @@
-// DOM-Helfer ohne innerHTML (XSS-sicher: alle Inhalte als Text/Knoten), Toasts, Dialoge, Formatierung.
+// DOM helpers without innerHTML (XSS-safe: all content as text/nodes), toasts, dialogs, formatting.
 import { getLang, setLang, t, STRINGS } from "./i18n.js";
 
 export function el(tag, attrs, ...children) {
@@ -56,7 +56,7 @@ export function fmtMoney(n) {
 }
 
 export async function copyText(text) {
-  try { await navigator.clipboard.writeText(text); toast(t("c.copied")); } catch (_) { /* Zwischenablage evtl. gesperrt */ }
+  try { await navigator.clipboard.writeText(text); toast(t("c.copied")); } catch (_) { /* clipboard may be blocked */ }
 }
 
 export function langSwitcher(onChange) {
@@ -68,7 +68,7 @@ export function langSwitcher(onChange) {
   return nav;
 }
 
-// Grobe, clientseitige Stärkeanzeige (die verbindliche Prüfung macht der Server).
+// Rough client-side strength meter (the server does the binding check).
 export function passwordMeter(input, minLength) {
   const bar = el("span");
   bar.style.width = "0%";

@@ -3,19 +3,22 @@ __pycache__/
 .pytest_cache/
 .venv/
 venv/
+node_modules/
 *.db
 *.db-journal
 *.db-wal
 *.db-shm
 *.joblib
-!ml/models/.gitkeep
+*.datakey
 .env
 *.env
 !*.env.example
-pi-gateway/state/
 ml/data/*.csv
+ml/report.md
+!ml/models/.gitkeep
 !ml/data/.gitkeep
 
-# Entwicklung
-backend/.dev-demo.env
-*.datakey
+# local development
+agent/state/
+server/.dev-demo.env
+server/.setup-token

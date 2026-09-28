@@ -1,42 +1,42 @@
 <!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="referrer" content="no-referrer">
   <meta name="robots" content="noindex">
-  <title>Smarte Radstation</title>
+  <title>Smart Bike Station</title>
   <link rel="icon" href="/static/img/icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/css/display.css">
   <script src="/static/js/display-i18n.js" defer></script>
   <script src="/static/js/display.js" defer></script>
 </head>
 <body>
-  <a class="skip" href="#slots" data-i18n="skip">Zu den Stellplätzen springen</a>
+  <a class="skip" href="#slots" data-i18n="skip">Skip to the bike spaces</a>
   <header class="top">
-    <h1 id="station-name" data-i18n="title">Smarte Radstation</h1>
+    <h1 id="station-name" data-i18n="title">Smart Bike Station</h1>
     <nav aria-label="Sprache / Taal / Language" class="lang">
+      <button type="button" data-lang="en" lang="en">EN</button>
       <button type="button" data-lang="de" lang="de">DE</button>
       <button type="button" data-lang="nl" lang="nl">NL</button>
-      <button type="button" data-lang="en" lang="en">EN</button>
     </nav>
   </header>
 
   <main>
-    <p id="invalid" class="alert" hidden data-i18n="invalidLink">Dieser Anzeige-Link ist ungültig oder deaktiviert.</p>
+    <p id="invalid" class="alert" hidden data-i18n="invalidLink">This display link is invalid or disabled.</p>
     <section class="summary" aria-labelledby="summary-h">
-      <h2 id="summary-h" class="visually-hidden" data-i18n="summaryHeading">Übersicht</h2>
+      <h2 id="summary-h" class="visually-hidden" data-i18n="summaryHeading">Overview</h2>
       <p class="big" id="free-count">–</p>
       <p class="big" id="recommendation">–</p>
       <p id="updated">–</p>
       <p id="connection" role="status">–</p>
-      <p id="simulated" class="badge sim" hidden data-i18n="simulatedData">Achtung: simulierte Daten</p>
+      <p id="simulated" class="badge sim" hidden data-i18n="simulatedData">Note: simulated data</p>
     </section>
 
     <div id="alerts" class="alerts" role="alert" aria-live="assertive"></div>
 
     <section aria-labelledby="slots-h">
-      <h2 id="slots-h" data-i18n="slotsHeading">Stellplätze</h2>
+      <h2 id="slots-h" data-i18n="slotsHeading">Bike spaces</h2>
       <ul id="slots" class="slots" tabindex="-1"></ul>
       <p class="legend" data-i18n="legend"></p>
     </section>

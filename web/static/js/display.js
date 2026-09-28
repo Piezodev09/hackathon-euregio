@@ -1,7 +1,7 @@
-// Öffentliche Kiosk-Anzeige einer Station (nur lesend).
-// Der Anzeige-Link hat die Form /display#<token>: Das Fragment wird nie an Server oder Proxys
-// übertragen; das Token geht nur als Header an die API.
-// Grundsatz: Bei fehlenden oder veralteten Daten NIE "frei" anzeigen.
+// Public kiosk display of one station (read only).
+// The display link has the form /display#<token>: the fragment is never sent to servers or proxies;
+// the token only travels to the API as a header.
+// Principle: with missing or stale data NEVER show "free".
 (function () {
   "use strict";
 
@@ -23,12 +23,12 @@
       const saved = localStorage.getItem("lang");
       if (saved && window.I18N[saved]) return saved;
     } catch (_) {}
-    const nav = (navigator.language || "de").slice(0, 2);
-    return window.I18N[nav] ? nav : "de";
+    const nav = (navigator.language || "en").slice(0, 2).toLowerCase();
+    return window.I18N[nav] ? nav : "en";
   }
 
   const t = (key, ...args) => {
-    const v = window.I18N[lang][key] ?? window.I18N.de[key] ?? key;
+    const v = window.I18N[lang][key] ?? window.I18N.en[key] ?? key;
     return typeof v === "function" ? v(...args) : v;
   };
   const fmtTime = (iso) =>
@@ -66,7 +66,7 @@
         pollMs = Math.max(1000, (last.poll_interval_s || 2) * 1000);
         staleAfterS = last.stale_after_s || 30;
       }
-    } catch (_) { /* Fehler wird sichtbar gemacht, kein eingefrorener Status */ }
+    } catch (_) { /* the error becomes visible, no frozen state */ }
     render();
     setTimeout(poll, invalid ? 30000 : pollMs);
   }
@@ -107,13 +107,13 @@
     const active = slots.filter((s) => s.alert);
     const text = active.map((s) => t("alertText", s.label, fmtTime(s.alert.occurred_at))).join("\n");
     if (alerts.dataset.text !== text) {
-      alerts.dataset.text = text; // nur bei Änderung neu setzen (Screenreader)
+      alerts.dataset.text = text; // only update on change (screen readers)
       alerts.replaceChildren(...active.map((s) => el("p", { class: "alert" }, "⚠ " + t("alertText", s.label, fmtTime(s.alert.occurred_at)) +
         (s.alert.simulated ? ` [${t("simulatedShort")}]` : ""))));
     }
   }
 
-  // Neuer Anzeige-Link (anderes Fragment) -> neu laden
+  // new display link (different fragment) -> reload
   window.addEventListener("hashchange", () => location.reload());
   setInterval(render, 1000);
   applyLang();

@@ -1,0 +1,69 @@
+# Configuration of the Smart Bike Station platform (non-secret values only).
+# Secrets (data key, SMTP password) come ONLY from environment variables,
+# see deploy/server.env.example. Most values can also be overridden with BIKE_* variables.
+
+[app]
+# "development" or "production". Insecure settings are rejected in production.
+environment = "development"
+# Public base URL (links in e-mails, origin check, cookie security).
+base_url = "http://127.0.0.1:8000"
+# Allowed Host headers (protection against host header attacks). "*" only for development.
+allowed_hosts = ["127.0.0.1", "localhost"]
+# Allow customers to sign up on their own.
+signup_enabled = true
+product_name = "Smart Bike Station"
+
+[auth]
+# Session: idle timeout and absolute maximum lifetime.
+session_idle_minutes = 60
+session_absolute_hours = 12
+# Lock the account after this many failed attempts (with growing lock duration).
+lockout_threshold = 5
+lockout_base_minutes = 5
+password_min_length = 12
+# scrypt cost factor (2^15 recommended). Only lower it for tests (BIKE_SCRYPT_N).
+scrypt_n = 32768
+# Platform admins must use 2FA (always enforced in production).
+platform_admin_mfa_required = true
+# Validity of links sent by e-mail (hours).
+verify_token_hours = 48
+reset_token_hours = 1
+invite_token_hours = 72
+
+[mail]
+# "console" (development: e-mails in the log) or "smtp".
+backend = "console"
+from = "Smart Bike Station <no-reply@example.org>"
+smtp_host = ""
+smtp_port = 587
+smtp_user = ""
+smtp_starttls = true
+
+[timing]
+# Without a reliable message for this many seconds a space counts as "unknown".
+stale_after_s = 30
+ui_poll_interval_s = 2
+
+[anomaly]
+window_s = 10
+peak_threshold = 300
+min_peaks = 3
+grace_period_s = 15
+cooldown_s = 30
+# Platform-wide model trained with ml/train.py. Without it the AI is "not available".
+model_path = "../ml/models/vibration_iforest.joblib"
+
+[retention]
+# Audit log retention (days). Measurement retention depends on the plan.
+audit_days = 365
+
+[security]
+# Rate limits (requests per second, burst) per client IP or device.
+read_rate_per_s = 20
+read_burst = 60
+device_rate_per_s = 20
+device_burst = 60
+# Sign-in / sign-up endpoints per IP: this many attempts per minute.
+auth_per_minute = 10
+# Only set to true behind a trusted reverse proxy that sets X-Forwarded-For.
+trust_proxy = false

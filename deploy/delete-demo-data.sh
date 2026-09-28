@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
-# Löscht PLATTFORMWEIT alle Mess- und Ereignisdaten (nur Demo-Betrieb!). Kunden, Stationen und Konten bleiben erhalten.
+# Deletes ALL measurement and event data platform-wide (demo operation only!).
+# Customers, stations and accounts are kept. Stop the service first: systemctl stop bike-station
 set -euo pipefail
 DB=${BIKE_DB_PATH:-/var/lib/bike-station/bike_station.db}
-read -r -p "Wirklich ALLE Mess- und Ereignisdaten in $DB löschen? (ja/nein) " a
-[ "$a" = "ja" ] || exit 1
-sqlite3 "$DB" "DELETE FROM measurement; DELETE FROM event; VACUUM;"
-echo "Demodaten gelöscht."
+read -r -p "Really delete ALL measurement and event data in $DB? (yes/no) " a
+[ "$a" = "yes" ] || exit 1
+python3 - "$DB" <<'PY'
+import sqlite3, sys
+con = sqlite3.connect(sys.argv[1])
+con.executescript("DELETE FROM measurement; DELETE FROM event; VACUUM;")
+PY
+echo "Demo data deleted."

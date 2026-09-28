@@ -1,4 +1,4 @@
-/* Hoher Kontrast, große Schrift, Zustände immer auch als Text/Symbol (Plan 9.2). */
+/* High contrast, large type, states always also as text/symbol (plan 9.2). */
 :root {
   --bg: #ffffff;
   --fg: #111111;

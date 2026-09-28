@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""Isolation Forest trainieren und ehrlich mit der Baseline-Regel vergleichen (Plan 8.1, 8.2).
+"""Train an Isolation Forest and compare it honestly with the baseline rule (plan 8.1, 8.2).
 
-  * Aufteilung in Training/Test nach KOMPLETTEN Durchläufen (run_id), nie nach Einzelfenstern,
-    damit fast identische, aufeinanderfolgende Fenster nicht in beiden Gruppen landen.
-  * Training nur auf normalen Läufen (das Modell lernt "normal").
-  * Regel und Modell werden auf denselben Testläufen bewertet: Wie viele auffällige Läufe
-    werden erkannt? Wie viele normale Läufe lösen eine unnötige Warnung aus?
-  * Ergebnis als Markdown-Report (ml/report.md) mit Anzahl der Fälle und Datenquelle.
+  * Train/test split by COMPLETE runs (run_id), never by single windows, so that nearly identical
+    consecutive windows never end up in both groups.
+  * Training on normal runs only (the model learns "normal").
+  * Rule and model are evaluated on the same test runs: how many anomalous runs are detected?
+    How many normal runs cause an unnecessary warning?
+  * Result as a Markdown report (ml/report.md) with case counts and data source.
 
-    python ml/train.py ml/data/recorded.csv            # echte Aufnahmen
-    python ml/train.py ml/data/synthetic.csv           # nur Pipeline-Test (SIMULIERT)
+    python3 ml/train.py ml/data/recorded.csv            # real recordings
+    python3 ml/train.py ml/data/synthetic.csv           # pipeline test only (SIMULATED)
 """
 
 from __future__ import annotations
@@ -39,8 +39,8 @@ def split_runs(runs: dict[str, list[dict]], test_frac: float, seed: int):
 
 
 def evaluate(runs, ids, decide) -> dict:
-    res = {"normal": [0, 0], "anomal": [0, 0]}  # [Läufe mit Warnung, Läufe gesamt]
-    windows = {"normal": [0, 0], "anomal": [0, 0]}
+    res = {"normal": [0, 0], "anomalous": [0, 0]}  # [runs with a warning, runs in total]
+    windows = {"normal": [0, 0], "anomalous": [0, 0]}
     for rid in ids:
         rows = runs[rid]
         label = rows[0]["label"]
@@ -62,18 +62,18 @@ def main() -> None:
     ap.add_argument("--test-frac", type=float, default=0.3)
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--contamination", type=float, default=0.02,
-                    help="erwarteter Anteil ungewöhnlicher Fenster in normalen Trainingsdaten")
+                    help="expected share of unusual windows in normal training data")
     ap.add_argument("--model-out", type=Path, default=DEFAULT_MODEL)
     ap.add_argument("--report", type=Path, default=ML_DIR / "report.md")
     args = ap.parse_args()
 
-    from sklearn.ensemble import IsolationForest  # erst hier importieren: nur fürs Training nötig
+    from sklearn.ensemble import IsolationForest  # imported here: only needed for training
     import joblib
 
     params = load_params()
     rows = read_rows(args.csv)
     if not rows:
-        raise SystemExit("Keine Daten.")
+        raise SystemExit("No data.")
     runs: dict[str, list[dict]] = defaultdict(list)
     for r in rows:
         runs[r["run_id"]].append(r)
@@ -81,7 +81,7 @@ def main() -> None:
     simulated = "simulated" in sources
 
     train_ids, test_ids = split_runs(runs, args.test_frac, args.seed)
-    # Wie im Betrieb: in der Schonzeit wird nicht bewertet, also auch nicht darauf trainiert.
+    # As in operation: nothing is evaluated during the grace period, so nothing is trained on it either.
     X = [
         [r[f] for f in FEATURE_NAMES]
         for rid in train_ids
@@ -89,7 +89,7 @@ def main() -> None:
         if r["label"] == "normal" and r["since_change_s"] >= params.grace_period_s
     ]
     if len(X) < 10:
-        raise SystemExit(f"Zu wenige normale Trainingsfenster ({len(X)}). Mehr Durchläufe aufnehmen.")
+        raise SystemExit(f"Too few normal training windows ({len(X)}). Record more runs.")
 
     model = IsolationForest(n_estimators=200, contamination=args.contamination, random_state=args.seed)
     model.fit(X)
@@ -105,15 +105,15 @@ def main() -> None:
     ev_rule = evaluate(runs, test_ids, rule)
     ev_ml = evaluate(runs, test_ids, ml)
 
-    def score(ev):  # erkannte auffällige Läufe minus unnötige Warnungen
-        return ev["runs"]["anomal"][0] - ev["runs"]["normal"][0]
+    def score(ev):  # detected anomalous runs minus unnecessary warnings
+        return ev["runs"]["anomalous"][0] - ev["runs"]["normal"][0]
 
     go = score(ev_ml) > score(ev_rule)
     recommendation = (
-        "KI ist auf diesen Testdaten besser als die Regel -> `alert_source = \"ml\"` möglich."
+        "The AI beats the rule on this test data -> `alert_source = \"ml\"` is possible."
         if go
-        else "KI ist NICHT besser als die Regel -> sichtbare Warnung bleibt bei der Regel "
-        "(`alert_source = \"rule\"`); KI als Forschungsfunktion vorführen."
+        else "The AI is NOT better than the rule -> visible warnings stay with the rule "
+        "(`alert_source = \"rule\"`); present the AI as a research feature."
     )
 
     n_train_runs = len(train_ids)
@@ -134,42 +134,42 @@ def main() -> None:
     joblib.dump({"model": model, **meta, "features": tuple(FEATURE_NAMES)}, args.model_out)
 
     lines = [
-        "# KI-Vergleich: Isolation Forest vs. Baseline-Regel",
+        "# AI comparison: Isolation Forest vs. baseline rule",
         "",
-        f"- Erstellt: {trained_at}",
-        f"- Datenquelle: **{', '.join(sources)}**"
-        + ("  \n  **ACHTUNG: Simulierte Daten – nur Machbarkeitsdemo, keine Aussage über echte Situationen.**" if simulated else ""),
-        f"- Läufe gesamt: {len(runs)} (Training {n_train_runs}, Test {n_test_runs}); Aufteilung nach ganzen Läufen",
-        f"- Trainingsfenster (nur normal, nach Schonzeit): {len(X)}",
-        f"- Regel: mindestens {params.min_peaks} Ausschläge ≥ {params.peak_threshold} in {params.window_s:g} s, "
-        f"Schonzeit {params.grace_period_s:g} s",
-        f"- Modell: IsolationForest(n_estimators=200, contamination={args.contamination})",
+        f"- Created: {trained_at}",
+        f"- Data source: **{', '.join(sources)}**"
+        + ("  \n  **WARNING: simulated data - feasibility demo only, says nothing about real situations.**" if simulated else ""),
+        f"- Runs in total: {len(runs)} (training {n_train_runs}, test {n_test_runs}); split by complete runs",
+        f"- Training windows (normal only, after the grace period): {len(X)}",
+        f"- Rule: at least {params.min_peaks} peaks ≥ {params.peak_threshold} within {params.window_s:g} s, "
+        f"grace period {params.grace_period_s:g} s",
+        f"- Model: IsolationForest(n_estimators=200, contamination={args.contamination})",
         "",
-        "## Ergebnis auf den Testläufen",
+        "## Result on the test runs",
         "",
-        "| Verfahren | Auffällige Läufe erkannt | Normale Läufe mit unnötiger Warnung | Auffällige Fenster | Normale Fenster markiert |",
+        "| Method | Anomalous runs detected | Normal runs with an unnecessary warning | Anomalous windows flagged | Normal windows flagged |",
         "|---|---|---|---|---|",
     ]
-    for name, ev in (("Regel (Baseline)", ev_rule), ("KI (Isolation Forest)", ev_ml)):
+    for name, ev in (("Rule (baseline)", ev_rule), ("AI (Isolation Forest)", ev_ml)):
         lines.append(
-            f"| {name} | {pct(*ev['runs']['anomal'])} | {pct(*ev['runs']['normal'])} | "
-            f"{pct(*ev['windows']['anomal'])} | {pct(*ev['windows']['normal'])} |"
+            f"| {name} | {pct(*ev['runs']['anomalous'])} | {pct(*ev['runs']['normal'])} | "
+            f"{pct(*ev['windows']['anomalous'])} | {pct(*ev['windows']['normal'])} |"
         )
     lines += [
         "",
         f"**Go/No-Go:** {recommendation}",
         "",
-        "## Grenzen",
+        "## Limitations",
         "",
-        "- Eine Anomalie heißt nur: *Dieses Muster war in den bisherigen Messungen ungewöhnlich.*",
-        "- Wenige Hackathon-Messungen reichen nicht für belastbare Aussagen über echte Diebstähle.",
-        "- Neues Fahrrad, vorbeigehende Personen, Wind oder Ausparken können Fehlalarme auslösen.",
-        "- Die Zeit bis zur Anzeige wird im Live-Test (T05) gemessen, nicht hier.",
+        "- An anomaly only means: *this pattern was unusual compared with the measurements so far.*",
+        "- A few hackathon recordings are not enough for reliable statements about real thefts.",
+        "- A new bike, people passing by, wind or taking a bike out can cause false alarms.",
+        "- The time until a warning is shown is measured in the live test (T05), not here.",
         "",
     ]
     args.report.write_text("\n".join(lines), encoding="utf-8")
     print("\n".join(lines))
-    print(f"Modell gespeichert: {args.model_out}")
+    print(f"Model saved: {args.model_out}")
 
 
 if __name__ == "__main__":

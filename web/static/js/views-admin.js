@@ -1,4 +1,4 @@
-// Verwaltung: Team, Konto & Sicherheit, Organisation, Tarif, Audit-Log, Plattform.
+// Administration: team, account & security, organisation, plan, audit log, platform.
 import { api, get, post, patch, del, describeError, setCsrf } from "./api.js";
 import { getLang, setLang, t, STRINGS } from "./i18n.js";
 import { el, clear, field, toast, confirmDialog, fmtDateTime, fmtMoney, copyText, passwordMeter } from "./ui.js";
@@ -8,7 +8,7 @@ const errorCard = (e) => el("div", { class: "alert-box error", role: "alert" }, 
 const th = (...hs) => el("thead", {}, el("tr", {}, hs.map((h) => el("th", { scope: "col" }, h))));
 const RANK = { viewer: 1, operator: 2, admin: 3, owner: 4 };
 
-// Kurzform der Browserkennung für die Sitzungsliste (z. B. "Chrome · Linux").
+// Short form of the user agent for the session list (e.g. "Chrome · Linux").
 function shortUa(ua) {
   if (!ua) return "–";
   const browser = /Edg\//.test(ua) ? "Edge" : /Firefox\//.test(ua) ? "Firefox" : /Chrome\//.test(ua) ? "Chrome" : /Safari\//.test(ua) ? "Safari" : ua.split(/[\s/]/)[0];
@@ -91,7 +91,7 @@ export function viewTeam() {
   return el("div", {}, users, invites, inviteForm);
 }
 
-// ---------------------------------------------------------------------- Konto & Sicherheit
+// ---------------------------------------------------------------------- account & security
 export function viewSecurity(rerender) {
   const me = state.me;
   const node = el("div");
@@ -99,7 +99,7 @@ export function viewSecurity(rerender) {
 
   const banner = me.mfa_setup_required ? el("div", { class: "alert-box warn", role: "alert" }, t("sec.banner")) : null;
 
-  // Profil
+  // profile
   const name = el("input", { type: "text", value: me.user.name, maxlength: "100", required: true });
   const lang = el("select", {}, Object.keys(STRINGS).map((l) => el("option", { value: l, selected: l === getLang() }, l.toUpperCase())));
   const profile = onSubmit(el("form", { class: "card" }, el("h2", {}, t("sec.profile")),
@@ -113,7 +113,7 @@ export function viewSecurity(rerender) {
     rerender();
   });
 
-  // Passwort
+  // password
   const cur = el("input", { type: "password", autocomplete: "current-password", required: true, maxlength: "128" });
   const neu = el("input", { type: "password", autocomplete: "new-password", required: true, maxlength: "128" });
   const pwForm = onSubmit(el("form", { class: "card" }, el("h2", {}, t("sec.pw")),
@@ -185,7 +185,7 @@ export function viewSecurity(rerender) {
   };
   renderMfa();
 
-  // Sitzungen
+  // sessions
   const sessions = el("section", { class: "card" });
   const loadSessions = async () => {
     try {
@@ -204,7 +204,7 @@ export function viewSecurity(rerender) {
   };
   loadSessions();
 
-  // Konto löschen
+  // delete account
   const dpw = el("input", { type: "password", autocomplete: "current-password", required: true });
   const delForm = onSubmit(el("form", { class: "card" }, el("h2", {}, t("sec.delete")), el("p", { class: "muted" }, t("sec.delete_hint")),
     field(t("sec.confirm_pw"), dpw), el("button", { class: "btn danger", type: "submit" }, t("sec.delete"))), async () => {
@@ -217,7 +217,7 @@ export function viewSecurity(rerender) {
   return node;
 }
 
-// ---------------------------------------------------------------------- Organisation
+// ---------------------------------------------------------------------- organisation
 export function viewOrg() {
   const tn = state.me.tenant;
   const owner = can("owner");
@@ -262,7 +262,7 @@ export function viewOrg() {
   return el("div", { class: "grid cols-2" }, el("div", {}, general, security), el("div", {}, exportCard, delCard));
 }
 
-// ---------------------------------------------------------------------- Tarif
+// ---------------------------------------------------------------------- plan
 function planFeatures(p) {
   return [t("bill.f_stations", { n: p.max_stations }), t("bill.f_slots", { n: p.max_slots_per_station }), t("bill.f_users", { n: p.max_users }),
     t("bill.f_retention", { n: p.retention_days }), p.ml_enabled ? t("bill.f_ml") : null, p.audit_log ? t("bill.f_audit") : null,
@@ -303,7 +303,7 @@ export function viewBilling(rerender) {
     el("h2", {}, t("l.pricing")), plans, el("p", { class: "small muted" }, t("bill.note")));
 }
 
-// ---------------------------------------------------------------------- Audit-Log
+// ---------------------------------------------------------------------- audit log
 export function viewAudit() {
   const box = el("div", { class: "card" }, t("c.loading"));
   get("/api/v1/org/audit?limit=300").then(({ entries }) => {
@@ -314,7 +314,7 @@ export function viewAudit() {
   return box;
 }
 
-// ---------------------------------------------------------------------- Plattform
+// ---------------------------------------------------------------------- platform
 export function viewPlatform() {
   const kpis = el("div", { class: "grid cols-4" });
   const table = el("div", { class: "card" }, t("c.loading"));

@@ -1,4 +1,4 @@
-// Kundenportal: Router, Layout, Rechteprüfung in der Oberfläche (maßgeblich ist immer der Server).
+// Customer portal: router, layout, permission checks in the UI (the server is always authoritative).
 import { get, post, setCsrf, setAuthLostHandler } from "./api.js";
 import { applyStatic, getLang, setLang, t } from "./i18n.js";
 import { el, clear, langSwitcher } from "./ui.js";

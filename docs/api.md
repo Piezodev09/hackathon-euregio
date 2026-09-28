@@ -1,91 +1,92 @@
-# API und Datenformat
+# API and data format
 
-Alle Pfade unter `/api/v1`. Browser nutzen das Session-Cookie + `X-CSRF-Token` (aus `/auth/me`
-bzw. der Login-Antwort). Gateways nutzen `Authorization: Bearer <Geräte-Token>`.
-Fehler: `{"detail": "<code>"}` oder `{"detail": {"code": …}}`; Codes siehe `web/static/js/i18n.js` (`err.*`).
+All paths are below `/api/v1`. Browsers use the session cookie + `X-CSRF-Token` (from `/auth/me`
+or the sign-in response). Gateways use `Authorization: Bearer <device token>`.
+Errors: `{"detail": "<code>"}` or `{"detail": {"code": …}}`; the codes are listed in
+`web/static/js/i18n.js` (`err.*`).
 
-## Gateway → Plattform
+## Gateway → platform
 
-`POST /measurements` bzw. `POST /measurements/batch` (`{"measurements": […]}`, max. 200)
+`POST /measurements` or `POST /measurements/batch` (`{"measurements": […]}`, max. 200)
 
 ```json
 {"station_id": "st_…", "slot_id": "A", "sequence": 1727517600123, "occupied": true,
  "vibration_score": 12, "sensor_state": "ok", "source": "live", "age_ms": 0}
 ```
 
-- `station_id` muss zur Station des Geräte-Tokens passen (sonst `403 station_mismatch`).
-- `slot_id` ist die Platzkennung (`key`) wie im Arduino. Doppelte `sequence` → `duplicate`.
-- `age_ms`: Pufferalter; nachgesendete Daten lösen keinen Live-Alarm aus.
+- `station_id` must match the station of the device token (otherwise `403 station_mismatch`).
+- `slot_id` is the slot key as used by the Arduino. A repeated `sequence` → `duplicate`.
+- `age_ms`: time spent in the buffer; data sent late never triggers a live warning.
 
-Arduino → Pi (JSON-Zeilen): `{"slot_id":"A","presence":1,"vibration":12,"seq":1042,"state":"ok"}`.
+Arduino → Pi (JSON lines): `{"slot_id":"A","presence":1,"vibration":12,"seq":1042,"state":"ok"}`.
 
-## Agent (Raspberry Pi) – siehe auch [agent.md](agent.md)
+## Agent (Raspberry Pi) – see also [agent.md](agent.md)
 
-| Methode/Pfad | Zweck | Auth |
+| Method/path | Purpose | Auth |
 |---|---|---|
-| `GET /install/agent.sh` · `/install/agent.tar.gz` · `/install/agent.sha256` | Installationsskript, Paket, Prüfsummen | öffentlich |
-| `POST /agent/enroll` `{code, hostname, agent_version, os_info, source}` | Kopplung → `{device_id, token, station_id, slot_map, config_version}` | Einmal-Code |
-| `POST /agent/heartbeat` `{agent_version, serial_connected, buffer_len, cpu_temp_c, …}` | Zustand melden → `{slot_map, config_version, commands, update}` | Geräte-Token |
-| `POST /agent/rotate-token` | neues Token (altes 15 min gültig) | Geräte-Token |
-| `POST /stations/{id}/enrollments` · `GET` · `DELETE …/{eid}` | Kopplungscodes (Portal) | Admin |
-| `POST /stations/{id}/devices/{dev}/command` `{command: restart\|rotate_token\|update}` | Fernbefehl | Admin |
-| `GET /devices` | Flottenübersicht | Lesend |
+| `GET /install/agent.sh` · `/install/agent.tar.gz` · `/install/agent.sha256` | install script, package, checksums | public |
+| `POST /agent/enroll` `{code, hostname, agent_version, os_info, source}` | pairing → `{device_id, token, station_id, slot_map, config_version}` | one-time code |
+| `POST /agent/heartbeat` `{agent_version, serial_connected, buffer_len, cpu_temp_c, …}` | report health → `{slot_map, config_version, commands, update}` | device token |
+| `POST /agent/rotate-token` | new token (old one valid for 15 min) | device token |
+| `POST /stations/{id}/enrollments` · `GET` · `DELETE …/{eid}` | pairing codes (portal) | admin |
+| `POST /stations/{id}/devices/{dev}/command` `{command: restart\|rotate_token\|update}` | remote command | admin |
+| `GET /devices` | fleet overview | viewer |
 
-## Authentifizierung (`/auth`)
+## Authentication (`/auth`)
 
-| Methode/Pfad | Zweck |
+| Method/path | Purpose |
 |---|---|
-| `POST /auth/register` | Organisation + Inhaber anlegen (immer `202 check_email`) |
-| `POST /auth/verify-email` `{token}` | E-Mail bestätigen |
-| `POST /auth/resend-verification` `{email}` | erneut senden |
-| `POST /auth/login` `{email,password}` | Session oder `{mfa_required, mfa_token}` |
-| `POST /auth/login/mfa` `{mfa_token, code}` | TOTP- oder Wiederherstellungscode |
-| `POST /auth/logout` | Session beenden |
-| `GET/PATCH /auth/me` | Profil, Mandant, Tarif, Nutzung, CSRF-Token |
-| `POST /auth/me/delete` `{password}` | eigenes Konto löschen |
-| `POST /auth/password/forgot` · `/reset` · `/change` | Passwort |
-| `GET /auth/sessions` · `DELETE /auth/sessions/{id}` · `POST /auth/sessions/revoke-others` | Sitzungen |
+| `POST /auth/register` | create organisation + owner (always `202 check_email`) |
+| `POST /auth/verify-email` `{token}` | confirm e-mail |
+| `POST /auth/resend-verification` `{email}` | send again |
+| `POST /auth/login` `{email,password}` | session or `{mfa_required, mfa_token}` |
+| `POST /auth/login/mfa` `{mfa_token, code}` | TOTP or recovery code |
+| `POST /auth/logout` | end session |
+| `GET/PATCH /auth/me` | profile, tenant, plan, usage, CSRF token |
+| `POST /auth/me/delete` `{password}` | delete own account |
+| `POST /auth/password/forgot` · `/reset` · `/change` | password |
+| `GET /auth/sessions` · `DELETE /auth/sessions/{id}` · `POST /auth/sessions/revoke-others` | sessions |
 | `POST /auth/mfa/setup` · `/enable` · `/disable` · `/recovery-codes` | 2FA |
-| `POST /auth/invite/info` · `/invite/accept` | Einladung annehmen |
+| `POST /auth/invite/info` · `/invite/accept` | accept an invitation |
 
 ## Organisation (`/org`)
 
-| Methode/Pfad | Rolle |
+| Method/path | Role |
 |---|---|
-| `GET /org` | Lesend |
-| `PATCH /org` `{name, mfa_required}` | Admin (`mfa_required`: Inhaber) |
-| `GET /org/plans` · `POST /org/plan` | Lesend · Inhaber |
-| `GET /org/users` · `PATCH/DELETE /org/users/{id}` | Lesend · Admin |
-| `GET/POST /org/invitations` · `DELETE /org/invitations/{id}` | Admin |
-| `GET /org/audit` | Admin (Tarif mit Audit-Log) |
-| `GET /org/export` · `POST /org/delete` | Inhaber |
+| `GET /org` | viewer |
+| `PATCH /org` `{name, mfa_required}` | admin (`mfa_required`: owner) |
+| `GET /org/plans` · `POST /org/plan` | viewer · owner |
+| `GET /org/users` · `PATCH/DELETE /org/users/{id}` | viewer · admin |
+| `GET/POST /org/invitations` · `DELETE /org/invitations/{id}` | admin |
+| `GET /org/audit` | admin (plan with audit log) |
+| `GET /org/export` · `POST /org/delete` | owner |
 
-## Stationen und Betrieb
+## Stations and operation
 
-| Methode/Pfad | Rolle |
+| Method/path | Role |
 |---|---|
-| `GET /stations` (mit Live-Kurzstatus) · `POST /stations` | Lesend · Admin |
-| `GET/PATCH/DELETE /stations/{id}` | Lesend · Admin |
-| `POST /stations/{id}/slots` · `PATCH/DELETE /stations/{id}/slots/{slot}` | Admin |
-| `GET /stations/{id}/status` · `GET /stations/{id}/occupancy?hours=24` | Lesend |
-| `GET/POST /stations/{id}/devices` · `DELETE /stations/{id}/devices/{dev}` | Admin |
-| `POST /stations/{id}/display-link` | Admin |
-| `GET /events?station_id&open_only&include_shadow` · `POST /events/{id}/ack` | Lesend · Betreuer |
-| `GET /public/display/status` (Header `X-Display-Token`) | öffentlich, nur lesend |
+| `GET /stations` (with short live status) · `POST /stations` | viewer · admin |
+| `GET/PATCH/DELETE /stations/{id}` | viewer · admin |
+| `POST /stations/{id}/slots` · `PATCH/DELETE /stations/{id}/slots/{slot}` | admin |
+| `GET /stations/{id}/status` · `GET /stations/{id}/occupancy?hours=24` | viewer |
+| `GET/POST /stations/{id}/devices` · `DELETE /stations/{id}/devices/{dev}` | admin |
+| `POST /stations/{id}/display-link` | admin |
+| `GET /events?station_id&open_only&include_shadow` · `POST /events/{id}/ack` | viewer · operator |
+| `GET /public/display/status` (header `X-Display-Token`) | public, read only |
 
-## Plattform-Betreiber (`/platform`, Plattform-Admin mit 2FA)
+## Platform operator (`/platform`, platform admin with 2FA)
 
 `GET /platform/tenants`, `PATCH /platform/tenants/{id}` `{status, plan}`, `GET /platform/stats`, `GET /platform/audit`.
 
-## Sonstiges
+## Other
 
-`GET /meta` (Produktname, Tarife, Passwortlänge), `GET /health`, `/.well-known/security.txt`, `/robots.txt`.
+`GET /meta` (product name, plans, password length), `GET /health`, `/.well-known/security.txt`, `/robots.txt`.
 
-## Statusantwort (gekürzt)
+## Status response (shortened)
 
 ```json
 {"free_count": 1, "known_count": 3, "total": 3, "recommendation": "B",
- "slots": [{"slot_id": "A", "label": "Platz A", "state": "occupied", "unknown_reason": null,
+ "slots": [{"slot_id": "A", "label": "Space A", "state": "occupied", "unknown_reason": null,
             "alert": {"kind": "unusual_movement", "occurred_at": "…", "id": "evt_…", "detector": "rule"}}],
  "simulated_data": false,
  "ai": {"visible_detector": "rule", "plan_allows_ml": true, "model_available": true}}
@@ -93,7 +94,8 @@ Arduino → Pi (JSON-Zeilen): `{"slot_id":"A","presence":1,"vibration":12,"seq":
 
 `state`: `free` / `occupied` / `unknown` (`unknown_reason`: `no_data`, `stale`, `sensor_error`).
 
-## Datenmodell (SQLite, Schema-Version 3, Migration von 2 automatisch)
+## Data model (SQLite, schema version 3, migrated automatically from 2)
 
-`tenant` → `user`, `station` → `slot`, `device`, `measurement`, `event`; dazu `session`, `auth_token`
-(Einmal-Tokens), `recovery_code`, `enrollment` (Kopplungscodes), `audit_log`. Löschen eines Mandanten entfernt alles per Kaskade.
+`tenant` → `user`, `station` → `slot`, `device`, `measurement`, `event`; plus `session`, `auth_token`
+(one-time tokens), `recovery_code`, `enrollment` (pairing codes), `audit_log`. Deleting a tenant
+removes everything by cascade.

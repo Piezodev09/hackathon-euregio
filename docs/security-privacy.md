@@ -1,100 +1,100 @@
-# Sicherheit und Datenschutz
+# Security and privacy
 
-Die Plattform ist mandantenfähig (SaaS): Kunden (Organisationen) mieten sich ein und verwalten
-ihre Stationen, Geräte und Teams selbst. Grundlage der Maßnahmen sind OWASP ASVS (Level 2
-als Ziel), OWASP Top 10 und NIST SP 800-63B für Passwörter.
+The platform is multi-tenant: customers (organisations) manage their stations, devices and teams
+themselves. The measures follow OWASP ASVS (level 2 as the goal), the OWASP Top 10 and
+NIST SP 800-63B for passwords.
 
-## Umgesetzte Sicherheitsmaßnahmen
+## Implemented security measures
 
-### Identität und Anmeldung
-| Maßnahme | Umsetzung | Code |
+### Identity and sign-in
+| Measure | Implementation | Code |
 |---|---|---|
-| Passwort-Hashing | scrypt (N=2¹⁵, r=8, p=1, 16-Byte-Salt), automatisches Rehash bei höherem Kostenfaktor | `security.py` |
-| Passwortrichtlinie | ≥ 12 Zeichen, ≤ 128, Liste häufiger Passwörter, nicht Teil von E-Mail/Name, keine Zwangs-Sonderzeichen (NIST) | `password_problems` |
-| Keine Konto-Aufzählung | gleiche Antwort bei unbekannter E-Mail, falschem Passwort und gesperrtem Konto; Dummy-Hash gleicht Laufzeit an; Registrierung/Reset immer „E-Mail prüfen“ | `routes/auth.py` |
-| Brute-Force-Schutz | Kontosperre nach 5 Fehlversuchen mit wachsender Dauer (5, 10, 20 … min, max. 24 h), Hinweis-Mail; IP-Ratenbegrenzung 10/min für Auth, 5/h für Mail-auslösende Endpunkte | `_register_failure`, `Core` |
-| E-Mail-Bestätigung | Pflicht vor erster Anmeldung; Einmal-Token, 48 h gültig | `verify-email` |
-| Zwei-Faktor (TOTP) | RFC 6238, ±1 Zeitschritt, **Replay-Schutz** (letzter Schritt gespeichert), 10 Wiederherstellungscodes (nur gehasht), Pflicht per Organisation einstellbar, Pflicht für Plattform-Admins | `totp_verify`, `mfa/*` |
-| 2FA-Geheimnis im Ruhezustand | AES-256-GCM mit Associated Data (Nutzer-ID) – Datenbankdiebstahl allein reicht nicht | `SecretBox` |
-| Passwort-Reset | Einmal-Token, 1 h gültig, beendet alle Sitzungen, Benachrichtigung | `password/reset` |
-| Sicherheitsbenachrichtigungen | Mails bei Sperre, Passwortänderung, 2FA an/aus, Nutzung eines Wiederherstellungscodes | |
+| Password hashing | scrypt (N=2¹⁵, r=8, p=1, 16-byte salt), automatic rehash when the cost factor increases | `security.py` |
+| Password policy | ≥ 12 characters, ≤ 128, list of common passwords, must not contain e-mail/name, no forced special characters (NIST) | `password_problems` |
+| No account enumeration | same response for unknown e-mail, wrong password and locked account; dummy hash equalises timing; sign-up/reset always answer "check your e-mail" | `routes/auth.py` |
+| Brute-force protection | account lock after 5 failures with growing duration (5, 10, 20 … min, max. 24 h), notification e-mail; IP rate limit 10/min for auth, 5/h for endpoints that send e-mail | `_register_failure`, `Core` |
+| E-mail verification | required before the first sign-in; one-time token, valid 48 h | `verify-email` |
+| Two-factor (TOTP) | RFC 6238, ±1 time step, **replay protection** (last step stored), 10 recovery codes (hashed only), can be required per organisation, mandatory for platform admins | `totp_verify`, `mfa/*` |
+| 2FA secret at rest | AES-256-GCM with associated data (user ID) – stealing the database alone is not enough | `SecretBox` |
+| Password reset | one-time token, valid 1 h, ends all sessions, notification | `password/reset` |
+| Security notifications | e-mails on lock-out, password change, 2FA on/off, use of a recovery code | |
 
-### Sitzungen
-| Maßnahme | Umsetzung |
+### Sessions
+| Measure | Implementation |
 |---|---|
-| Serverseitige Sessions | 256-Bit-Zufallstoken, in der DB nur SHA-256-Hash, sofort widerrufbar |
-| Cookie | `__Host-`-Präfix (bei HTTPS), `HttpOnly`, `Secure`, `SameSite=Strict`, `Path=/` |
-| Laufzeit | 60 min Leerlauf, 12 h absolut |
-| Session-Fixation | bei jeder Anmeldung neue Session, alte wird verworfen |
-| Widerruf | Liste aktiver Sitzungen, einzeln/alle anderen abmelden; Passwort-/Rollenänderung und 2FA-Aktivierung beenden andere Sitzungen; Sperre eines Mandanten beendet alle |
-| CSRF | Synchronizer-Token (`X-CSRF-Token`) für jede zustandsändernde Anfrage **plus** Origin-/`Sec-Fetch-Site`-Prüfung **plus** SameSite=Strict |
+| Server-side sessions | 256-bit random token, only its SHA-256 hash in the database, revocable at once |
+| Cookie | `__Host-` prefix (with HTTPS), `HttpOnly`, `Secure`, `SameSite=Strict`, `Path=/` |
+| Lifetime | 60 min idle, 12 h absolute |
+| Session fixation | a new session on every sign-in, the old one is discarded |
+| Revocation | list of active sessions, sign out one/all others; password/role change and enabling 2FA end other sessions; suspending a tenant ends all |
+| CSRF | synchronizer token (`X-CSRF-Token`) for every state-changing request **plus** origin/`Sec-Fetch-Site` check **plus** SameSite=Strict |
 
-### Autorisierung und Mandantentrennung
-- Jede Abfrage ist über `tenant_id` gefiltert; fremde Ressourcen liefern **404** (keine Existenz-Auskunft).
-- Nicht erratbare IDs (`st_…`, `usr_…`, 96 Bit) statt fortlaufender Nummern.
-- Rollen: Inhaber > Administrator > Betreuer > Lesend. Niemand vergibt höhere Rechte als die eigenen;
-  der letzte Inhaber kann weder entfernt noch herabgestuft werden.
-- Geräte-Tokens gelten nur für **eine** Station (`station_mismatch` bei Abweichung), sind widerrufbar,
-  nur gehasht gespeichert und werden genau einmal angezeigt.
-- Agent-Kopplung per Einmal-Code (~50 Bit, 30 min, nur gehasht, rate-limitiert); Geräte-Tokens rotieren
-  automatisch alle 30 Tage mit kurzer Übergangsfrist; Fernbefehle nur aus fester Liste; Updates nur mit
-  passender SHA-256, sicherem Entpacken und automatischem Rollback (Details: [agent.md](agent.md)).
-- Öffentliche Anzeige-Links: nur lesend, eingeschränkte Daten (keine KI-/Ereignisdetails), rotierbar,
-  deaktivierbar; Token im URL-Fragment und im Header – nie in Server-Logs.
-- Tarif-Limits (Stationen, Plätze, Nutzer, Funktionen) werden serverseitig erzwungen.
-- Plattform-Admins sind von Mandanten getrennt und benötigen 2FA.
+### Authorisation and tenant isolation
+- Every query is filtered by `tenant_id`; resources of other tenants return **404** (no existence oracle).
+- Unguessable IDs (`st_…`, `usr_…`, 96 bit) instead of sequential numbers.
+- Roles: owner > admin > operator > viewer. Nobody grants higher rights than their own; the last
+  owner can neither be removed nor demoted.
+- Device tokens are valid for **one** station only (`station_mismatch` otherwise), revocable,
+  stored only as hashes and shown exactly once.
+- Agent pairing with a one-time code (~50 bit, 30 min, hashed, rate-limited); device tokens rotate
+  automatically every 30 days with a short grace period; remote commands only from a fixed list;
+  updates only with a matching SHA-256, safe extraction and automatic rollback (see [agent.md](agent.md)).
+- Public display links: read only, reduced data (no AI/event details), rotatable, can be disabled;
+  token in the URL fragment and a header – never in server logs.
+- Plan limits (stations, spaces, users, features) are enforced on the server.
+- Platform admins are separate from tenants and need 2FA.
 
-### Transport, Header, Eingaben
-| Maßnahme | Umsetzung |
+### Transport, headers, input
+| Measure | Implementation |
 |---|---|
-| TLS | HTTPS Pflicht in `production` (Start verweigert sonst); HSTS 2 Jahre inkl. Subdomains |
-| Content-Security-Policy | `default-src 'none'; script-src 'self'; style-src 'self'; frame-ancestors 'none'; base-uri 'none'; object-src 'none'` – kein Inline-JS/CSS |
-| Weitere Header | `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Permissions-Policy` (Kamera, Mikrofon, Standort … aus), COOP/CORP `same-origin`, `Cache-Control: no-store` für API und Seiten, `X-Request-ID` |
-| Host-Header | `TrustedHostMiddleware` mit Allowlist |
-| Eingaben | strikte Pydantic-Schemata (`extra=forbid`), Längen, Muster, Steuerzeichen verboten; E-Mail-Header-Injection damit ausgeschlossen |
-| Anfragegröße | 64 KB, auch bei chunked Transfer |
-| Fehlerausgaben | keine Stacktraces, keine gespiegelten Eingaben, keine OpenAPI/Docs-Seiten |
-| XSS im Frontend | kein `innerHTML`; alle Inhalte als Textknoten |
-| SQL-Injection | ausschließlich parametrisierte Abfragen |
-| `security.txt` | `/.well-known/security.txt` für Meldungen von Schwachstellen |
+| TLS | HTTPS mandatory in `production` (start is refused otherwise); HSTS 2 years incl. subdomains |
+| Content Security Policy | `default-src 'none'; script-src 'self'; style-src 'self'; frame-ancestors 'none'; base-uri 'none'; object-src 'none'` – no inline JS/CSS |
+| Other headers | `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Permissions-Policy` (camera, microphone, location … off), COOP/CORP `same-origin`, `Cache-Control: no-store` for API and pages, `X-Request-ID` |
+| Host header | `TrustedHostMiddleware` with an allow list |
+| Input | strict Pydantic schemas (`extra=forbid`), lengths, patterns, control characters rejected; this also rules out e-mail header injection |
+| Request size | 64 KB, also for chunked transfers |
+| Error output | no stack traces, no echoed input, no OpenAPI/docs pages |
+| XSS in the frontend | no `innerHTML`; all content as text nodes |
+| SQL injection | parameterised queries only |
+| `security.txt` | `/.well-known/security.txt` for vulnerability reports |
 
-### Betrieb
-- Unsichere Konfigurationen werden in `production` abgelehnt (HTTP, `*`-Hosts, Console-Mail, schwacher scrypt-Faktor, fehlender Datenschlüssel).
-- Datenbankdatei `0600`, `secure_delete`, systemd-Härtung (`NoNewPrivileges`, `ProtectSystem=strict`, …), nftables-Beispiel.
-- Audit-Log je Mandant (Anmeldungen, Fehlversuche, Rollen, Tokens, Tarif, Export, Quittierungen …) und plattformweit.
-- Automatische Löschung: Messdaten/Ereignisse nach Tarif-Frist (7/30/90 Tage), Audit-Log nach 365 Tagen, abgelaufene Sessions/Tokens.
+### Operation
+- Insecure configurations are rejected in `production` (HTTP, `*` hosts, weak scrypt factor, missing data key).
+- Database file `0600`, `secure_delete`, systemd hardening (`NoNewPrivileges`, `ProtectSystem=strict`, …), nftables example.
+- Audit log per tenant (sign-ins, failures, roles, tokens, plan, export, acknowledgements …) and platform-wide.
+- Automatic deletion: measurements/events after the plan period (7/30/90 days), audit log after 365 days, expired sessions/tokens.
 
-## Bedrohungsmodell (Auszug)
+## Threat model (excerpt)
 
-| Bedrohung | Gegenmaßnahme |
+| Threat | Countermeasure |
 |---|---|
-| Credential Stuffing / Brute Force | Kontosperre, IP-Limit, 2FA, keine Aufzählung |
-| Session-Diebstahl | HttpOnly-Cookie, kurze Laufzeiten, Widerruf, CSP gegen XSS |
-| CSRF | Token + Origin + SameSite=Strict |
-| Mandant A liest Daten von B (IDOR) | Tenant-Filter in jeder Abfrage, 404, nicht erratbare IDs, Tests `test_tenancy.py` |
-| Gefälschte Sensordaten | Geräte-Token je Station, Validierung, Audit |
-| Gestohlenes Geräte-Token | nur eine Station betroffen, widerrufbar, automatische Rotation, „zuletzt gesehen“ + IP sichtbar |
-| Manipuliertes Agent-Update | SHA-256 über authentifizierten Kanal, sicheres Entpacken, Versionsprüfung, Rollback (offen: Release-Signatur) |
-| Erratener Kopplungscode | 50 Bit, 30 min, einmalig, Rate-Limit je IP |
-| DB-Leak | Passwörter scrypt, Tokens gehasht, 2FA-Geheimnisse AES-GCM |
-| Missbrauch von Anzeige-Links | nur Lesen, begrenzte Daten, rotierbar, Rate-Limit |
-| Fehlinterpretation eines Alarms | sachlicher Text, kein Personenbezug |
+| Credential stuffing / brute force | account lock, IP limit, 2FA, no enumeration |
+| Session theft | HttpOnly cookie, short lifetimes, revocation, CSP against XSS |
+| CSRF | token + origin + SameSite=Strict |
+| Tenant A reads data of B (IDOR) | tenant filter in every query, 404, unguessable IDs, tests `test_tenancy.py` |
+| Forged sensor data | device token per station, validation, audit |
+| Stolen device token | only one station affected, revocable, automatic rotation, "last seen" + IP visible |
+| Manipulated agent update | SHA-256 over the authenticated channel, safe extraction, version check, rollback (open: release signature) |
+| Guessed pairing code | 50 bit, 30 min, single use, rate limit per IP |
+| Database leak | passwords with scrypt, tokens hashed, 2FA secrets AES-GCM |
+| Abuse of display links | read only, limited data, rotatable, rate limit |
+| Misinterpretation of a warning | factual wording, no reference to persons |
 
-## Datenschutz
+## Privacy
 
-- Keine Kameras, kein RFID, keine Personenerkennung. Messdaten: Platz, Zustand, Vibrationswert, Zeit, Quelle.
-- Kontodaten: Name, E-Mail, Rolle, Sprache; Sitzungen: IP und Browserkennung (Sicherheitszweck, max. 12 h).
-- Betroffenenrechte: Datenexport (JSON, Art. 20), Konto löschen, Organisation vollständig löschen (Kaskade).
-- Keine Tracking-/Werbe-Cookies; nur ein technisch notwendiges Session-Cookie.
-- **Vor produktivem Einsatz durch den Betreiber zu klären:** Datenschutzerklärung und Impressum
-  (Platzhalter auf der Landingpage), Auftragsverarbeitungsvertrag mit Kunden, Hosting-Standort,
-  Verzeichnis der Verarbeitungstätigkeiten, ggf. DSFA im Schulkontext.
+- No cameras, no RFID, no identification of people. Measurements: space, state, vibration value, time, source.
+- Account data: name, e-mail, role, language; sessions: IP and user agent (security purpose, max. 12 h).
+- Data subject rights: data export (JSON, Art. 20 GDPR), delete account, delete the whole organisation (cascade).
+- No tracking or advertising cookies; only one technically necessary session cookie.
+- **To be settled by the operator before production use:** privacy policy and imprint
+  (`/legal/*`), data processing agreement with customers, hosting location, record of processing
+  activities, possibly a DPIA in a school context.
 
-## Bekannte Grenzen / offene Punkte
+## Known limitations / open points
 
-- Keine Zahlungsanbindung – Tarifwechsel werden protokolliert, Abrechnung manuell.
-- Ratenbegrenzung im Speicher je Prozess (bei mehreren Instanzen: Redis o. ä. nötig).
-- SQLite für kleinen Betrieb; für viele Kunden auf PostgreSQL mit Row-Level-Security umstellen.
-- Kein QR-Code für die 2FA-Einrichtung (Schlüssel + `otpauth://`-Link); WebAuthn/Passkeys als Erweiterung.
-- Agent-Releases sind per Prüfsumme, aber noch nicht kryptografisch signiert.
-- Kein externer Penetrationstest durchgeführt.
+- No payment integration – plan changes are audited, billing is manual.
+- Rate limiting in memory per process (several instances would need Redis or similar).
+- SQLite for small installations; for many customers move to PostgreSQL with row-level security.
+- No QR code for the 2FA setup (key + `otpauth://` link); WebAuthn/passkeys as an extension.
+- Agent releases are protected by checksum but not yet cryptographically signed.
+- No external penetration test has been carried out.

@@ -1,9 +1,8 @@
-// Texte DE/NL/EN (Plan 9.2). Übersetzungen vor der Vorführung von einer
-// sprachkundigen Person prüfen lassen!
+// Kiosk display texts EN/DE/NL (plan 9.2). English is the reference language and the fallback.
 window.I18N = {
   de: {
     skip: "Zu den Stellplätzen springen",
-    title: "Smarte Radstation",
+    title: "Smart Bike Station",
     invalidLink: "Dieser Anzeige-Link ist ungültig oder deaktiviert.",
     slotName: (id) => `Platz ${id}`,
     summaryHeading: "Übersicht",

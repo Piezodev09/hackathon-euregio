@@ -1,61 +1,78 @@
-# Architektur
+# Architecture
 
-Konkreter Vorschlag nach Projektplan Kapitel 3 – an die tatsächlich vorhandenen Geräte anpassen.
+Concrete proposal following chapter 3 of the project plan. Adapt pins, thresholds and network
+details to the hardware that is actually available.
 
-## Plattformen und Aufgaben
+## Components and responsibilities
 
-| Plattform | Aufgabe | Code |
+```mermaid
+flowchart LR
+  subgraph Station["Bike station (on site)"]
+    S["Sensors<br/>HC-SR04 presence<br/>SW-420 vibration"] --> A["Arduino<br/>debounce, LEDs"]
+    A -- "USB serial<br/>JSON lines" --> P["Raspberry Pi<br/>agent (bikeagent)"]
+  end
+  P -- "HTTPS (pinned CA)<br/>measurements, heartbeat" --> SRV
+  P -. "MQTT (LAN, optional)" .-> HA["Home Assistant"]
+  subgraph Proxmox["Proxmox host"]
+    SRV["LXC: platform (server/)<br/>FastAPI + SQLite + AI"]
+  end
+  SRV -- "HTTPS" --> B["Browser<br/>portal · kiosk · landing page"]
+  SRV -. "webhooks" .-> CHAT["Teams / Slack / Discord / HA"]
+```
+
+| Platform | Responsibility | Code |
 |---|---|---|
-| Arduino | Sensoren lesen, Belegung 2 s entprellen, LEDs setzen, JSON-Zeilen über USB-Seriell senden (bei Änderung, bei Vibration max. alle 0,5 s, Heartbeat alle 10 s) | `arduino/smart_bike_station/` |
-| Raspberry Pi | Zeilen prüfen, Platz zuordnen, Sequenznummer vergeben, bis zu 500 Nachrichten puffern, per HTTPS senden; schweigt der Arduino > 15 s, alle Plätze als Sensorfehler melden; Netzstatus an Arduino zurück | `pi-gateway/gateway.py` |
-| Debian-VM auf Proxmox | FastAPI: Messungen annehmen, Zustände ableiten, Regel + KI auswerten, SQLite, Dashboard ausliefern | `backend/`, `web/` |
-| Browser | Live-Belegung, Empfehlung, Warnungen, Zeitstempel, Verlauf; Kundenportal mit Rollen, Kiosk-Anzeige per Anzeige-Link | `web/` |
+| Arduino | read sensors, debounce occupancy for 2 s, drive LEDs, send JSON lines over USB serial (on change, vibration at most every 0.5 s, heartbeat every 10 s) | `firmware/smart_bike_station/` |
+| Raspberry Pi | validate lines, map slots, assign sequence numbers, buffer up to 500 messages, upload via HTTPS; if the Arduino is silent for > 15 s report every slot as a sensor error; report the network state back to the Arduino; heartbeat, remote configuration, self-update | `agent/bikeagent/` |
+| Proxmox LXC (or VM / Docker) | FastAPI: accept measurements, derive states, evaluate rule + AI, SQLite, serve portal, kiosk and landing page | `server/`, `web/` |
+| Browser | live occupancy, recommendation, warnings, timestamps, history; customer portal with roles, kiosk display via display link | `web/` |
 
-## Datenfluss
-
-```
-Fahrrad einstellen
-  -> Sensor misst Abstand/Präsenz
-  -> Arduino entprellt (2 s) und meldet {"slot_id","presence","vibration","seq","state"}
-  -> Pi prüft Format/Plausibilität, ordnet Stellplatz zu, vergibt Sequenznummer
-       +-> API nicht erreichbar? -> puffern (begrenzt), später mit age_ms nachsenden
-  -> API prüft Geräte-Token + Eingaben, setzt Server-Zeitstempel
-       +-> SQLite: measurement (+ event bei Sensorfehler/Warnung)
-       +-> belegt + Vibration: Merkmale berechnen -> Regel und KI bewerten
-  -> Dashboard fragt alle 2 s den Status ab
-```
-
-## Zustände
+## Data flow
 
 ```
-[FREI] <-- Fahrrad erkannt / entfernt --> [BELEGT]
-  | Messung unplausibel / Sensorausfall / keine Daten seit 30 s
+Bike is parked
+  -> sensor measures distance / presence
+  -> Arduino debounces (2 s) and reports {"slot_id","presence","vibration","seq","state"}
+  -> Pi checks format/plausibility, maps the slot, assigns a sequence number
+       +-> platform unreachable? -> buffer (bounded), resend later with age_ms
+  -> platform checks device token + input, sets the server timestamp
+       +-> SQLite: measurement (+ event on sensor fault / warning)
+       +-> occupied + vibration: compute features -> rule and AI evaluate
+  -> the dashboard polls the status every 2 s
+```
+
+## States
+
+```
+[FREE] <-- bike detected / removed --> [OCCUPIED]
+  | implausible reading / sensor failure / no data for 30 s
   v
-[UNBEKANNT] -- gültige Messungen --> neuer Zustand
-[BELEGT] -- auffällige Vibration --> Warnereignis (Platz bleibt BELEGT)
+[UNKNOWN] -- valid readings --> new state
+[OCCUPIED] -- unusual vibration --> warning event (the space stays OCCUPIED)
 ```
 
-Ein Alarm ist kein Belegungszustand. „Unbekannt“ wird an drei Stellen erzwungen:
+A warning is not an occupancy state. "Unknown" is enforced in four places:
 
-1. **Arduino**: nach dem Start und nach 5 ungültigen Messungen in Folge `presence=-1`.
-2. **Gateway**: kommt vom Arduino nichts mehr, meldet es `sensor_state="error"` für alle Plätze.
-3. **API**: letzte Meldung älter als `stale_after_s` (30 s) → `unknown/stale`.
-4. **Browser**: letzte erfolgreiche Antwort älter als 30 s → alle Plätze `unknown/connection`.
+1. **Arduino**: after a start and after 5 invalid readings in a row `presence=-1`.
+2. **Agent**: if the Arduino stops sending, it reports `sensor_state="error"` for every slot.
+3. **Platform**: last message older than `stale_after_s` (30 s) -> `unknown/stale`.
+4. **Browser**: last successful response older than 30 s -> every slot `unknown/connection`.
 
-## Zeitwerte (Planungsannahmen, in Konfiguration)
+## Timing (planning assumptions, configurable)
 
-| Wert | Default | Ort |
+| Value | Default | Where |
 |---|---|---|
-| Entprellung | 2 s | `STABLE_MS` im Sketch |
-| Heartbeat | 10 s | `HEARTBEAT_MS` im Sketch, `timing.heartbeat_s` im Gateway |
-| Arduino-Timeout | 15 s | `timing.arduino_timeout_s` im Gateway |
-| „unbekannt/veraltet“ | 30 s | `timing.stale_after_s` in `backend/config.toml` |
-| Dashboard-Abfrage | 2 s | `timing.ui_poll_interval_s` |
-| Schonzeit nach Belegungswechsel | 15 s | `anomaly.grace_period_s` |
+| Debounce | 2 s | `STABLE_MS` in the sketch |
+| Heartbeat | 10 s | `HEARTBEAT_MS` in the sketch |
+| Arduino timeout | 15 s | `GatewayConfig.arduino_timeout_s` in the agent |
+| "unknown / stale" | 30 s | `timing.stale_after_s` in `server/config.toml` |
+| Dashboard polling | 2 s | `timing.ui_poll_interval_s` |
+| Grace period after an occupancy change | 15 s | `anomaly.grace_period_s` |
+| Agent heartbeat | 60 s | `HEARTBEAT_S` in `server/app/routes/agent.py` |
 
-## Warum so einfach?
+## Why so simple?
 
-Kein Message-Broker, kein Kubernetes, eine Datenbankdatei, Polling statt WebSockets:
-weniger Integrations- und Fehleraufwand bei wenigen Demo-Plätzen (Plan 3.2).
-Gateway nutzt nur die Python-Standardbibliothek + pyserial, damit die Installation auch
-in Netzen mit Proxy/eingeschränktem Internet klappt.
+No message broker, no Kubernetes, one database file, polling instead of WebSockets: less
+integration and failure surface for a few demo spaces (plan 3.2). The agent only uses the Python
+standard library plus pyserial so that the installation also works in networks with a proxy or
+restricted internet access. MQTT is optional and purely local.

@@ -1,4 +1,4 @@
-// Landingpage: Sprache, Beispiel-Vorschau, Preise aus der API.
+// Landing page: language, example preview, plans from the API.
 import { applyStatic, getLang, t } from "./i18n.js";
 import { el, clear, langSwitcher, slotSymbol } from "./ui.js";
 import { planCard } from "./views-admin.js";

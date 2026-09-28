@@ -1,10 +1,10 @@
-// Gemeinsamer Zustand des Portals und Hilfen für Rollen/Timer.
+// Shared portal state and helpers for roles and timers.
 export const state = { me: null };
 
 const RANK = { viewer: 1, operator: 2, admin: 3, owner: 4 };
 export const can = (role) => !!state.me?.tenant && (RANK[state.me.user.role] || 0) >= RANK[role];
 
-// Timer der aktuellen Seite; werden beim Seitenwechsel beendet.
+// Timers of the current page; cleared when navigating.
 let timers = [];
 export function every(ms, fn) {
   fn();

@@ -1,4 +1,4 @@
-// API-Client: gleiche Herkunft, Session-Cookie (HttpOnly) + CSRF-Header, übersetzte Fehlermeldungen.
+// API client: same origin, session cookie (HttpOnly) + CSRF header, translated error messages.
 import { t } from "./i18n.js";
 
 let csrfToken = null;

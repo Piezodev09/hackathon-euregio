@@ -1,4 +1,4 @@
-// Betrieb: Übersicht, Stationen, Live-Ansicht, Einstellungen, Meldungen.
+// Operations: overview, stations, live view, settings, events, gateways.
 import { get, post, patch, del, describeError } from "./api.js";
 import { getLang, t } from "./i18n.js";
 import { el, clear, field, toast, confirmDialog, fmtDateTime, fmtTime, copyText, slotSymbol } from "./ui.js";
@@ -25,7 +25,7 @@ function stationCard(s) {
     el("p", {}, el("a", { class: "btn small", href: `#/stations/${s.id}` }, t("ov.open"))));
 }
 
-// ---------------------------------------------------------------------- Übersicht
+// ---------------------------------------------------------------------- overview
 export function viewOverview() {
   const kpis = el("div", { class: "grid cols-4" });
   const cards = el("div", { class: "grid cols-3" });
@@ -82,7 +82,7 @@ export function viewNewStation() {
   return form;
 }
 
-// ---------------------------------------------------------------------- Live-Ansicht
+// ---------------------------------------------------------------------- live view
 export function slotList(status, { connLost = false } = {}) {
   const slots = status.slots.map((s) => (connLost ? { ...s, state: "unknown", unknown_reason: "connection" } : s));
   const rec = connLost ? null : status.recommendation;
@@ -214,7 +214,7 @@ export function viewStation(id, setTitle) {
   return node;
 }
 
-// ---------------------------------------------------------------------- Einstellungen
+// ---------------------------------------------------------------------- settings
 export function viewStationSettings(id, setTitle) {
   const node = el("div", {}, el("p", {}, t("c.loading")));
   const load = async () => {
@@ -338,7 +338,7 @@ export function viewStationSettings(id, setTitle) {
       } catch (e) { clear(list, errorCard(e)); }
     };
 
-    // Manuelles Token (Fortgeschrittene / ohne Installationsskript)
+    // manual token (advanced / without install script)
     const name = el("input", { type: "text", required: true, maxlength: "100", value: "Pi-Gateway" });
     const manual = el("form", { class: "btn-row" }, field(t("ss.device_name"), name), el("button", { class: "btn", type: "submit" }, t("ss.add_device")));
     const manualReveal = el("div");
@@ -346,7 +346,8 @@ export function viewStationSettings(id, setTitle) {
       ev.preventDefault();
       try {
         const d = await post(`/api/v1/stations/${id}/devices`, { name: name.value });
-        const cfg = `[api]\nurl = "${location.origin}"\n\n[station]\nid = "${d.station_id}"\n[station.slot_map]\n${st.slots.map((s) => `${s.key} = "${s.key}"`).join("\n")}\n\n# /etc/bike-gateway/gateway.env\n# BIKE_DEVICE_TOKEN=${d.token}`;
+        const key = st.slots[0]?.key || "A";
+        const cfg = `curl -X POST ${location.origin}/api/v1/measurements \\\n  -H "Authorization: Bearer ${d.token}" -H "Content-Type: application/json" \\\n  -d '{"station_id":"${d.station_id}","slot_id":"${key}","sequence":1,"occupied":true,"vibration_score":0,"sensor_state":"ok"}'`;
         clear(manualReveal, el("div", { class: "alert-box warn" }, el("p", {}, t("ss.token_once")),
           el("p", { class: "secret-box mono" }, d.token), el("button", { class: "btn small", type: "button", onclick: () => copyText(d.token) }, t("c.copy"))),
           el("p", { class: "small muted" }, t("ss.gateway_hint")), el("pre", { class: "secret-box mono small" }, cfg),
@@ -447,7 +448,7 @@ export function viewDevices() {
   return el("div", {}, el("p", { class: "muted" }, t("ag.fleet_hint")), box);
 }
 
-// ---------------------------------------------------------------------- Meldungen
+// ---------------------------------------------------------------------- events
 export function viewEvents() {
   const openOnly = el("input", { type: "checkbox" });
   const shadow = el("input", { type: "checkbox" });
