@@ -51,6 +51,17 @@ export function fmtDateTime(iso) {
 export function fmtTime(iso) {
   return iso ? new Date(iso).toLocaleTimeString(getLang(), { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "–";
 }
+export function fmtCents(c) {
+  if (c === null || c === undefined) return "–";
+  return new Intl.NumberFormat(getLang(), { style: "currency", currency: "EUR" }).format(c / 100);
+}
+export function fmtDuration(s) {
+  if (s === null || s === undefined) return "–";
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60);
+  return h < 48 ? `${h} h ${m % 60} min` : `${Math.floor(h / 24)} d ${h % 24} h`;
+}
 export function fmtMoney(n) {
   return new Intl.NumberFormat(getLang(), { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n);
 }
@@ -108,6 +119,9 @@ const ICONS = {
   nodata: `<svg ${NS}><circle cx="24" cy="24" r="19" fill="none" stroke="currentColor" stroke-width="4" stroke-dasharray="6 4"/><path d="M16 24h16" stroke="currentColor" stroke-width="4.5" stroke-linecap="round"/></svg>`,
   info: `<svg ${NS}><circle cx="24" cy="24" r="19" fill="none" stroke="currentColor" stroke-width="4"/><path d="M24 22v13" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><circle cx="24" cy="15" r="2.6" fill="currentColor"/></svg>`,
   vib: `<svg ${NS}><path d="M4 24h7l4-10 6 20 6-24 6 20 4-6h7" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  card: `<svg ${NS}><rect x="5" y="11" width="38" height="26" rx="4" fill="none" stroke="currentColor" stroke-width="4"/><path d="M31 20a6 6 0 0 1 0 8M35 17a10 10 0 0 1 0 14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M11 30h12" stroke="currentColor" stroke-width="4" stroke-linecap="round"/></svg>`,
+  camera: `<svg ${NS}><path d="M6 16h8l4-6h12l4 6h8v24H6Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><circle cx="24" cy="27" r="7" fill="none" stroke="currentColor" stroke-width="4"/></svg>`,
+  wrench: `<svg ${NS}><path d="M30 6a10 10 0 0 0-9 14L7 34a4 4 0 0 0 6 6l14-14a10 10 0 0 0 14-9l-6 6-6-2-2-6Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/></svg>`,
   logo: `<svg ${NS}><path d="M6 42V12h36v30" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><rect x="14" y="14" width="20" height="8" rx="1" fill="currentColor"/><circle cx="16" cy="35" r="5" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="32" cy="35" r="5" fill="none" stroke="currentColor" stroke-width="3"/><path d="M16 35l5-8h7l4 8" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>`,
 };
 const parser = new DOMParser();

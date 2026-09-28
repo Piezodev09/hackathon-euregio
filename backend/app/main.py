@@ -21,7 +21,9 @@ from .config import Settings, load_settings
 from .core import Core
 from .agent_bundle import AgentBundle
 from .tlsinfo import TlsInfo
-from .routes import agent, auth, org, platform, stations
+from .licensing import Licensing
+from .parking import Parking
+from .routes import agent, auth, org, parking, platform, stations
 from .service import Monitoring
 
 log = logging.getLogger("bike_station")
@@ -72,10 +74,12 @@ def create_app(settings: Settings | None = None, clock: Callable[[], float] = ti
     settings = settings or load_settings()
     core = Core(settings, clock=clock)
     monitoring = Monitoring(core)
+    licensing = Licensing(core)
 
     async def maintenance_loop():
         while True:
             try:
+                licensing.record_usage()
                 d = monitoring.purge()
                 if any(d.values()):
                     log.info("Aufbewahrung: %s gelöscht", d)
@@ -94,6 +98,9 @@ def create_app(settings: Settings | None = None, clock: Callable[[], float] = ti
                   docs_url=None, redoc_url=None, openapi_url=None)  # keine öffentliche API-Doku/Debug-Ausgabe
     app.state.core = core
     app.state.monitoring = monitoring
+    app.state.licensing = licensing
+    app.state.parking = Parking(core)
+    monitoring.parking = app.state.parking
     app.state.tls = TlsInfo.load(settings.tls_cert_file) if settings.base_url.startswith("https://") else None
     app.state.agent_bundle = AgentBundle.build(settings.base_url, pin=app.state.tls.pin if app.state.tls else "")
     log.info("Agent-Paket %s bereit (sha256 %s)", app.state.agent_bundle.version, app.state.agent_bundle.sha256[:12])
@@ -146,7 +153,7 @@ def create_app(settings: Settings | None = None, clock: Callable[[], float] = ti
         return JSONResponse({"detail": "internal_error"}, 500)
 
     # ------------------------------------------------------------------ Router
-    for r in (auth.router, org.router, stations.router, agent.router, platform.router):
+    for r in (auth.router, org.router, stations.router, agent.router, platform.router, parking.router):
         app.include_router(r)
 
     @app.get("/health", include_in_schema=False)

@@ -182,6 +182,8 @@ def test_simulator_single_stall_lines():
     sim.emit()
     sim.command("p")
     sim.command("e")
+    sim.command("n 04aabbccdd")
     lines = [parse_line(x) for x in out.getvalue().splitlines()]
-    assert [m["occupied"] for m in lines] == [False, True, None]
-    assert lines[-1]["sensor_state"] == "error"
+    assert [m.get("occupied") for m in lines[:3]] == [False, True, None]
+    assert lines[2]["sensor_state"] == "error"
+    assert lines[3] == {"kind": "nfc", "uid": "04AABBCCDD"}

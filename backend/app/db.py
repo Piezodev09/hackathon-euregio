@@ -12,7 +12,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS tenant (
@@ -179,6 +179,108 @@ CREATE TABLE IF NOT EXISTS event (
 CREATE INDEX IF NOT EXISTS idx_event_tenant_time ON event (tenant_id, occurred_at);
 CREATE INDEX IF NOT EXISTS idx_event_slot ON event (slot_id, kind, severity, occurred_at);
 
+-- NFC-Karten: nur HMAC der UID (Roh-UID wird nie gespeichert). pending = unbekannt, vom Admin anzulernen.
+CREATE TABLE IF NOT EXISTS card (
+    id              TEXT PRIMARY KEY,
+    tenant_id       TEXT NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+    uid_hmac        TEXT NOT NULL,
+    label           TEXT NOT NULL DEFAULT '',
+    status          TEXT NOT NULL DEFAULT 'pending',   -- pending | active | blocked
+    created_at      REAL NOT NULL,
+    last_seen_at    REAL,
+    last_station_id TEXT,
+    UNIQUE (tenant_id, uid_hmac)
+);
+
+-- Parkvorgang: Check-in bis Check-out per Karte, Gebühr nach Tarif-Schnappschuss.
+CREATE TABLE IF NOT EXISTS parking_session (
+    id            TEXT PRIMARY KEY,
+    tenant_id     TEXT NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+    station_id    TEXT NOT NULL REFERENCES station(id) ON DELETE CASCADE,
+    card_id       TEXT NOT NULL REFERENCES card(id) ON DELETE CASCADE,
+    started_at    REAL NOT NULL,
+    ended_at      REAL,
+    amount_cents  INTEGER,
+    tariff        TEXT NOT NULL,
+    status        TEXT NOT NULL DEFAULT 'open',       -- open | closed | cancelled
+    closed_by     TEXT,
+    source        TEXT NOT NULL DEFAULT 'live'
+);
+CREATE INDEX IF NOT EXISTS idx_session_station ON parking_session (station_id, status);
+CREATE INDEX IF NOT EXISTS idx_session_tenant_time ON parking_session (tenant_id, started_at);
+
+-- Protokoll der NFC-Vorgänge (ohne UID) + Schutz vor doppelter Verarbeitung.
+CREATE TABLE IF NOT EXISTS nfc_tap (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id   TEXT NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+    station_id  TEXT NOT NULL REFERENCES station(id) ON DELETE CASCADE,
+    device_id   TEXT NOT NULL,
+    sequence    INTEGER NOT NULL,
+    card_id     TEXT,
+    at          REAL NOT NULL,
+    result      TEXT NOT NULL,
+    amount_cents INTEGER,
+    source      TEXT NOT NULL DEFAULT 'live',
+    UNIQUE (device_id, sequence)
+);
+CREATE INDEX IF NOT EXISTS idx_tap_station_time ON nfc_tap (station_id, at);
+
+-- Monatsabrechnung je Karte: nur der Bezahlstatus wird gespeichert, Beträge werden aus Parkvorgängen berechnet.
+CREATE TABLE IF NOT EXISTS statement_payment (
+    tenant_id  TEXT NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+    card_id    TEXT NOT NULL REFERENCES card(id) ON DELETE CASCADE,
+    month      TEXT NOT NULL,
+    paid_at    REAL NOT NULL,
+    paid_by    TEXT,
+    PRIMARY KEY (tenant_id, card_id, month)
+);
+
+-- Lizenzvertrag je Organisation (Plattform-Betreiber -> Kunde). NULL = Werte aus dem Tarif.
+CREATE TABLE IF NOT EXISTS license (
+    tenant_id                  TEXT PRIMARY KEY REFERENCES tenant(id) ON DELETE CASCADE,
+    valid_from                 REAL NOT NULL,
+    valid_until                REAL,
+    price_per_stall_day_cents  INTEGER,
+    base_month_cents           INTEGER,
+    notes                      TEXT NOT NULL DEFAULT ''
+);
+
+-- Anzahl Stellplätze je Tag (Grundlage der Lizenzabrechnung "pro Stellplatz und Tag").
+CREATE TABLE IF NOT EXISTS usage_day (
+    tenant_id  TEXT NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+    day        TEXT NOT NULL,
+    stalls     INTEGER NOT NULL,
+    PRIMARY KEY (tenant_id, day)
+);
+
+CREATE TABLE IF NOT EXISTS invoice (
+    id           TEXT PRIMARY KEY,
+    tenant_id    TEXT NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+    number       TEXT NOT NULL UNIQUE,
+    month        TEXT NOT NULL,
+    created_at   REAL NOT NULL,
+    lines        TEXT NOT NULL,
+    total_cents  INTEGER NOT NULL,
+    status       TEXT NOT NULL DEFAULT 'open',   -- open | paid | void
+    paid_at      REAL,
+    UNIQUE (tenant_id, month)
+);
+
+-- Kamera-Einzelbilder (Datei auf der Platte, hier nur Metadaten). Werden nach expires_at gelöscht.
+CREATE TABLE IF NOT EXISTS snapshot (
+    id          TEXT PRIMARY KEY,
+    tenant_id   TEXT NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+    station_id  TEXT NOT NULL REFERENCES station(id) ON DELETE CASCADE,
+    event_id    TEXT,
+    reason      TEXT NOT NULL,
+    taken_at    REAL NOT NULL,
+    expires_at  REAL NOT NULL,
+    size        INTEGER NOT NULL,
+    file        TEXT NOT NULL,
+    source      TEXT NOT NULL DEFAULT 'live'
+);
+CREATE INDEX IF NOT EXISTS idx_snapshot_station ON snapshot (station_id, taken_at);
+
 CREATE TABLE IF NOT EXISTS audit_log (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     tenant_id  TEXT,
@@ -214,6 +316,8 @@ class Database:
             single_stall = version == 3
             if single_stall:
                 version = 4
+            if version == 4:
+                version = 5  # nur neue Tabellen/Spalten (werden unten angelegt)
             if version not in (0, SCHEMA_VERSION):
                 raise RuntimeError(
                     f"Datenbank hat Schema-Version {version}, erwartet {SCHEMA_VERSION}. "
@@ -222,6 +326,7 @@ class Database:
             self._conn.executescript(SCHEMA)
             if single_stall:
                 self._migrate_3_to_4()
+            self._ensure_columns()
             self._conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         if self.path != ":memory:":
             try:
@@ -243,6 +348,22 @@ class Database:
             for d in defs:
                 if d.split()[0] not in existing:
                     self._conn.execute(f"ALTER TABLE {table} ADD COLUMN {d}")
+
+    # Spalten, die nach Schema 4 dazukamen (idempotent, auch für neue Datenbanken).
+    EXTRA_COLUMNS = {
+        "tenant": ["tariff TEXT"],
+        "station": ["tariff TEXT", "camera_enabled INTEGER NOT NULL DEFAULT 0", "camera_retention_h INTEGER NOT NULL DEFAULT 24",
+                    "camera_approved_by TEXT", "stall_token_hash TEXT", "stall_view_enabled INTEGER NOT NULL DEFAULT 0",
+                    "maintenance INTEGER NOT NULL DEFAULT 0"],
+    }
+
+    def _ensure_columns(self) -> None:
+        for table, defs in self.EXTRA_COLUMNS.items():
+            existing = {r[1] for r in self._conn.execute(f"PRAGMA table_info({table})")}
+            for d in defs:
+                if d.split()[0] not in existing:
+                    self._conn.execute(f"ALTER TABLE {table} ADD COLUMN {d}")
+        self._conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_station_stall_token ON station (stall_token_hash)")
 
     def _migrate_3_to_4(self) -> None:
         """Eine Station = ein Stellplatz: überzählige Plätze (samt Messungen/Ereignissen) entfernen."""

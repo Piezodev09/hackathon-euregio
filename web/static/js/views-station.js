@@ -1,10 +1,11 @@
 // Betrieb: Übersicht, Stellplätze, Live-Ansicht, Einstellungen, Meldungen.
 // Eine Station ist genau ein vorne offener Stellplatz.
-import { get, post, patch, del, describeError } from "./api.js";
+import { get, post, patch, put, del, describeError } from "./api.js";
 import { getLang, t } from "./i18n.js";
 import { el, clear, field, toast, confirmDialog, fmtDateTime, fmtTime, copyText, icon, effectiveState, reasonText,
   stallStatus, stallBadge, fmtAge } from "./ui.js";
 import { state, can, every, go } from "./state.js";
+import { sessionSummary, tariffForm, tariffText } from "./views-parking.js";
 
 let devicesTimer = null;
 const errorCard = (e) => el("div", { class: "alert-box error", role: "alert" }, describeError(e));
@@ -128,6 +129,7 @@ function warningItem(kind, title, text, action) {
 
 export function viewStation(id, setTitle) {
   const statusBox = el("div");
+  const sessionBox = el("div");
   const live = el("p", { class: "visually-hidden", "aria-live": "polite" });
   const measure = el("section", { class: "card", "aria-labelledby": "measure-h" });
   const warnings = el("section", { class: "card", "aria-labelledby": "warn-h" });
@@ -140,7 +142,7 @@ export function viewStation(id, setTitle) {
   let warnSig = "";
 
   const node = el("div", { class: "stall-grid" },
-    el("div", {}, el("section", { "aria-labelledby": "status-h" }, el("h2", { id: "status-h", class: "visually-hidden" }, t("st.current")), statusBox, live), measure, usage),
+    el("div", {}, el("section", { "aria-labelledby": "status-h" }, el("h2", { id: "status-h", class: "visually-hidden" }, t("st.current")), statusBox, sessionBox, live), measure, usage),
     el("div", {}, warnings, ai, recent));
 
   const render = () => {
@@ -148,7 +150,9 @@ export function viewStation(id, setTitle) {
     const stale = last.stale_after_s || 30;
     const connLost = Date.now() - lastOk > stale * 1000;
     const { state: st, reason } = effectiveState(last, connLost);
-    clear(statusBox, stallStatus(last, { connLost, simulated: last.simulated_data }));
+    clear(statusBox, last.maintenance ? el("div", { class: "maint-banner", role: "status" }, icon("wrench"), t("st.maintenance")) : null,
+      stallStatus(last, { connLost, simulated: last.simulated_data }));
+    clear(sessionBox, sessionSummary(last.session));
     if (st !== lastState) {
       lastState = st;
       live.textContent = `${t("st.current")}: ${t("st." + st)}. ${st === "unknown" ? reasonText(reason, stale) : ""}`;
@@ -238,7 +242,7 @@ export function viewStationSettings(id, setTitle) {
     try {
       const st = await get(`/api/v1/stations/${id}`);
       setTitle(`${st.name} – ${t("st.settings")}`);
-      clear(node, general(st), devicesCard(st), displayCard(st), dangerCard(st));
+      clear(node, general(st), operationCard(st), devicesCard(st), displayCard(st), dangerCard(st));
     } catch (e) { clear(node, errorCard(e)); }
   };
 
@@ -261,6 +265,22 @@ export function viewStationSettings(id, setTitle) {
       } catch (e) { toast(describeError(e), "error"); }
     });
     return f;
+  }
+
+  function operationCard(st) {
+    const maint = el("input", { type: "checkbox", checked: st.maintenance });
+    maint.addEventListener("change", async () => {
+      try { await patch(`/api/v1/stations/${id}`, { maintenance: maint.checked }); toast(t("c.saved")); }
+      catch (e) { maint.checked = !maint.checked; toast(describeError(e), "error"); }
+    });
+    const billingOn = !!state.me.tenant.plan.parking_billing;
+    return el("section", { class: "card" }, el("h2", {}, t("ss.operation")),
+      el("label", { class: "check" }, maint, el("span", {}, t("ss.maintenance"), el("small", { class: "hint" }, t("ss.maintenance_hint")))),
+      el("h3", {}, t("pk.tariff")),
+      el("p", {}, st.tariff ? tariffText(st.tariff) : t("pk.inherited")),
+      billingOn ? tariffForm(st.tariff, async (tf) => {
+        try { await put(`/api/v1/stations/${id}/tariff`, { tariff: tf }); toast(t("c.saved")); load(); } catch (e) { toast(describeError(e), "error"); }
+      }, { allowInherit: true }) : el("p", { class: "small muted" }, t("pk.feature_off", { f: t("feat.parking_billing") })));
   }
 
   function devicesCard(st) {

@@ -14,8 +14,10 @@ Interaktive Befehle (Eingabe + Enter im Terminal):
     b    leichtes Anstoßen (ein Ausschlag)
     s    kräftiges, wiederholtes Rütteln (ca. 3 s)
     e    Sensorfehler ein/aus (-> STATUS UNBEKANNT)
+    n    NFC-Karte an den Leser halten (Demo-Karte), n 04AABBCCDD = bestimmte UID
     q    beenden
-Mit --auto wechselt die Belegung zufällig (zum Füllen der Auslastungsanzeige).
+Mit --auto wechselt die Belegung zufällig; dabei wird vor dem Ausparken und nach dem Einstellen
+die Demo-Karte angehalten (Ein-/Auschecken).
 """
 
 from __future__ import annotations
@@ -26,6 +28,9 @@ import random
 import sys
 import threading
 import time
+
+
+DEMO_UID = "04A1B2C3D4"
 
 
 class Simulator:
@@ -51,8 +56,13 @@ class Simulator:
         self.out.flush()
         self.last_sent = time.monotonic()
 
+    def nfc(self, uid: str = DEMO_UID) -> None:
+        self.out.write(json.dumps({"type": "nfc", "uid": uid.upper()}, separators=(",", ":")) + "\n")
+        self.out.flush()
+
     def command(self, cmd: str) -> bool:
-        op = cmd.strip().lower()
+        parts = cmd.strip().split()
+        op = parts[0].lower() if parts else ""
         if not op:
             return True
         if op == "q":
@@ -70,8 +80,10 @@ class Simulator:
             elif op == "e":
                 self.error = not self.error
                 self.emit()
+            elif op == "n":
+                self.nfc(parts[1] if len(parts) > 1 else DEMO_UID)
             else:
-                print("? Befehl: p | b | s | e | q", file=sys.stderr)
+                print("? Befehl: p | b | s | e | n [UID] | q", file=sys.stderr)
         return True
 
     def tick(self) -> None:
@@ -84,11 +96,16 @@ class Simulator:
             elif now - self.last_sent >= self.heartbeat_s:
                 self.emit()
 
-    def auto_step(self) -> None:
+    def auto_step(self, with_nfc: bool = True) -> None:
         with self.lock:
-            if not self.error:
-                self.present = not self.present
-                self.emit(vib=random.randint(100, 300))
+            if self.error:
+                return
+            if self.present and with_nfc:
+                self.nfc()  # vor dem Ausparken auschecken
+            self.present = not self.present
+            self.emit(vib=random.randint(100, 300))
+            if self.present and with_nfc:
+                self.nfc()  # nach dem Einstellen einchecken
 
 
 def main() -> int:
@@ -110,7 +127,7 @@ def main() -> int:
             src = open(args.commands) if args.commands else open("/dev/tty")
         except OSError:
             src = sys.stdin
-        print("Simulator bereit. Befehle: p | b | s | e | q", file=sys.stderr)
+        print("Simulator bereit. Befehle: p | b | s | e | n [UID] | q", file=sys.stderr)
         for line in src:
             if not sim.command(line):
                 break

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from ..core import Ctx, client_ip, core_of, limit, require
@@ -29,11 +31,16 @@ def _station_out(core, st, m: Monitoring | None = None) -> dict:
     out = {"id": st["id"], "name": st["name"], "location": st["location"], "alert_source": st["alert_source"],
            "display_enabled": bool(st["display_enabled"]), "display_configured": st["display_token_hash"] is not None,
            "auto_update": bool(st["auto_update"]), "config_version": st["config_version"],
+           "maintenance": bool(st["maintenance"]), "stall_view_enabled": bool(st["stall_view_enabled"]),
+           "stall_view_configured": st["stall_token_hash"] is not None, "camera_enabled": bool(st["camera_enabled"]),
+           "camera_retention_h": st["camera_retention_h"], "camera_approved_by": st["camera_approved_by"],
+           "tariff": json.loads(st["tariff"]) if st["tariff"] else None,
            "created_at": iso(st["created_at"])}
     if m is not None:
         s = m.status(st)
         out["live"] = {"state": s["state"], "unknown_reason": s["unknown_reason"], "age_s": s["age_s"],
-                       "alert": s["alert"] is not None, "simulated_data": s["simulated_data"]}
+                       "alert": s["alert"] is not None, "simulated_data": s["simulated_data"],
+                       "session": s["session"], "maintenance": s["maintenance"]}
     return out
 
 
@@ -79,6 +86,10 @@ def patch_station(station_id: str, body: StationPatch, request: Request, ctx: Ct
         raise HTTPException(402, {"code": "plan_feature", "feature": "ml"})
     if changes.get("display_enabled") and st["display_token_hash"] is None:
         raise HTTPException(409, "create_display_link_first")
+    if changes.get("stall_view_enabled") and not get_plan(ctx.tenant["plan"]).stall_view:
+        raise HTTPException(402, {"code": "plan_feature", "feature": "stall_view"})
+    if changes.get("stall_view_enabled") and st["stall_token_hash"] is None:
+        raise HTTPException(409, "create_stall_link_first")
     for k, v in changes.items():
         core.db.execute(f"UPDATE station SET {k} = ? WHERE id = ?", (int(v) if isinstance(v, bool) else v, st["id"]))
     core.audit("station_updated", tenant_id=ctx.tenant_id, user_id=ctx.user["id"], actor=ctx.actor, ip=ctx.ip, target=st["id"],

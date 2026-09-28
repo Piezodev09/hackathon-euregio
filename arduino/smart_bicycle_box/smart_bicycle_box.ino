@@ -3,15 +3,17 @@
  *
  * Aufgaben: Präsenz- und Erschütterungssensor lesen, Belegung entprellen, lokale LEDs setzen
  * und Messungen als JSON-Zeilen über USB-Seriell an den Raspberry Pi senden.
- * Keine Nutzerdaten, keine KI auf dem Arduino. Der NFC-Leser ist geplant und hier noch nicht
- * angebunden.
+ * Keine Nutzerdaten, keine KI auf dem Arduino. Optional: NFC-Leser PN532 (I2C) zum Ein-/Auschecken.
  *
  * Ausgabe je Zeile (115200 Baud):
  *   {"presence":1,"vibration":12,"seq":1042,"state":"ok"}
  *   presence: 1 belegt, 0 frei, -1 kein gültiger Messwert (-> "STATUS UNBEKANNT")
  *   vibration: 0..1023 (Spitzenwert bzw. skalierte Impulszahl im letzten Intervall)
  *
+ *   {"type":"nfc","uid":"04A1B2C3D4"}          (nur mit NFC_ENABLED, gleiche Karte max. alle 3 s)
+ *
  * Eingabe vom Pi:  "NET 1" / "NET 0"  -> Netzstatus-LED
+ *                  "NFC checked_in|checked_out|…" -> kurze Rückmeldung per LED (grün = ok, rot = Fehler)
  *
  * !!! ACHTUNG – VOR DER VERDRAHTUNG PRÜFEN !!!
  *   Alle Pinnummern, Sensortypen und Schwellwerte unten sind PLATZHALTER.
@@ -36,6 +38,10 @@
 #define VIB_ANALOG  2
 #define VIB_TYPE VIB_DIGITAL
 
+// NFC-Leser PN532 über I2C (SDA/SCL, Modul-Schalter auf I2C). Benötigt die Bibliothek
+// "Adafruit PN532" (Bibliotheksverwalter). Ohne Leser auskommentiert lassen.
+// #define NFC_ENABLED
+
 // PLATZHALTER – vor Ort anpassen!
 const uint8_t PRESENCE_PIN    = 2;   // Echo-Pin (Ultraschall) oder Signal-Pin (digital)
 const uint8_t TRIGGER_PIN     = 3;   // nur Ultraschall
@@ -55,6 +61,22 @@ const uint8_t  INVALID_LIMIT       = 5;      // so viele ungültige Messungen in
 const uint16_t VIB_PULSE_SCALE     = 64;     // digital: Score = Impulse * Faktor (max 1023)
 const uint16_t VIB_ANALOG_NOISE    = 20;     // analog: darunter = 0
 const uint8_t  LED_BRIGHTNESS      = 255;    // nur bei PWM-Pins wirksam
+
+#ifdef NFC_ENABLED
+#include <Wire.h>
+#include <Adafruit_PN532.h>
+const uint8_t PN532_IRQ_PIN = 7;    // PLATZHALTER
+const uint8_t PN532_RESET_PIN = 8;  // PLATZHALTER
+Adafruit_PN532 nfc(PN532_IRQ_PIN, PN532_RESET_PIN);
+bool nfcReady = false;
+uint8_t lastUid[10];
+uint8_t lastUidLen = 0;
+unsigned long lastUidAt = 0;
+const unsigned long NFC_REPEAT_MS = 3000;
+unsigned long lastNfcPoll = 0;
+#endif
+unsigned long feedbackUntil = 0;
+bool feedbackOk = true;
 
 // ---------------------------------------------------------------- Zustand
 // Nach dem Start gilt nichts als bekannt: stable = -1 ("STATUS UNBEKANNT"), nie automatisch frei.
@@ -146,6 +168,12 @@ void setLed(uint8_t pin, bool on) {
 
 void updateLeds(unsigned long now) {
   // Nur lokale Zusatzanzeige; der Zustand steht als Wort + Symbol auf dem Display.
+  if (now < feedbackUntil) {  // kurze NFC-Rückmeldung
+    bool blink = (now / 100) % 2;
+    setLed(LED_FREE_PIN, feedbackOk && blink);
+    setLed(LED_OCCUPIED_PIN, !feedbackOk && blink);
+    return;
+  }
   if (stable < 0) {
     bool blink = (now / 500) % 2;  // unbekannt: rot blinkend, grün aus
     setLed(LED_FREE_PIN, false);
@@ -163,6 +191,10 @@ void readCommands() {
       rxLine.trim();
       if (rxLine == "NET 1") { netOk = true; netKnown = true; }
       else if (rxLine == "NET 0") { netOk = false; netKnown = true; }
+      else if (rxLine.startsWith("NFC ")) {
+        feedbackOk = rxLine == "NFC checked_in" || rxLine == "NFC checked_out";
+        feedbackUntil = millis() + 1500;
+      }
       rxLine = "";
     } else if (rxLine.length() < 32) {
       rxLine += c;
@@ -174,6 +206,29 @@ void readCommands() {
     digitalWrite(NET_LED_PIN, on ? HIGH : LOW);
   }
 }
+
+#ifdef NFC_ENABLED
+void pollNfc(unsigned long now) {
+  if (!nfcReady || now - lastNfcPoll < 150) return;
+  lastNfcPoll = now;
+  uint8_t uid[10];
+  uint8_t len = 0;
+  // Kurzes Timeout (30 ms), damit Sensoren weiter gelesen werden.
+  if (!nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &len, 30)) return;
+  if (len < 4 || len > 10) return;
+  bool same = len == lastUidLen && memcmp(uid, lastUid, len) == 0;
+  if (same && now - lastUidAt < NFC_REPEAT_MS) return;
+  memcpy(lastUid, uid, len);
+  lastUidLen = len;
+  lastUidAt = now;
+  Serial.print(F("{\"type\":\"nfc\",\"uid\":\""));
+  for (uint8_t i = 0; i < len; i++) {
+    if (uid[i] < 0x10) Serial.print('0');
+    Serial.print(uid[i], HEX);
+  }
+  Serial.println(F("\"}"));
+}
+#endif
 
 // ---------------------------------------------------------------- Setup / Loop
 void setup() {
@@ -188,7 +243,13 @@ void setup() {
   pinMode(LED_FREE_PIN, OUTPUT);
   pinMode(LED_OCCUPIED_PIN, OUTPUT);
   if (NET_LED_PIN >= 0) pinMode(NET_LED_PIN, OUTPUT);
-  Serial.println(F("{\"type\":\"hello\",\"fw\":\"0.2.0\"}"));
+#ifdef NFC_ENABLED
+  nfc.begin();
+  nfcReady = nfc.getFirmwareVersion() != 0;
+  if (nfcReady) nfc.SAMConfig();
+  Serial.println(nfcReady ? F("{\"type\":\"info\",\"nfc\":\"ok\"}") : F("{\"type\":\"info\",\"nfc\":\"missing\"}"));
+#endif
+  Serial.println(F("{\"type\":\"hello\",\"fw\":\"0.3.0\"}"));
 }
 
 unsigned long lastPresenceRead = 0;
@@ -197,6 +258,9 @@ void loop() {
   unsigned long now = millis();
   readCommands();
   sampleVibration();
+#ifdef NFC_ENABLED
+  pollNfc(now);
+#endif
 
   // Präsenz ca. alle 100 ms lesen (Ultraschall braucht Zeit).
   if (now - lastPresenceRead >= 100) {

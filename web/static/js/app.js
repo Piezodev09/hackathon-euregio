@@ -6,6 +6,7 @@ import { state, can, clearTimers, go } from "./state.js";
 import * as A from "./views-auth.js";
 import * as S from "./views-station.js";
 import * as M from "./views-admin.js";
+import * as P from "./views-parking.js";
 
 const root = document.getElementById("root");
 const PUBLIC = new Set(["login", "register", "check-email", "verify", "forgot", "reset", "invite"]);
@@ -20,12 +21,13 @@ function navItems() {
   const me = state.me;
   const items = [];
   if (me.tenant) {
-    items.push(["section", t("nav.s_monitor")], ["/", t("nav.overview")], ["/events", t("nav.events")]);
+    items.push(["section", t("nav.s_monitor")], ["/", t("nav.overview")], ["/events", t("nav.events")], ["/sessions", t("nav.sessions")]);
+    items.push(["section", t("nav.s_billing")], ["/cards", t("nav.cards")], ["/parking-billing", t("nav.parking_billing")]);
     items.push(["section", t("nav.s_admin")], ["/stations", t("nav.stations")], ["/devices", t("nav.devices")], ["/team", t("nav.team")]);
     if (can("admin")) items.push(["/org", t("nav.org")], ["/audit", t("nav.audit")]);
     items.push(["/billing", t("nav.billing")]);
   }
-  if (me.user.is_platform_admin) items.push(["section", t("nav.s_platform")], ["/platform", t("nav.platform")]);
+  if (me.user.is_platform_admin) items.push(["section", t("nav.s_platform")], ["/platform", t("nav.platform")], ["/platform-billing", t("nav.platform_billing")]);
   items.push(["section", ""], ["/security", t("nav.security")]);
   return items;
 }
@@ -97,7 +99,7 @@ export async function route() {
   }
   const me = state.me;
   if (me.mfa_setup_required && name !== "security") return go("/security");
-  if (!me.tenant && me.user.is_platform_admin && !["platform", "security"].includes(name)) return go("/platform");
+  if (!me.tenant && me.user.is_platform_admin && !["platform", "platform-billing", "security"].includes(name)) return go("/platform");
 
   const rerender = () => route();
   let title = "";
@@ -132,6 +134,10 @@ export async function route() {
   else if (name === "billing") { title = t("bill.title"); view = M.viewBilling(rerender); }
   else if (name === "audit") { title = t("au.title"); view = can("admin") ? M.viewAudit() : deny(); }
   else if (name === "platform") { title = t("pf.title"); view = me.user.is_platform_admin ? M.viewPlatform() : deny(); }
+  else if (name === "platform-billing") { title = t("nav.platform_billing"); view = me.user.is_platform_admin ? P.viewPlatformBilling() : deny(); }
+  else if (name === "cards") { title = t("nav.cards"); view = P.viewCards(); }
+  else if (name === "sessions") { title = t("nav.sessions"); view = P.viewSessions(); }
+  else if (name === "parking-billing") { title = t("nav.parking_billing"); view = P.viewParkingBilling(); }
   else { title = t("err.not_found"); view = el("p", {}, el("a", { href: "#/" }, t("nav.overview"))); }
 
   const placeholder = el("div");

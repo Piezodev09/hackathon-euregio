@@ -196,6 +196,11 @@ def export(request: Request, ctx: Ctx = Depends(require("owner"))):
         "events": rows("SELECT id, station_id, kind, severity, detector, occurred_at, acknowledged_at, acknowledged_by, source FROM event WHERE tenant_id = ?"),
         "measurements": rows("SELECT m.station_id, m.server_time, m.occupied, m.vibration_score, m.sensor_state, m.source "
                              "FROM measurement m JOIN station st ON st.id = m.station_id WHERE st.tenant_id = ? ORDER BY m.server_time"),
+        # Karten ohne UID-Hash (nicht rückrechenbar, aber auch nicht nötig)
+        "cards": rows("SELECT id, label, status, created_at, last_seen_at FROM card WHERE tenant_id = ?"),
+        "parking_sessions": rows("SELECT id, station_id, card_id, started_at, ended_at, amount_cents, tariff, status, source "
+                                 "FROM parking_session WHERE tenant_id = ? ORDER BY started_at"),
+        "invoices": rows("SELECT number, month, created_at, lines, total_cents, status, paid_at FROM invoice WHERE tenant_id = ?"),
         "audit_log": rows("SELECT at, actor, action, target, ip, detail FROM audit_log WHERE tenant_id = ? ORDER BY at"),
     }
     core.audit("org_exported", tenant_id=tid, user_id=ctx.user["id"], actor=ctx.actor, ip=ctx.ip)

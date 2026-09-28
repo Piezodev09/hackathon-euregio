@@ -172,7 +172,16 @@ class Monitoring:
             "alert": alert_out,
             # Kennzeichnung für die Oberfläche: die letzte Messung stammt aus dem Simulator.
             "simulated_data": m is not None and m["source"] == "simulated",
+            "maintenance": bool(station["maintenance"]),
+            "camera_active": bool(station["camera_enabled"]),
+            "session": None,
+            "last_tap": None,
         }
+        parking = getattr(self, "parking", None)
+        if parking is not None:
+            s = parking.open_session(station["id"])
+            body["session"] = parking.session_out(s, public=public) if s else None
+            body["last_tap"] = parking.last_tap(station["id"])
         if not public:
             ml_allowed = self._ml_allowed(station)
             body["ai"] = {

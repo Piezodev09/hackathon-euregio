@@ -189,3 +189,19 @@ details summary { cursor: pointer; font-weight: 700; min-height: 44px; display: 
 .preview-switch { margin-top: var(--space-4); }
 @media (min-width: 901px) { .shell { background: linear-gradient(to right, var(--surface-raised) 272px, var(--surface) 272px); } }
 h1[tabindex="-1"]:focus:not(:focus-visible), h1[tabindex="-1"]:focus { outline: none; }
+
+/* ---------- Parken / Abrechnung ---------- */
+.toolbar { margin-bottom: var(--space-4); }
+.inline-field { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; margin: 0; }
+.inline-field input, .inline-field select { width: auto; }
+.session-box { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: center; padding: 14px 16px;
+  border: 2px solid var(--petrol); border-radius: var(--radius-md); background: var(--petrol-soft); color: var(--ink); }
+.session-box .sbb-icon { width: 36px; height: 36px; color: var(--petrol); }
+.session-box p { margin: 0; }
+.session-box__title { font-weight: 700; font-size: 18px; }
+.maint-banner { display: flex; gap: 12px; align-items: center; padding: 14px 16px; border: 3px solid var(--ink); border-radius: var(--radius-md);
+  background: var(--surface-sunken); font-weight: 700; }
+.maint-banner .sbb-icon { width: 32px; height: 32px; }
+.snapshot img { display: block; max-width: 100%; border-radius: var(--radius-md); border: 1px solid var(--line); }
+.qr { display: inline-block; background: #fff; padding: 12px; border-radius: var(--radius-md); border: 1px solid var(--line); }
+.qr svg { display: block; width: 200px; height: 200px; }

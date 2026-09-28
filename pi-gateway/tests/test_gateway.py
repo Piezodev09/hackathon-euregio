@@ -155,3 +155,60 @@ def test_gateway_adds_station_and_source(tmp_path):
     body = gw.uplink.buffer[0].body
     assert body["station_id"] == "demo-01" and body["source"] == "simulated" and "slot_id" not in body
     assert isinstance(body["sequence"], int)
+
+
+def test_parse_nfc_line():
+    assert parse_line('{"type":"nfc","uid":"04a1b2c3d4"}') == {"kind": "nfc", "uid": "04A1B2C3D4"}
+    for bad in ('{"type":"nfc","uid":"xyz"}', '{"type":"nfc","uid":"04A1"}', '{"type":"nfc"}'):
+        with pytest.raises(ParseError):
+            parse_line(bad)
+
+
+class TapApi:
+    def __init__(self, responses):
+        self.responses = list(responses)
+        self.calls = []
+
+    def __call__(self, path, payload):
+        self.calls.append((path, payload))
+        r = self.responses.pop(0)
+        if isinstance(r, Exception):
+            raise r
+        return r
+
+
+def test_gateway_sends_nfc_tap_immediately_and_reports_back(tmp_path):
+    import urllib.error
+
+    api = TapApi([urllib.error.URLError("down"), (503, {}), (200, {"result": "checked_in"})])
+    c = cfg(tmp_path)
+    gw = Gateway(c, uplink=Uplink(c, post=api))
+    sent = []
+    gw.write_back = sent.append
+    done = []
+    gw.run_async = lambda f, *a: done.append(f(*a, sleep=lambda s: None))
+    gw.handle_line('{"type":"nfc","uid":"04A1B2C3D4"}')
+    assert done == ["checked_in"] and sent == ["NFC checked_in\n"]
+    assert [p for p, _ in api.calls] == ["/api/v1/nfc/tap"] * 3
+    body = api.calls[-1][1]
+    assert body["uid"] == "04A1B2C3D4" and body["station_id"] == "demo-01" and "age_ms" in body
+    assert len(gw.uplink.buffer) == 0  # nicht im Messwert-Puffer
+
+
+def test_gateway_nfc_rejected_is_not_retried(tmp_path):
+    api = TapApi([(403, {})])
+    c = cfg(tmp_path)
+    gw = Gateway(c, uplink=Uplink(c, post=api))
+    out = []
+    gw.run_async = lambda f, *a: out.append(f(*a, sleep=lambda s: None))
+    gw.tap("04A1B2C3D4")
+    assert out == ["rejected"] and len(api.calls) == 1
+
+
+def test_uplink_passes_response_hints(tmp_path):
+    c = cfg(tmp_path)
+    up = Uplink(c, post=lambda p, b: (202, {"stored": 1, "capture": True}))
+    hints = []
+    up.on_response = hints.append
+    up.enqueue({"sequence": 1})
+    assert up.flush_once() and hints == [{"stored": 1, "capture": True}]
