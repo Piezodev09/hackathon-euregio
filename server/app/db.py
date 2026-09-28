@@ -11,7 +11,28 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
+
+EVENT_TABLE = """
+CREATE TABLE IF NOT EXISTS {name} (
+    id               TEXT PRIMARY KEY,
+    tenant_id        TEXT NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+    station_id       TEXT NOT NULL REFERENCES station(id) ON DELETE CASCADE,
+    slot_id          TEXT REFERENCES slot(id) ON DELETE CASCADE,        -- NULL for gateway events
+    device_id        TEXT REFERENCES device(id) ON DELETE CASCADE,      -- set for gateway events
+    kind             TEXT NOT NULL,          -- unusual_movement | sensor_fault | gateway_offline | gateway_online
+    severity         TEXT NOT NULL,          -- warning | info | shadow
+    detector         TEXT,
+    detail           TEXT,
+    occurred_at      REAL NOT NULL,
+    acknowledged_at  REAL,
+    acknowledged_by  TEXT,
+    source           TEXT NOT NULL DEFAULT 'live'
+);
+"""
+EVENT_COLUMNS = ("id", "tenant_id", "station_id", "slot_id", "kind", "severity", "detector", "detail", "occurred_at",
+                 "acknowledged_at", "acknowledged_by", "source")
+
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS tenant (
@@ -127,7 +148,8 @@ CREATE TABLE IF NOT EXISTS device (
     update_requested        INTEGER NOT NULL DEFAULT 0,
     prev_token_hash         TEXT,       -- old token stays valid briefly (rotation without lock-out)
     prev_token_valid_until  REAL,
-    token_rotated_at        REAL
+    token_rotated_at        REAL,
+    offline_notified        INTEGER NOT NULL DEFAULT 0   -- a gateway_offline event was raised
 );
 CREATE INDEX IF NOT EXISTS idx_device_prev_token ON device (prev_token_hash);
 
@@ -160,21 +182,7 @@ CREATE TABLE IF NOT EXISTS measurement (
 CREATE INDEX IF NOT EXISTS idx_measurement_slot_time ON measurement (slot_id, server_time);
 CREATE INDEX IF NOT EXISTS idx_measurement_station_time ON measurement (station_id, server_time);
 
-CREATE TABLE IF NOT EXISTS event (
-    id               TEXT PRIMARY KEY,
-    tenant_id        TEXT NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
-    station_id       TEXT NOT NULL REFERENCES station(id) ON DELETE CASCADE,
-    slot_id          TEXT NOT NULL REFERENCES slot(id) ON DELETE CASCADE,
-    kind             TEXT NOT NULL,          -- unusual_movement | sensor_fault
-    severity         TEXT NOT NULL,          -- warning | info | shadow
-    detector         TEXT,
-    detail           TEXT,
-    occurred_at      REAL NOT NULL,
-    acknowledged_at  REAL,
-    acknowledged_by  TEXT,
-    source           TEXT NOT NULL DEFAULT 'live'
-);
-CREATE INDEX IF NOT EXISTS idx_event_tenant_time ON event (tenant_id, occurred_at);
+""" + EVENT_TABLE.format(name="event") + """CREATE INDEX IF NOT EXISTS idx_event_tenant_time ON event (tenant_id, occurred_at);
 CREATE INDEX IF NOT EXISTS idx_event_slot ON event (slot_id, kind, severity, occurred_at);
 
 CREATE TABLE IF NOT EXISTS audit_log (
@@ -189,6 +197,59 @@ CREATE TABLE IF NOT EXISTS audit_log (
     detail     TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_audit_tenant_time ON audit_log (tenant_id, at);
+
+-- Platform-wide settings set at runtime (e.g. the demo station shown on the landing page).
+CREATE TABLE IF NOT EXISTS setting (
+    key         TEXT PRIMARY KEY,
+    value       TEXT NOT NULL,
+    updated_at  REAL NOT NULL
+);
+
+-- Demo requests from the landing page (no IP address stored; deleted after 180 days).
+CREATE TABLE IF NOT EXISTS lead (
+    id            TEXT PRIMARY KEY,
+    name          TEXT NOT NULL,
+    organisation  TEXT NOT NULL,
+    email         TEXT NOT NULL,
+    message       TEXT NOT NULL DEFAULT '',
+    locale        TEXT,
+    created_at    REAL NOT NULL,
+    handled_at    REAL,
+    handled_by    TEXT
+);
+
+-- Read-only API keys for integrations (only the hash is stored).
+CREATE TABLE IF NOT EXISTS api_key (
+    id            TEXT PRIMARY KEY,
+    tenant_id     TEXT NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+    name          TEXT NOT NULL,
+    prefix        TEXT NOT NULL,
+    key_hash      TEXT NOT NULL UNIQUE,
+    created_at    REAL NOT NULL,
+    created_by    TEXT,
+    last_used_at  REAL,
+    last_ip       TEXT,
+    revoked_at    REAL
+);
+CREATE INDEX IF NOT EXISTS idx_api_key_tenant ON api_key (tenant_id);
+
+-- Outgoing webhooks (HMAC secret encrypted with the data key).
+CREATE TABLE IF NOT EXISTS webhook (
+    id               TEXT PRIMARY KEY,
+    tenant_id        TEXT NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+    name             TEXT NOT NULL,
+    url              TEXT NOT NULL,
+    kind             TEXT NOT NULL,          -- generic | slack | teams | discord
+    events           TEXT NOT NULL,          -- JSON list of event kinds
+    secret_enc       BLOB NOT NULL,
+    enabled          INTEGER NOT NULL DEFAULT 1,
+    created_at       REAL NOT NULL,
+    created_by       TEXT,
+    last_status      TEXT,
+    last_attempt_at  REAL,
+    last_error       TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_webhook_tenant ON webhook (tenant_id);
 """
 
 
@@ -209,6 +270,9 @@ class Database:
             if version == 2:
                 self._migrate_2_to_3()
                 version = 3
+            if version == 3:
+                self._migrate_3_to_4()
+                version = 4
             if version not in (0, SCHEMA_VERSION):
                 raise RuntimeError(
                     f"Database has schema version {version}, expected {SCHEMA_VERSION}. "
@@ -236,6 +300,30 @@ class Database:
             for d in defs:
                 if d.split()[0] not in existing:
                     self._conn.execute(f"ALTER TABLE {table} ADD COLUMN {d}")
+
+    def _migrate_3_to_4(self) -> None:
+        """Integrations: gateway events without a slot, offline flag per device (new tables come from SCHEMA)."""
+        dev_cols = {r[1] for r in self._conn.execute("PRAGMA table_info(device)")}
+        if dev_cols and "offline_notified" not in dev_cols:
+            self._conn.execute("ALTER TABLE device ADD COLUMN offline_notified INTEGER NOT NULL DEFAULT 0")
+        ev = self._conn.execute("PRAGMA table_info(event)").fetchall()
+        if not ev or any(r[1] == "device_id" for r in ev):
+            return
+        # SQLite cannot drop NOT NULL from slot_id: rebuild the table and copy the rows.
+        cols = ", ".join(c for c in EVENT_COLUMNS if c in {r[1] for r in ev})
+        self._conn.execute("PRAGMA foreign_keys=OFF")
+        try:
+            self._conn.execute("BEGIN")
+            self._conn.execute(EVENT_TABLE.format(name="event_v4"))
+            self._conn.execute(f"INSERT INTO event_v4 ({cols}) SELECT {cols} FROM event")
+            self._conn.execute("DROP TABLE event")
+            self._conn.execute("ALTER TABLE event_v4 RENAME TO event")
+            self._conn.execute("COMMIT")
+        except BaseException:
+            self._conn.execute("ROLLBACK")
+            raise
+        finally:
+            self._conn.execute("PRAGMA foreign_keys=ON")
 
     @contextmanager
     def tx(self) -> Iterator[sqlite3.Connection]:

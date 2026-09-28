@@ -13,6 +13,18 @@ allowed_hosts = ["127.0.0.1", "localhost"]
 # organisations) or "closed". Without e-mail (mail.backend = "none") "open" becomes "approval".
 signup = "open"
 product_name = "Smart Bike Station"
+# Local time zone of the stations (weekly occupancy pattern by hour of day).
+timezone = "Europe/Berlin"
+# Display token of the station shown live on the landing page. Usually set by
+# "python -m app.cli demo --reset"; this value (or BIKE_LANDING_DEMO_TOKEN) overrides it.
+landing_demo_display_token = ""
+
+[legal]
+# Shown on /legal/imprint and /legal/privacy. Fill in before going public! (BIKE_OPERATOR_NAME, ...)
+operator_name = ""
+# Postal address, several lines separated by "\n".
+address = ""
+contact_email = ""
 
 [auth]
 # Session: idle timeout and absolute maximum lifetime.

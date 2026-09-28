@@ -1,6 +1,6 @@
 // Customer portal: router, layout, permission checks in the UI (the server is always authoritative).
 import { get, post, setCsrf, setAuthLostHandler } from "./api.js";
-import { applyStatic, getLang, setLang, t } from "./i18n.js";
+import { applyStatic, getLang, planName, setLang, t } from "./i18n.js";
 import { el, clear, langSwitcher } from "./ui.js";
 import { state, can, clearTimers, go } from "./state.js";
 import * as A from "./views-auth.js";
@@ -33,8 +33,8 @@ function navItems() {
 function layout(title, content, currentPath, actions) {
   const me = state.me;
   const sidebar = el("nav", { class: "sidebar", id: "sidebar", "aria-label": t("c.menu") },
-    el("a", { class: "brand", href: "#/" }, el("span", { class: "logo", "aria-hidden": "true" }, "R"), me.product_name),
-    me.tenant ? el("p", { class: "small muted", style: null }, me.tenant.name, " · ", el("span", { class: "badge" }, me.tenant.plan.name)) : null,
+    el("a", { class: "brand", href: "#/" }, el("img", { class: "logo", src: "/static/img/icon.svg", alt: "", width: "32", height: "32" }), me.product_name),
+    me.tenant ? el("p", { class: "small muted", style: null }, me.tenant.name, " · ", el("span", { class: "badge" }, planName(me.tenant.plan))) : null,
     el("ul", { class: "nav" }, navItems().map(([href, label, icon]) => href === "section"
       ? el("li", { class: "section" }, label)
       : el("li", {}, el("a", { href: "#" + href, "aria-current": currentPath === href ? "page" : null },
@@ -157,7 +157,4 @@ setAuthLostHandler((err) => {
 
 window.addEventListener("hashchange", route);
 document.documentElement.lang = getLang();
-A.loadMeta().then((m) => {
-  if (!location.hash) location.hash = m.setup_required ? "#/setup" : "#/";
-  else route();
-});
+A.loadMeta().then(() => { if (!location.hash) location.hash = "#/"; else route(); });

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Runs the whole platform locally WITHOUT hardware (development and demos only!):
-#   platform + portal on http://127.0.0.1:8000, a demo customer and a paired agent.
+#   platform + portal on http://127.0.0.1:8000, the demo organisation (python -m app.cli demo) with
+#   7 days of simulated history, the live demo on the landing page and a paired agent.
 #
 #   scripts/dev.sh                 agent (exactly as on the Pi) with its built-in simulator
 #   scripts/dev.sh --interactive   keyboard-driven simulator piped into the agent (shake, sensor fault ...)
@@ -22,7 +23,8 @@ URL="http://127.0.0.1:8000"
 if [ ! -f "$DEMO_ENV" ] || [ ! -f "$BIKE_DB_PATH" ]; then
   rm -f "$DEMO_ENV"
   rm -rf "$AGENT_STATE"
-  (cd server && BIKE_CLI_PASSWORD="$DEMO_PASSWORD" python3 -m app.cli create-demo --email "$DEMO_EMAIL") > "$DEMO_ENV"
+  echo "Creating the demo organisation (2 stations, 7 days of simulated history) ..."
+  (cd server && BIKE_CLI_PASSWORD="$DEMO_PASSWORD" python3 -m app.cli demo --reset --email "$DEMO_EMAIL") > "$DEMO_ENV"
   chmod 600 "$DEMO_ENV"
 fi
 # shellcheck disable=SC1090
@@ -38,6 +40,7 @@ done
 
 cat <<INFO
 ────────────────────────────────────────────────────────────
+ Landing page:    $URL/   (live demo widget)
  Portal:          $URL/app
  Sign-in:         $DEMO_EMAIL / $DEMO_PASSWORD
  Kiosk display:   $DISPLAY_URL

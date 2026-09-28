@@ -7,6 +7,7 @@ import logging
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 from .anomaly import DetectorParams, features_at, rule_decision
 from .core import Core
@@ -18,6 +19,8 @@ log = logging.getLogger(__name__)
 
 # How long an unacknowledged warning is shown.
 ALERT_DISPLAY_S = 300
+# Demo requests from the landing page are deleted after this time (data minimisation).
+LEAD_RETENTION_S = 180 * 86400
 
 
 def iso(ts: float | None) -> str | None:
@@ -197,7 +200,7 @@ class Monitoring:
     def events(self, tenant_id: str, station_id: str | None = None, limit: int = 100,
                include_shadow: bool = False, open_only: bool = False) -> list[dict]:
         sql = ("SELECT e.*, s.key AS slot_key, st.name AS station_name FROM event e "
-               "JOIN slot s ON s.id = e.slot_id JOIN station st ON st.id = e.station_id WHERE e.tenant_id = ?")
+               "LEFT JOIN slot s ON s.id = e.slot_id JOIN station st ON st.id = e.station_id WHERE e.tenant_id = ?")
         params: list = [tenant_id]
         if station_id:
             sql += " AND e.station_id = ?"
@@ -239,48 +242,83 @@ class Monitoring:
         return True
 
     # ------------------------------------------------------------------ occupancy history
+    def _hour_parts(self, slot_id: str, start: float, now: float):
+        """Valid measurement segments of one slot, split at full hours: yields (hour_start, seconds, occupied, source).
+
+        A reading is valid until the next reading, but at most ``stale_after_s`` - gaps never count as "free".
+        """
+        stale = self.core.s.stale_after_s
+        rows = self.db.all(
+            "SELECT server_time, occupied, sensor_state, source FROM measurement "
+            "WHERE slot_id = ? AND server_time >= ? AND server_time <= ? ORDER BY server_time",
+            (slot_id, start - stale, now),
+        )
+        for i, r in enumerate(rows):
+            if r["sensor_state"] != "ok" or r["occupied"] is None:
+                continue
+            seg_start = max(r["server_time"], start)
+            nxt = rows[i + 1]["server_time"] if i + 1 < len(rows) else now
+            seg_end = min(nxt, r["server_time"] + stale, now)
+            while seg_start < seg_end:
+                b = int(seg_start // 3600) * 3600
+                part_end = min(seg_end, b + 3600)
+                yield b, part_end - seg_start, bool(r["occupied"]), r["source"]
+                seg_start = part_end
+
     def occupancy_summary(self, station: sqlite3.Row, hours: int = 24) -> dict:
         """Time-weighted occupancy per hour and slot. Gaps never count as "free"."""
         now = self.core.clock()
-        stale = self.core.s.stale_after_s
         start = (int(now // 3600) - hours + 1) * 3600
         slots = self.slots(station["id"])
         buckets = {start + i * 3600: {sl["key"]: [0.0, 0.0] for sl in slots} for i in range(hours)}
-        simulated = live = False
-        n = 0
+        sources: set[str] = set()
         for sl in slots:
-            rows = self.db.all(
-                "SELECT server_time, occupied, sensor_state, source FROM measurement "
-                "WHERE slot_id = ? AND server_time >= ? ORDER BY server_time",
-                (sl["id"], start - stale),
-            )
-            n += len(rows)
-            for i, r in enumerate(rows):
-                if r["sensor_state"] != "ok" or r["occupied"] is None:
-                    continue
-                if r["source"] == "simulated":
-                    simulated = True
-                else:
-                    live = True
-                seg_start = max(r["server_time"], start)
-                nxt = rows[i + 1]["server_time"] if i + 1 < len(rows) else now
-                seg_end = min(nxt, r["server_time"] + stale, now)
-                while seg_start < seg_end:
-                    b = int(seg_start // 3600) * 3600
-                    part_end = min(seg_end, b + 3600)
-                    if b in buckets:
-                        acc = buckets[b][sl["key"]]
-                        acc[1] += part_end - seg_start
-                        if r["occupied"]:
-                            acc[0] += part_end - seg_start
-                    seg_start = part_end
+            for b, secs, occ, source in self._hour_parts(sl["id"], start, now):
+                if b in buckets:
+                    acc = buckets[b][sl["key"]]
+                    acc[1] += secs
+                    acc[0] += secs if occ else 0.0
+                    sources.add(source)
+        n = self.db.scalar("SELECT COUNT(*) FROM measurement WHERE station_id = ? AND server_time >= ?",
+                           (station["id"], start - self.core.s.stale_after_s))
         out = []
         for b, per_slot in buckets.items():
             vals = {k: (round(o / t, 3) if t > 0 else None) for k, (o, t) in per_slot.items()}
             known = [v for v in vals.values() if v is not None]
             out.append({"hour_start": iso(b), "occupancy": vals, "avg_occupied_slots": round(sum(known), 2) if known else None})
         return {"station_id": station["id"], "hours": hours, "buckets": out, "measurement_count": n,
-                "contains_simulated": simulated, "contains_live": live}
+                "contains_simulated": "simulated" in sources, "contains_live": "live" in sources}
+
+    def occupancy_week(self, station: sqlite3.Row, days: int = 7) -> dict:
+        """Typical week: share of occupied spaces per weekday and local hour over the last ``days`` days.
+
+        Planning data ("when is the station full?"). Only time with valid readings counts.
+        """
+        tz = ZoneInfo(self.core.s.timezone)
+        now = self.core.clock()
+        start = (int(now // 3600) - days * 24 + 1) * 3600
+        slots = self.slots(station["id"])
+        acc: dict[tuple[int, int], list[float]] = {}
+        local: dict[int, tuple[int, int]] = {}
+        sources: set[str] = set()
+        for sl in slots:
+            for b, secs, occ, source in self._hour_parts(sl["id"], start, now):
+                if b not in local:
+                    dt = datetime.fromtimestamp(b, tz)
+                    local[b] = (dt.weekday(), dt.hour)
+                a = acc.setdefault(local[b], [0.0, 0.0])
+                a[1] += secs
+                a[0] += secs if occ else 0.0
+                sources.add(source)
+        matrix = [[None if (d, h) not in acc or acc[(d, h)][1] <= 0 else round(acc[(d, h)][0] / acc[(d, h)][1], 3)
+                   for h in range(24)] for d in range(7)]
+        cells = [(v, d, h) for d, row in enumerate(matrix) for h, v in enumerate(row) if v is not None]
+        peak = max(cells, default=None)
+        known = sum(a[1] for a in acc.values())
+        return {"station_id": station["id"], "days": days, "timezone": self.core.s.timezone, "slots": len(slots),
+                "matrix": matrix, "peak": None if peak is None else {"weekday": peak[1], "hour": peak[2], "share": peak[0]},
+                "average": round(sum(a[0] for a in acc.values()) / known, 3) if known else None,
+                "contains_simulated": "simulated" in sources, "contains_live": "live" in sources}
 
     # ------------------------------------------------------------------ retention
     def purge(self) -> dict:
@@ -299,4 +337,5 @@ class Monitoring:
         self.db.execute("DELETE FROM session WHERE expires_at < ? OR last_seen_at < ?", (now, now - self.core.s.session_idle_s))
         self.db.execute("DELETE FROM auth_token WHERE expires_at < ?", (now - 86400,))
         self.db.execute("DELETE FROM audit_log WHERE at < ?", (now - self.core.s.audit_retention_s,))
+        deleted["leads"] = self.db.execute("DELETE FROM lead WHERE created_at < ?", (now - LEAD_RETENTION_S,)).rowcount
         return deleted

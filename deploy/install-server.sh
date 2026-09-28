@@ -225,6 +225,10 @@ if [ ! -f "$ETC/server.env.local" ]; then
 # BIKE_SMTP_USER=bikes@example.org
 # BIKE_SMTP_PASSWORD=...
 # BIKE_SIGNUP=closed            # open | approval | closed
+# Operator details for /legal/imprint and /legal/privacy:
+# BIKE_OPERATOR_NAME=City of Example
+# BIKE_OPERATOR_ADDRESS=Town hall\nMarket 1\n12345 Example
+# BIKE_CONTACT_EMAIL=bikes@example.org
 ENV
 fi
 chown root:"$SVC_USER" "$ETC/server.env" "$ETC/server.env.local"

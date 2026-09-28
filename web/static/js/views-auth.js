@@ -14,7 +14,7 @@ export async function loadMeta() {
 function authCard(title, body, rerender) {
   return el("div", { class: "auth-wrap" },
     el("main", { class: "auth-card", id: "main" },
-      el("a", { class: "brand", href: "/" }, el("span", { class: "logo", "aria-hidden": "true" }, "R"), meta.product_name),
+      el("a", { class: "brand", href: "/" }, el("img", { class: "logo", src: "/static/img/icon.svg", alt: "", width: "32", height: "32" }), meta.product_name),
       el("div", { class: "card" },
         el("div", { class: "btn-row", style: null }, el("h1", { tabindex: "-1" }, title)),
         body),
@@ -86,7 +86,7 @@ export function viewLogin(rerender) {
     }
   });
 
-  const wrap = el("div", {}, meta.setup_required ? el("div", { class: "alert-box info" }, t("setup.login_hint")) : null, form,
+  const wrap = el("div", {}, meta.setup_required ? el("div", { class: "alert-box info" }, t("setup.login_hint"), " ", el("a", { href: "#/setup" }, t("setup.title"))) : null, form,
     el("div", { class: "auth-links" },
       el("a", { href: "#/forgot" }, t("auth.forgot")),
       meta.signup_enabled ? el("a", { href: "#/register" }, t("auth.no_account")) : null));
@@ -121,7 +121,7 @@ export function viewRegister(rerender) {
     field(t("c.email"), input("email", "email", { autocomplete: "email", maxlength: "254" })),
     field(t("c.password"), pw, t("auth.pw_hint", { n: meta.password_min_length })), passwordMeter(pw, meta.password_min_length),
     el("div", { class: "field" }, el("label", { class: "check" }, el("input", { type: "checkbox", name: "terms", required: true }),
-      el("span", {}, t("auth.terms"), " ", el("a", { href: "/#privacy", target: "_blank", rel: "noopener" }, t("l.privacy"))))),
+      el("span", {}, t("auth.terms"), " ", el("a", { href: "/legal/privacy", target: "_blank", rel: "noopener" }, t("l.privacy"))))),
     el("button", { class: "btn primary", type: "submit" }, t("auth.register_btn"))), async (fd) => {
     err.hide();
     try {

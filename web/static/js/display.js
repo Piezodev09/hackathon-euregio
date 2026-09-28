@@ -45,6 +45,8 @@
     document.documentElement.lang = lang;
     document.querySelectorAll("[data-i18n]").forEach((n) => (n.textContent = t(n.dataset.i18n)));
     document.querySelectorAll("[data-lang]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.lang === lang)));
+    const qr = document.getElementById("phone-qr");
+    if (qr.getAttribute("src")) qr.alt = t("phoneQrAlt");
     render();
   }
   document.querySelectorAll("[data-lang]").forEach((b) =>
@@ -112,6 +114,23 @@
         (s.alert.simulated ? ` [${t("simulatedShort")}]` : ""))));
     }
   }
+
+  // QR code of this display link, so passers-by can open the same view on their phone.
+  let qrLoaded = false;
+  async function loadQr() {
+    if (qrLoaded || invalid || !TOKEN) return;
+    try {
+      const r = await fetch("/api/v1/public/display/qr", { cache: "no-store", credentials: "omit", headers: { "X-Display-Token": TOKEN } });
+      if (!r.ok) return;
+      const data = await r.json();
+      const img = document.getElementById("phone-qr");
+      img.src = data.qr;
+      img.alt = t("phoneQrAlt");
+      document.getElementById("phone").hidden = params.get("qr") === "0";
+      qrLoaded = true;
+    } catch (_) { /* optional */ }
+  }
+  setTimeout(loadQr, 1500);
 
   // new display link (different fragment) -> reload
   window.addEventListener("hashchange", () => location.reload());

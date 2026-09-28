@@ -4,22 +4,46 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="referrer" content="no-referrer">
-  <meta name="description" content="Smart Bike Station: live occupancy of bike spaces, space recommendation and movement warnings for schools, companies and municipalities.">
   <title>Smart Bike Station – every bike space, live</title>
+  <meta name="description" content="Live occupancy of every bike space, a recommended free space and movement warnings – for schools, companies and municipalities. No cameras, GDPR-friendly, self-hostable.">
+  <meta name="theme-color" content="#2563eb">
   <link rel="icon" href="/static/img/icon.svg" type="image/svg+xml">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Smart Bike Station – every bike space, live">
+  <meta property="og:description" content="Sensors, a Raspberry Pi and a privacy-friendly platform: free bike spaces at a glance, no more searching. No cameras, self-hostable.">
+  <meta property="og:image" content="/static/img/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
   <link rel="stylesheet" href="/static/css/app.css">
+  <link rel="stylesheet" href="/static/css/landing.css">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Smart Bike Station",
+    "applicationCategory": "BusinessApplication",
+    "operatingSystem": "Web, Raspberry Pi OS, Debian",
+    "description": "Live occupancy of bike spaces with sensors, space recommendation and movement warnings for schools, companies and municipalities.",
+    "offers": [
+      {"@type": "Offer", "name": "Free", "price": "0", "priceCurrency": "EUR"},
+      {"@type": "Offer", "name": "School", "price": "19", "priceCurrency": "EUR", "priceSpecification": {"@type": "UnitPriceSpecification", "price": "19", "priceCurrency": "EUR", "unitText": "MONTH"}},
+      {"@type": "Offer", "name": "Pro", "price": "79", "priceCurrency": "EUR", "priceSpecification": {"@type": "UnitPriceSpecification", "price": "79", "priceCurrency": "EUR", "unitText": "MONTH"}}
+    ]
+  }
+  </script>
   <script type="module" src="/static/js/landing.js"></script>
 </head>
-<body>
-  <a class="skip" href="#main">Skip to content</a>
+<body class="landing">
+  <a class="skip" href="#main" data-i18n="l.skip">Skip to content</a>
   <header class="site-header">
     <div class="inner">
-      <a class="brand" href="/"><span class="logo" aria-hidden="true">R</span>Smart Bike Station</a>
-      <nav class="site-nav" aria-label="Main navigation">
-        <a class="link" href="#features" data-i18n="l.features">Features</a>
-        <a class="link" href="#how" data-i18n="l.how">How it works</a>
-        <a class="link" href="#security" data-i18n="l.security">Security</a>
-        <a class="link" href="#pricing" data-i18n="l.pricing">Pricing</a>
+      <a class="brand" href="/"><img class="logo" src="/static/img/icon.svg" alt="" width="32" height="32">Smart Bike Station</a>
+      <nav class="site-nav" aria-label="Main navigation" data-i18n-aria="l.nav_label">
+        <a class="link hide-sm" href="#features" data-i18n="l.nav_features">Features</a>
+        <a class="link hide-sm" href="#how" data-i18n="l.nav_how">How it works</a>
+        <a class="link hide-sm" href="#pricing" data-i18n="l.nav_pricing">Pricing</a>
+        <a class="link hide-sm" href="#faq" data-i18n="l.nav_faq">FAQ</a>
         <span id="lang"></span>
         <a class="btn small" href="/app#/login" data-i18n="l.login">Sign in</a>
         <a class="btn small primary" href="/app#/register" data-i18n="l.start">Start free</a>
@@ -28,90 +52,269 @@
   </header>
 
   <main id="main">
-    <section class="hero">
+    <!-- 1 Hero -->
+    <section class="hero" aria-labelledby="hero-h">
       <div class="section-inner hero-grid">
         <div>
-          <h1 data-i18n="l.hero_title">Free bike spaces at a glance.</h1>
-          <p class="lead" data-i18n="l.hero_lead"></p>
-          <div class="btn-row">
-            <a class="btn primary" href="/app#/register" data-i18n="l.cta">Start free now</a>
-            <a class="btn" href="#pricing" data-i18n="l.cta2">See pricing</a>
+          <p class="eyebrow" data-i18n="l.eyebrow">For schools, companies and municipalities</p>
+          <h1 id="hero-h" data-i18n="l.hero_title">Every bike space, live – no more searching.</h1>
+          <p class="lead" data-i18n="l.hero_lead">Small sensors show which bike spaces are free, recommend the nearest one and report unusual movement – on a screen at the station, on every phone and in your portal.</p>
+          <div class="btn-row cta-row">
+            <a class="btn primary large" href="/app#/register" data-i18n="l.cta_start">Start free</a>
+            <a class="btn large" href="#live" data-i18n="l.cta_live">See it live</a>
+          </div>
+          <ul class="trust" aria-label="Trust" data-i18n-aria="l.trust_label">
+            <li><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 2 4 5v6c0 5 3.4 9.6 8 11 4.6-1.4 8-6 8-11V5l-8-3z"/></svg><span data-i18n="l.trust_gdpr">GDPR-friendly</span></li>
+            <li><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 5H15l2 3h3v10M4 8v11h13M9.5 10.5a3.5 3.5 0 0 0 4.9 4.9"/></svg><span data-i18n="l.trust_cameras">No cameras</span></li>
+            <li><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 5h16v6H4zM4 13h16v6H4zM8 8h.01M8 16h.01"/></svg><span data-i18n="l.trust_selfhost">Self-hostable</span></li>
+          </ul>
+        </div>
+        <div class="hero-visual" aria-hidden="true">
+          <svg class="viz" viewBox="0 0 560 400" role="presentation">
+            <rect class="viz-screen" x="10" y="20" width="400" height="260" rx="14"/>
+            <rect class="viz-bar" x="10" y="20" width="400" height="34" rx="14"/>
+            <circle class="viz-dot" cx="32" cy="37" r="5"/><circle class="viz-dot" cx="50" cy="37" r="5"/><circle class="viz-dot" cx="68" cy="37" r="5"/>
+            <text class="viz-title" x="34" y="92">Schoolyard</text>
+            <text class="viz-big" x="34" y="130">3 / 6 free</text>
+            <g class="viz-slots">
+              <rect class="s s1" x="34" y="150" width="54" height="54" rx="8"/><rect class="s s2" x="96" y="150" width="54" height="54" rx="8"/>
+              <rect class="s s3" x="158" y="150" width="54" height="54" rx="8"/><rect class="s s4" x="220" y="150" width="54" height="54" rx="8"/>
+              <rect class="s s5" x="282" y="150" width="54" height="54" rx="8"/><rect class="s s6" x="344" y="150" width="54" height="54" rx="8"/>
+            </g>
+            <g class="viz-heat">
+              <rect x="34" y="222" width="30" height="14" rx="3" class="h1"/><rect x="68" y="222" width="30" height="14" rx="3" class="h3"/>
+              <rect x="102" y="222" width="30" height="14" rx="3" class="h4"/><rect x="136" y="222" width="30" height="14" rx="3" class="h4"/>
+              <rect x="170" y="222" width="30" height="14" rx="3" class="h3"/><rect x="204" y="222" width="30" height="14" rx="3" class="h2"/>
+              <rect x="238" y="222" width="30" height="14" rx="3" class="h1"/><rect x="272" y="222" width="30" height="14" rx="3" class="h1"/>
+              <rect x="34" y="242" width="30" height="14" rx="3" class="h2"/><rect x="68" y="242" width="30" height="14" rx="3" class="h4"/>
+              <rect x="102" y="242" width="30" height="14" rx="3" class="h4"/><rect x="136" y="242" width="30" height="14" rx="3" class="h3"/>
+              <rect x="170" y="242" width="30" height="14" rx="3" class="h3"/><rect x="204" y="242" width="30" height="14" rx="3" class="h2"/>
+              <rect x="238" y="242" width="30" height="14" rx="3" class="h1"/><rect x="272" y="242" width="30" height="14" rx="3" class="h0"/>
+            </g>
+            <rect class="viz-alert" x="310" y="224" width="88" height="32" rx="8"/>
+            <text class="viz-alert-t" x="322" y="245">⚠ check B</text>
+            <rect class="viz-stand" x="170" y="280" width="80" height="18"/>
+            <rect class="viz-stand" x="130" y="296" width="160" height="8" rx="4"/>
+            <g class="viz-phone">
+              <rect class="viz-phone-body" x="420" y="110" width="126" height="250" rx="20"/>
+              <rect class="viz-phone-screen" x="430" y="130" width="106" height="210" rx="10"/>
+              <text class="viz-phone-t" x="442" y="160">Free: 3</text>
+              <text class="viz-phone-rec" x="442" y="184">→ Space C</text>
+              <rect class="s s1" x="442" y="200" width="38" height="38" rx="6"/><rect class="s s2" x="486" y="200" width="38" height="38" rx="6"/>
+              <rect class="s s3" x="442" y="244" width="38" height="38" rx="6"/><rect class="s s4" x="486" y="244" width="38" height="38" rx="6"/>
+              <rect class="s s5" x="442" y="288" width="38" height="38" rx="6"/><rect class="s s6" x="486" y="288" width="38" height="38" rx="6"/>
+            </g>
+          </svg>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2 Live demo -->
+    <section class="section alt" id="live" aria-labelledby="live-h">
+      <div class="section-inner">
+        <h2 id="live-h" data-i18n="l.live_title">Live from our demo station</h2>
+        <p class="muted" data-i18n="l.live_lead">This is real platform data, updated every few seconds. The demo station is fed by a simulator – clearly labelled, never passed off as real sensors.</p>
+        <div class="live-grid">
+          <div class="card live-card" id="live-card" aria-live="polite">
+            <p class="muted" data-i18n="l.live_loading">Connecting to the demo station …</p>
+          </div>
+          <div class="card qr-card" id="live-qr" hidden>
+            <h3 data-i18n="l.live_phone">Open on your phone</h3>
+            <img class="qr" id="live-qr-img" alt="QR code of the live display" data-i18n-alt="l.live_qr_alt" width="180" height="180">
+            <p><a id="live-qr-link" href="#" data-i18n="l.live_kiosk">Open the kiosk view</a></p>
           </div>
         </div>
-        <div class="card preview" aria-labelledby="preview-h">
-          <h2 id="preview-h" class="small muted" data-i18n="l.preview">Live preview (example)</h2>
-          <p class="big" id="preview-free"></p>
-          <ul class="slots" id="preview-slots"></ul>
+      </div>
+    </section>
+
+    <!-- 3 Problem -> solution -->
+    <section class="section" id="problem" aria-labelledby="problem-h">
+      <div class="section-inner">
+        <h2 id="problem-h" data-i18n="l.problem_title">Full racks, long searches, bikes on the fence</h2>
+        <div class="grid cols-2 problem-grid">
+          <div class="card problem">
+            <h3 data-i18n="l.problem_h">Today</h3>
+            <ul class="x-list">
+              <li data-i18n="l.problem_1">Racks look full – people circle around or give up.</li>
+              <li data-i18n="l.problem_2">Free spaces at the far end are never found.</li>
+              <li data-i18n="l.problem_3">Bikes end up on fences, railings and escape routes.</li>
+              <li data-i18n="l.problem_4">Nobody knows when the station is full – there is no data for planning.</li>
+            </ul>
+          </div>
+          <div class="card solution">
+            <h3 data-i18n="l.solution_h">With Smart Bike Station</h3>
+            <ul class="check-list">
+              <li data-i18n="l.solution_1">Free spaces are visible before you arrive – on site and on the phone.</li>
+              <li data-i18n="l.solution_2">A clear recommendation leads to the next free space.</li>
+              <li data-i18n="l.solution_3">Unusual movement is reported as a hint – never as an accusation.</li>
+              <li data-i18n="l.solution_4">A weekly heatmap shows when capacity runs out.</li>
+            </ul>
+          </div>
         </div>
       </div>
     </section>
 
-    <section class="section alt" id="features" aria-labelledby="features-h">
+    <!-- 4 How it works -->
+    <section class="section alt" id="how" aria-labelledby="how-h">
       <div class="section-inner">
-        <h2 id="features-h" data-i18n="l.features">Features</h2>
-        <div class="grid cols-3">
-          <div class="card feature"><h3><span class="icon" aria-hidden="true">✓</span><span data-i18n="l.f1_t"></span></h3><p data-i18n="l.f1"></p></div>
-          <div class="card feature"><h3><span class="icon" aria-hidden="true">→</span><span data-i18n="l.f2_t"></span></h3><p data-i18n="l.f2"></p></div>
-          <div class="card feature"><h3><span class="icon" aria-hidden="true">⚠</span><span data-i18n="l.f3_t"></span></h3><p data-i18n="l.f3"></p></div>
-          <div class="card feature"><h3><span class="icon" aria-hidden="true">▦</span><span data-i18n="l.f4_t"></span></h3><p data-i18n="l.f4"></p></div>
-          <div class="card feature"><h3><span class="icon" aria-hidden="true">Aa</span><span data-i18n="l.f5_t"></span></h3><p data-i18n="l.f5"></p></div>
-          <div class="card feature"><h3><span class="icon" aria-hidden="true">☺</span><span data-i18n="l.f6_t"></span></h3><p data-i18n="l.f6"></p></div>
-        </div>
-      </div>
-    </section>
-
-    <section class="section" id="how" aria-labelledby="how-h">
-      <div class="section-inner">
-        <h2 id="how-h" data-i18n="l.how">How it works</h2>
-        <p class="muted" data-i18n="l.how_lead"></p>
-        <ol class="flow" aria-label="Data flow">
-          <li class="step"><span data-i18n="l.s1"></span><small data-i18n="l.s1s"></small></li>
-          <li class="arrow" aria-hidden="true">→</li>
-          <li class="step"><span data-i18n="l.s2"></span><small data-i18n="l.s2s"></small></li>
-          <li class="arrow" aria-hidden="true">→</li>
-          <li class="step"><span data-i18n="l.s3"></span><small data-i18n="l.s3s"></small></li>
-          <li class="arrow" aria-hidden="true">→</li>
-          <li class="step"><span data-i18n="l.s4"></span><small data-i18n="l.s4s"></small></li>
-          <li class="arrow" aria-hidden="true">→</li>
-          <li class="step"><span data-i18n="l.s5"></span><small data-i18n="l.s5s"></small></li>
+        <h2 id="how-h" data-i18n="l.how_title">Running in three steps</h2>
+        <ol class="steps3">
+          <li class="card"><span class="num" aria-hidden="true">1</span><h3 data-i18n="l.step1_t">Mount the sensors</h3><p data-i18n="l.step1">One distance and one vibration sensor per space, an Arduino per rack. Existing racks stay.</p></li>
+          <li class="card"><span class="num" aria-hidden="true">2</span><h3 data-i18n="l.step2_t">Pair the Pi</h3><p data-i18n="l.step2">One command on the Raspberry Pi – or the Home Assistant add-on. The pairing code comes from the portal, done in 60 seconds.</p></li>
+          <li class="card"><span class="num" aria-hidden="true">3</span><h3 data-i18n="l.step3_t">See it live</h3><p data-i18n="l.step3">Portal, kiosk screen at the station and phone view update within seconds.</p></li>
         </ol>
       </div>
     </section>
 
-    <section class="section alt" id="security" aria-labelledby="security-h">
+    <!-- 5 Features + integrations -->
+    <section class="section" id="features" aria-labelledby="features-h">
       <div class="section-inner">
-        <h2 id="security-h" data-i18n="l.sec_title">Security and privacy built in</h2>
-        <div class="grid cols-2">
-          <div class="card"><p data-i18n="l.sec1"></p></div>
-          <div class="card"><p data-i18n="l.sec2"></p></div>
-          <div class="card"><p data-i18n="l.sec3"></p></div>
-          <div class="card"><p data-i18n="l.sec4"></p></div>
-          <div class="card"><p data-i18n="l.sec5"></p></div>
-          <div class="card"><p data-i18n="l.sec6"></p></div>
+        <h2 id="features-h" data-i18n="l.features_title">Everything a busy bike station needs</h2>
+        <div class="grid cols-3 features">
+          <article class="card feature"><svg class="ficon" aria-hidden="true" viewBox="0 0 24 24"><circle cx="6" cy="16" r="4"/><circle cx="18" cy="16" r="4"/><path d="M6 16l4-8h5l3 8M10 8 8 4H6"/></svg><h3 data-i18n="l.f1_t">Live occupancy</h3><p data-i18n="l.f1">Free, occupied or unknown – per space, with a timestamp. Missing data is never shown as “free”.</p></article>
+          <article class="card feature"><svg class="ficon" aria-hidden="true" viewBox="0 0 24 24"><path d="M4 12h14M13 6l6 6-6 6"/></svg><h3 data-i18n="l.f2_t">Space recommendation</h3><p data-i18n="l.f2">Arrivals see the next free space immediately – with a transparent, fixed rule.</p></article>
+          <article class="card feature"><svg class="ficon" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3 2 20h20L12 3zM12 10v4M12 17h.01"/></svg><h3 data-i18n="l.f3_t">Movement warnings</h3><p data-i18n="l.f3">Repeated strong shaking at a parked bike raises a warning: a suspicion to check, never proof. Rule and AI are compared openly.</p></article>
+          <article class="card feature"><svg class="ficon" aria-hidden="true" viewBox="0 0 24 24"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/></svg><h3 data-i18n="l.f4_t">Planning heatmap</h3><p data-i18n="l.f4">Occupancy by weekday and hour shows when the station is full – data for your next investment.</p></article>
+          <article class="card feature"><svg class="ficon" aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg><h3 data-i18n="l.f5_t">Kiosk, phone, three languages</h3><p data-i18n="l.f5">A high-contrast display at the station, a QR code for phones, English, German and Dutch – states always with text and symbol.</p></article>
+          <article class="card feature"><svg class="ficon" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 2 4 5v6c0 5 3.4 9.6 8 11 4.6-1.4 8-6 8-11V5l-8-3z"/><path d="m9 12 2 2 4-4"/></svg><h3 data-i18n="l.f6_t">Secure by default</h3><p data-i18n="l.f6">Roles, two-factor sign-in, audit log, encrypted transport, device tokens per station.</p></article>
+        </div>
+        <div class="integrations" aria-labelledby="int-h">
+          <h3 id="int-h" data-i18n="l.int_title">Fits into what you already use</h3>
+          <ul class="chips">
+            <li>Home Assistant</li><li>MQTT</li><li data-i18n="l.int_webhooks">Webhooks (Teams, Slack, Discord)</li>
+            <li>REST API</li><li>Docker</li><li>Proxmox</li>
+          </ul>
         </div>
       </div>
     </section>
 
-    <section class="section" id="pricing" aria-labelledby="pricing-h">
-      <div class="section-inner">
-        <h2 id="pricing-h" data-i18n="l.pricing">Pricing</h2>
-        <p class="muted" data-i18n="l.pricing_lead"></p>
-        <div class="grid cols-3" id="plans"></div>
+    <!-- 6 Hardware -->
+    <section class="section alt" id="hardware" aria-labelledby="hw-h">
+      <div class="section-inner grid cols-2 hw-grid">
+        <div>
+          <h2 id="hw-h" data-i18n="l.hw_title">Hardware starter kit</h2>
+          <p data-i18n="l.hw_lead">Standard parts you can buy anywhere – no proprietary hardware, no lock-in.</p>
+          <p class="price-estimate"><span data-i18n="l.hw_price">approx. €130 per station with 3 spaces</span> <span class="badge" data-i18n="l.estimate">estimate</span></p>
+          <p class="small muted" data-i18n="l.hw_note">Estimated street prices excl. VAT; they vary by supplier. Wiring guide and firmware are included (firmware/README.md).</p>
+        </div>
+        <ul class="bom card">
+          <li><strong>Raspberry Pi</strong> <span data-i18n="l.bom_pi">4 or 5, power supply, microSD – runs the agent</span></li>
+          <li><strong>Arduino</strong> <span data-i18n="l.bom_arduino">Uno or Nano – reads the sensors, drives the LEDs</span></li>
+          <li><strong>HC-SR04</strong> <span data-i18n="l.bom_hcsr04">ultrasonic distance sensor – one per space</span></li>
+          <li><strong>SW-420</strong> <span data-i18n="l.bom_sw420">vibration sensor – one per space</span></li>
+          <li><strong>LEDs</strong> <span data-i18n="l.bom_leds">green/red per space, with resistors – plus printed labels</span></li>
+        </ul>
       </div>
     </section>
 
-    <section class="section alt" id="privacy" aria-labelledby="privacy-h">
+    <!-- 7 Security, privacy, sustainability -->
+    <section class="section" id="trust" aria-labelledby="trust-h">
+      <div class="section-inner grid cols-2">
+        <div>
+          <h2 id="trust-h" data-i18n="l.sec_title">Security and privacy built in</h2>
+          <ul class="check-list">
+            <li data-i18n="l.sec1">No cameras, no names, no RFID – only space, state and time.</li>
+            <li data-i18n="l.sec2">Runs in the cloud or on your own server (Proxmox, Docker) – your data stays yours.</li>
+            <li data-i18n="l.sec3">Two-factor sign-in, account lockout, secure sessions, audit log.</li>
+            <li data-i18n="l.sec4">Encrypted transport, certificate pinning for the gateways, checksum-verified updates with rollback.</li>
+            <li data-i18n="l.sec5">Automatic deletion after the retention period, export and deletion in one click.</li>
+            <li data-i18n="l.sec6">Warnings are hints, not accusations – deliberately factual wording.</li>
+          </ul>
+        </div>
+        <div>
+          <h2 data-i18n="l.eco_title">Sustainable by design</h2>
+          <ul class="check-list">
+            <li data-i18n="l.eco1">Uses your existing racks – no new infrastructure.</li>
+            <li><span data-i18n="l.eco2">About 4 W per station (Pi + Arduino + sensors), ≈ 35 kWh per year</span> <span class="badge" data-i18n="l.estimate">estimate</span></li>
+            <li data-i18n="l.eco3">Better used racks mean fewer new ones – and more people choosing the bike.</li>
+            <li data-i18n="l.eco4">LED brightness adjustable, no screens required.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- 8 Comparison -->
+    <section class="section alt" id="compare" aria-labelledby="cmp-h">
       <div class="section-inner">
-        <h2 id="privacy-h" data-i18n="l.privacy">Privacy</h2>
-        <p>Placeholder for the operator's privacy policy. Processed data: user account data (name, e-mail, role), session data (IP address, user agent) for security, technical measurements of the bike spaces (occupancy, vibration value, time) and an audit log of security-relevant actions. No cameras, no identification of people, no tracking or advertising cookies.</p>
+        <h2 id="cmp-h" data-i18n="l.cmp_title">How it compares</h2>
+        <div class="table-wrap">
+          <table class="compare">
+            <caption class="visually-hidden" data-i18n="l.cmp_caption">Comparison with camera systems and manual counting</caption>
+            <thead><tr>
+              <th scope="col"><span class="visually-hidden" data-i18n="l.cmp_criterion">Criterion</span></th>
+              <th scope="col" class="us">Smart Bike Station</th>
+              <th scope="col" data-i18n="l.cmp_camera">Camera counting</th>
+              <th scope="col" data-i18n="l.cmp_manual">Manual counting</th>
+            </tr></thead>
+            <tbody>
+              <tr><th scope="row" data-i18n="l.cmp_r1">Live status per space</th><td class="yes" data-i18n="l.cmp_yes">yes</td><td class="part" data-i18n="l.cmp_partly">partly</td><td class="no" data-i18n="l.cmp_no">no</td></tr>
+              <tr><th scope="row" data-i18n="l.cmp_r2">No personal data</th><td class="yes" data-i18n="l.cmp_yes">yes</td><td class="no" data-i18n="l.cmp_no">no</td><td class="yes" data-i18n="l.cmp_yes">yes</td></tr>
+              <tr><th scope="row" data-i18n="l.cmp_r3">Movement warnings</th><td class="yes" data-i18n="l.cmp_yes">yes</td><td class="part" data-i18n="l.cmp_partly">partly</td><td class="no" data-i18n="l.cmp_no">no</td></tr>
+              <tr><th scope="row" data-i18n="l.cmp_r4">Planning data (heatmap)</th><td class="yes" data-i18n="l.cmp_yes">yes</td><td class="yes" data-i18n="l.cmp_yes">yes</td><td class="part" data-i18n="l.cmp_samples">samples only</td></tr>
+              <tr><th scope="row" data-i18n="l.cmp_r5">Works in your own network</th><td class="yes" data-i18n="l.cmp_yes">yes</td><td class="part" data-i18n="l.cmp_partly">partly</td><td class="yes" data-i18n="l.cmp_yes">yes</td></tr>
+              <tr><th scope="row" data-i18n="l.cmp_r6">Effort to run</th><td class="yes" data-i18n="l.cmp_low">low</td><td class="part" data-i18n="l.cmp_medium">medium</td><td class="no" data-i18n="l.cmp_high">high</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="small muted" data-i18n="l.cmp_note">Qualitative comparison of typical approaches, not of specific products.</p>
+      </div>
+    </section>
+
+    <!-- 9 Pricing -->
+    <section class="section" id="pricing" aria-labelledby="pricing-h">
+      <div class="section-inner">
+        <h2 id="pricing-h" data-i18n="l.pricing_title">Simple pricing</h2>
+        <p class="muted" data-i18n="l.pricing_lead">Per organisation, all features of a plan included. Prices excl. VAT, cancel monthly.</p>
+        <div class="billing-toggle" role="group" aria-label="Billing period" data-i18n-aria="l.billing_label">
+          <button type="button" class="btn small" data-period="month" aria-pressed="true" data-i18n="l.monthly">Monthly</button>
+          <button type="button" class="btn small" data-period="year" aria-pressed="false"><span data-i18n="l.yearly">Yearly</span> <span class="badge ok" data-i18n="l.two_free">2 months free</span></button>
+        </div>
+        <div class="grid cols-4 plans" id="plans"></div>
+        <p class="small muted" data-i18n="l.pricing_note">Self-hosting on your own server is included in every plan. Hardware is not included.</p>
+      </div>
+    </section>
+
+    <!-- 10 FAQ -->
+    <section class="section alt" id="faq" aria-labelledby="faq-h">
+      <div class="section-inner narrow">
+        <h2 id="faq-h" data-i18n="l.faq_title">Frequently asked questions</h2>
+        <details><summary data-i18n="l.faq1_q">What happens if the internet goes down?</summary><p data-i18n="l.faq1_a">The Pi buffers measurements and sends them later; LEDs at the spaces keep working. Screens show “unknown” instead of a wrong “free”. Self-hosted in your LAN, the internet is not needed at all.</p></details>
+        <details><summary data-i18n="l.faq2_q">Can we host it ourselves?</summary><p data-i18n="l.faq2_a">Yes. One command on a Proxmox host creates a container with the complete platform – no domain and no mail server needed. Docker works too.</p></details>
+        <details><summary data-i18n="l.faq3_q">How long does the installation take?</summary><p data-i18n="l.faq3_a">Mounting the sensors of a rack takes about an hour. Pairing a Raspberry Pi takes about a minute: create a code in the portal, run one command.</p></details>
+        <details><summary data-i18n="l.faq4_q">Which hardware do we need?</summary><p data-i18n="l.faq4_a">A Raspberry Pi, an Arduino, one distance sensor and one vibration sensor per space, LEDs. Everything is standard – see the starter kit above.</p></details>
+        <details><summary data-i18n="l.faq5_q">Is it GDPR-compliant?</summary><p data-i18n="l.faq5_a">It is built for data minimisation: no cameras, no personal data about cyclists, automatic deletion, export and deletion for customers. The operator still needs its own privacy notice – templates are included.</p></details>
+        <details><summary data-i18n="l.faq6_q">Is it accessible?</summary><p data-i18n="l.faq6_a">States are always shown with text and a symbol (never colour alone), everything works with the keyboard, the kiosk view uses high contrast and large type, in three languages.</p></details>
+        <details><summary data-i18n="l.faq7_q">How do we cancel?</summary><p data-i18n="l.faq7_a">Monthly, in the portal. You can export all data as JSON and delete your organisation completely at any time.</p></details>
+      </div>
+    </section>
+
+    <!-- 11 Final CTA + demo request -->
+    <section class="section cta-final" id="contact" aria-labelledby="contact-h">
+      <div class="section-inner grid cols-2">
+        <div>
+          <h2 id="contact-h" data-i18n="l.contact_title">See it at your site</h2>
+          <p data-i18n="l.contact_lead">Start free right away – or ask for a demo with your team. We answer personally.</p>
+          <p><a class="btn primary large" href="/app#/register" data-i18n="l.cta_start">Start free</a></p>
+        </div>
+        <form class="card lead-form" id="lead-form" novalidate>
+          <h3 data-i18n="l.form_title">Request a demo</h3>
+          <div class="field"><label for="lead-name" data-i18n="l.form_name">Your name</label><input id="lead-name" type="text" name="name" required maxlength="100" autocomplete="name"></div>
+          <div class="field"><label for="lead-org" data-i18n="l.form_org">Organisation</label><input id="lead-org" type="text" name="organisation" required maxlength="100" autocomplete="organization"></div>
+          <div class="field"><label for="lead-email" data-i18n="l.form_email">E-mail</label><input id="lead-email" name="email" type="email" required maxlength="254" autocomplete="email"></div>
+          <div class="field"><label for="lead-msg" data-i18n="l.form_msg">Message (optional)</label><textarea id="lead-msg" name="message" rows="3" maxlength="2000"></textarea></div>
+          <div class="hp" aria-hidden="true"><label for="lead-website">Website</label><input id="lead-website" type="text" name="website" tabindex="-1" autocomplete="off"></div>
+          <div class="field"><label class="check"><input type="checkbox" name="consent" required> <span><span data-i18n="l.form_consent">I agree that my details are used to answer my request.</span> <a href="/legal/privacy" data-i18n="l.privacy_link">Privacy policy</a></span></label></div>
+          <div id="lead-status" role="status" aria-live="polite"></div>
+          <button class="btn primary" type="submit" data-i18n="l.form_send">Send request</button>
+        </form>
       </div>
     </section>
   </main>
 
   <footer class="site-footer">
     <div class="section-inner">
-      <span>© Smart Bike Station · <span data-i18n="l.footer"></span></span>
-      <span><a href="#privacy" data-i18n="l.privacy">Privacy</a> · <a href="#imprint" id="imprint" data-i18n="l.imprint">Imprint</a> ·
+      <span>© <span id="year">2026</span> Smart Bike Station · <span data-i18n="l.footer">Made at the Hackathon Euregio.</span></span>
+      <span><a href="/legal/imprint" data-i18n="l.imprint">Imprint</a> · <a href="/legal/privacy" data-i18n="l.privacy_link">Privacy policy</a> ·
         <a href="/.well-known/security.txt">security.txt</a></span>
     </div>
   </footer>

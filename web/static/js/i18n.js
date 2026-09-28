@@ -138,32 +138,18 @@ export const STRINGS = {
     "pf.suspend_confirm": "Kunde „{name}“ sperren? Alle Sitzungen und Gateways werden sofort abgewiesen.",
 
     "nav.devices": "Gateways", "err.invalid_or_expired_code": "Der Kopplungscode ist ungültig oder abgelaufen.", "err.device_not_managed": "Dieses Gerät wurde manuell eingerichtet und kann keine Fernbefehle empfangen.", "ag.title": "Gateways (Raspberry Pi)", "ag.hint": "Ein Raspberry Pi je Station liest den Arduino aus und überträgt die Daten verschlüsselt. Die Einrichtung dauert wenige Minuten: Code erzeugen, Befehl auf dem Pi ausführen – fertig.", "ag.setup": "Gateway einrichten", "ag.setup_title": "Neues Gateway koppeln", "ag.code_label": "Kopplungscode (einmalig verwendbar):", "ag.code_expires": "gültig bis {t}", "ag.step_os": "Raspberry Pi mit Raspberry Pi OS (Bookworm oder neuer) starten, mit dem Netz verbinden und ein Terminal öffnen (oder per SSH anmelden). Arduino per USB anschließen.", "ag.step_download": "Installationsskript herunterladen:", "ag.step_verify": "Prüfsumme kontrollieren (muss „OK“ ausgeben):", "ag.step_install": "Installieren und koppeln:", "ag.step_done": "Nach etwa einer Minute erscheint das Gateway unten als „online“.", "ag.oneliner": "Alternative: Ein-Zeilen-Befehl", "ag.oneliner_hint": "Bequemer, aber ohne vorherige Prüfung des Skripts. Nur in vertrauenswürdigen Netzen verwenden.", "ag.simulator_hint": "Ohne Arduino testen:", "ag.pending": "Offene Kopplungscodes", "ag.none": "Noch kein Gateway eingerichtet.", "ag.version": "Version", "ag.health": "Zustand", "ag.last_contact": "Letzter Kontakt", "ag.online": "online", "ag.offline": "offline", "ag.unmanaged": "manuell", "ag.arduino": "Arduino", "ag.buffer": "{n} gepuffert", "ag.free": "frei", "ag.uptime": "läuft seit {h} h", "ag.uptime_m": "läuft seit {m} min", "ag.update_avail": "Update {v} verfügbar", "ag.restart": "Neu starten", "ag.rotate": "Token erneuern", "ag.update": "Aktualisieren", "ag.rotate_confirm": "Das Gateway erhält beim nächsten Kontakt ein neues Token. Fortfahren?", "ag.revoke_confirm": "Gateway „{name}“ sperren? Es kann danach keine Daten mehr senden.", "ag.queued": "Befehl wird beim nächsten Kontakt (≤ 1 min) ausgeführt.", "ag.auto_update": "Updates automatisch einspielen", "ag.manual": "Erweitert: Geräte-Token für eigene Hardware", "ag.fleet_hint": "Alle Gateways Ihrer Organisation. Ein Gateway gilt als offline, wenn es sich seit 3 Minuten nicht gemeldet hat.", "ag.fleet_summary": "{online} von {total} Gateways online · aktuelle Agent-Version {v}",
-    "l.features": "Funktionen", "l.how": "So funktioniert’s", "l.security": "Sicherheit", "l.pricing": "Preise",
-    "l.login": "Anmelden", "l.start": "Kostenlos starten",
-    "l.hero_title": "Freie Fahrradplätze auf einen Blick.",
-    "l.hero_lead": "Die Smart Bike Station erkennt die Belegung jedes Stellplatzes, empfiehlt freie Plätze und meldet auffällige Bewegungen – für Schulen, Unternehmen und Kommunen in der Euregio.",
-    "l.cta": "Jetzt kostenlos starten", "l.cta2": "Preise ansehen", "l.preview": "Live-Vorschau (Beispiel)",
-    "l.f1_t": "Echtzeit-Belegung", "l.f1": "Frei, belegt oder unbekannt – mit Zeitstempel. Fehlende Daten werden nie als „frei“ angezeigt.",
-    "l.f2_t": "Platzempfehlung", "l.f2": "Ankommende sehen sofort den nächsten freien Platz – transparent nach fester Regel.",
-    "l.f3_t": "Bewegungsmeldungen", "l.f3": "Auffällige Erschütterungen werden sachlich gemeldet. KI und Regel laufen im nachvollziehbaren Vergleich.",
-    "l.f4_t": "Auslastung", "l.f4": "Stündliche Auslastung als Heatmap mit Textzusammenfassung – Grundlage für Planung.",
-    "l.f5_t": "Mehrsprachig & barrierearm", "l.f5": "Deutsch, Niederländisch und Englisch. Zustände immer mit Text und Symbol, per Tastatur bedienbar.",
-    "l.f6_t": "Team & Rollen", "l.f6": "Inhaber, Administratoren, Betreuer und Lesende – mit Einladungen und Audit-Log.",
-    "l.how_lead": "Eigene Hardware am Stellplatz, Betrieb und Auswertung in der Cloud.",
-    "l.s1": "Sensoren", "l.s1s": "Präsenz & Vibration", "l.s2": "Arduino", "l.s2s": "entprellt, LEDs", "l.s3": "Raspberry Pi",
-    "l.s3s": "Gateway, Puffer", "l.s4": "Plattform", "l.s4s": "API, KI, Daten", "l.s5": "Dashboard", "l.s5s": "Portal & Anzeige",
-    "l.sec_title": "Sicherheit und Datenschutz ab Werk",
-    "l.sec1": "Keine Kameras, keine Namen, keine Personenerkennung – nur Platz, Zustand und Zeit.",
-    "l.sec2": "Zwei-Faktor-Anmeldung, Kontosperre bei Angriffen, sichere Sitzungen mit CSRF-Schutz.",
-    "l.sec3": "Strikte Mandantentrennung, Geräte-Tokens je Station, nur gehasht gespeichert.",
-    "l.sec4": "Verschlüsselte Übertragung (TLS), strenge Sicherheits-Header, Audit-Log.",
-    "l.sec5": "Datensparsam: automatische Löschung nach Tarif-Frist, Export und Löschung per Klick.",
-    "l.sec6": "Meldungen sind Hinweise, keine Schuldzuweisung – bewusst sachlich formuliert.",
-    "l.pricing_lead": "Monatlich kündbar. Preise zzgl. MwSt.", "l.choose": "Auswählen", "l.popular": "Beliebt",
-    "l.imprint": "Impressum", "l.privacy": "Datenschutz", "l.terms": "Nutzungsbedingungen",
-    "l.footer": "Hackathon Euregio – Prototyp.",
+    "l.pricing": "Preise",
+    
+    
+    
+    
+    
+    "l.popular": "Am beliebtesten",
+    "l.privacy": "Datenschutz", 
     "setup.title": "Plattform einrichten", "setup.lead": "Legen Sie das Administratorkonto und Ihre Organisation an. Das geht genau einmal.", "setup.token": "Einrichtungs-Token", "setup.token_hint": "Wird vom Installationsskript und im Server-Log ausgegeben (Datei .setup-token im Datenverzeichnis).", "setup.org_name": "Name Ihrer Organisation", "setup.btn": "Admin und Organisation anlegen", "setup.done_already": "Die Plattform ist bereits eingerichtet. Bitte melden Sie sich an.", "setup.login_hint": "Diese Plattform ist noch nicht eingerichtet. Öffnen Sie den Einrichtungslink aus dem Installationsskript.", "auth.approval_note": "Neue Organisationen werden vom Betreiber dieser Plattform freigeschaltet.", "auth.pending_title": "Fast geschafft", "auth.pending_text": "Ihre Organisation wurde registriert. Der Betreiber dieser Plattform schaltet sie frei – danach können Sie sich anmelden.", "auth.forgot_no_mail": "Diese Plattform versendet keine E-Mails. Bitte fragen Sie Ihren Administrator nach einem Link zum Zurücksetzen des Passworts.", "err.pending_approval": "Ihre Organisation ist noch nicht freigeschaltet. Bitte warten Sie auf die Freigabe durch den Betreiber.", "err.tenant_pending": "Ihre Organisation ist noch nicht freigeschaltet.", "err.use_password_change": "Ihr eigenes Passwort ändern Sie unter „Mein Konto & Sicherheit“.", "c.qr_alt": "QR-Code des Links", "c.valid_until": "Gültig bis {t}", "tm.reset_link": "Reset-Link", "tm.reset_confirm": "Einmaligen Link zum Zurücksetzen des Passworts für {email} erzeugen?", "tm.reset_title": "Link zum Zurücksetzen des Passworts für {email}", "tm.reset_hint": "Persönlich übergeben (QR-Code scannen lassen oder Link kopieren). Er funktioniert einmal. Die Zwei-Faktor-Anmeldung bleibt aktiv.", "tm.invite_link_title": "Einladung für {email}", "tm.invite_link_hint": "Diese Plattform versendet keine E-Mails. Übergeben Sie den Link oder lassen Sie den QR-Code scannen – er wird nur jetzt angezeigt.", "tm.invite_btn_link": "Einladungslink erzeugen", "pf.pending": "Warten auf Freigabe", "pf.pending_s": "wartet", "pf.approve": "Freischalten", "pf.approve_confirm": "„{name}“ freischalten? Der Inhaber kann sich danach anmelden.", "ag.ca_download_hint": "-k ist hier in Ordnung: Der Pi vertraut der Plattform noch nicht, der nächste Schritt prüft das Skript. Danach pinnt das Skript das Plattform-Zertifikat für jede Verbindung.", "ag.ca_pinned": "Die Plattform nutzt eine eigene Zertifizierungsstelle. Der Agent pinnt sie (Fingerabdruck):",
     "sec.banner_platform": "Als Plattform-Administrator müssen Sie die Zwei-Faktor-Anmeldung nutzen. Bitte richten Sie sie jetzt ein.",
+    "plan.free": "Free", "plan.school": "Schule", "plan.pro": "Pro",
+    "st.usage_day": "Letzte 24 h", "st.usage_week": "Typische Woche", "st.usage_week_title": "Belegung nach Wochentag und Uhrzeit (7 Tage)", "st.day": "Tag", "st.week_text": "Am vollsten: {d} um {h}:00 Uhr mit {v} belegten Plätzen. Durchschnitt der Woche: {a}.", "st.week_note": "Anteil belegter Plätze, Ortszeit ({tz}). Schraffiert: keine Daten.", "pf.leads": "Demo-Anfragen", "pf.leads_hint": "Anfragen aus dem Kontaktformular der Landingpage. Werden nach 180 Tagen automatisch gelöscht.", "pf.leads_none": "Noch keine Demo-Anfragen.", "pf.lead_org": "Organisation", "pf.lead_msg": "Nachricht", "pf.lead_open": "offen", "pf.lead_done": "erledigt", "pf.lead_mark": "Als erledigt markieren", "pf.lead_reopen": "Wieder öffnen", "pf.lead_delete_confirm": "Anfrage von {name} löschen?",
   },
 
   nl: {
@@ -295,30 +281,18 @@ export const STRINGS = {
     "pf.suspend_confirm": "Klant „{name}” blokkeren? Alle sessies en gateways worden direct geweigerd.",
 
     "nav.devices": "Gateways", "err.invalid_or_expired_code": "De koppelcode is ongeldig of verlopen.", "err.device_not_managed": "Dit apparaat is handmatig ingericht en kan geen opdrachten op afstand ontvangen.", "ag.title": "Gateways (Raspberry Pi)", "ag.hint": "Eén Raspberry Pi per station leest de Arduino uit en verstuurt de gegevens versleuteld. Inrichten duurt een paar minuten: code aanmaken, opdracht op de Pi uitvoeren – klaar.", "ag.setup": "Gateway inrichten", "ag.setup_title": "Nieuwe gateway koppelen", "ag.code_label": "Koppelcode (eenmalig bruikbaar):", "ag.code_expires": "geldig tot {t}", "ag.step_os": "Start de Raspberry Pi met Raspberry Pi OS (Bookworm of nieuwer), verbind met het netwerk en open een terminal (of log in via SSH). Sluit de Arduino via USB aan.", "ag.step_download": "Installatiescript downloaden:", "ag.step_verify": "Controlesom controleren (moet „OK” tonen):", "ag.step_install": "Installeren en koppelen:", "ag.step_done": "Na ongeveer een minuut verschijnt de gateway hieronder als „online”.", "ag.oneliner": "Alternatief: opdracht op één regel", "ag.oneliner_hint": "Gemakkelijker, maar zonder voorafgaande controle van het script. Alleen in vertrouwde netwerken gebruiken.", "ag.simulator_hint": "Zonder Arduino testen:", "ag.pending": "Openstaande koppelcodes", "ag.none": "Nog geen gateway ingericht.", "ag.version": "Versie", "ag.health": "Toestand", "ag.last_contact": "Laatste contact", "ag.online": "online", "ag.offline": "offline", "ag.unmanaged": "handmatig", "ag.arduino": "Arduino", "ag.buffer": "{n} gebufferd", "ag.free": "vrij", "ag.uptime": "draait {h} u", "ag.uptime_m": "draait {m} min", "ag.update_avail": "Update {v} beschikbaar", "ag.restart": "Herstarten", "ag.rotate": "Token vernieuwen", "ag.update": "Bijwerken", "ag.rotate_confirm": "De gateway krijgt bij het volgende contact een nieuw token. Doorgaan?", "ag.revoke_confirm": "Gateway „{name}” blokkeren? Daarna kan hij geen gegevens meer versturen.", "ag.queued": "Opdracht wordt bij het volgende contact (≤ 1 min) uitgevoerd.", "ag.auto_update": "Updates automatisch installeren", "ag.manual": "Geavanceerd: apparaattoken voor eigen hardware", "ag.fleet_hint": "Alle gateways van uw organisatie. Een gateway is offline als hij zich 3 minuten niet heeft gemeld.", "ag.fleet_summary": "{online} van {total} gateways online · huidige agentversie {v}",
-    "l.features": "Functies", "l.how": "Hoe het werkt", "l.security": "Beveiliging", "l.pricing": "Prijzen",
-    "l.login": "Inloggen", "l.start": "Gratis beginnen", "l.hero_title": "Vrije fietsplekken in één oogopslag.",
-    "l.hero_lead": "Het Slimme Fietsstation herkent de bezetting van elke plek, adviseert vrije plekken en meldt ongewone bewegingen – voor scholen, bedrijven en gemeenten in de Euregio.",
-    "l.cta": "Nu gratis beginnen", "l.cta2": "Prijzen bekijken", "l.preview": "Live-voorbeeld",
-    "l.f1_t": "Realtime bezetting", "l.f1": "Vrij, bezet of onbekend – met tijdstempel. Ontbrekende gegevens worden nooit als „vrij” getoond.",
-    "l.f2_t": "Plekadvies", "l.f2": "Aankomende fietsers zien direct de eerstvolgende vrije plek – transparant volgens een vaste regel.",
-    "l.f3_t": "Bewegingsmeldingen", "l.f3": "Ongewone trillingen worden zakelijk gemeld. AI en regel worden navolgbaar vergeleken.",
-    "l.f4_t": "Bezetting", "l.f4": "Bezetting per uur als heatmap met tekstuele samenvatting – basis voor planning.",
-    "l.f5_t": "Meertalig & toegankelijk", "l.f5": "Duits, Nederlands en Engels. Status altijd met tekst en symbool, met toetsenbord te bedienen.",
-    "l.f6_t": "Team & rollen", "l.f6": "Eigenaren, beheerders, begeleiders en lezers – met uitnodigingen en auditlog.",
-    "l.how_lead": "Eigen hardware bij de fietsplek, beheer en analyse in de cloud.",
-    "l.s1": "Sensoren", "l.s1s": "aanwezigheid & trilling", "l.s2": "Arduino", "l.s2s": "ontdendert, leds", "l.s3": "Raspberry Pi",
-    "l.s3s": "gateway, buffer", "l.s4": "Platform", "l.s4s": "API, AI, gegevens", "l.s5": "Dashboard", "l.s5s": "portaal & weergave",
-    "l.sec_title": "Beveiliging en privacy standaard ingebouwd",
-    "l.sec1": "Geen camera's, geen namen, geen persoonsherkenning – alleen plek, status en tijd.",
-    "l.sec2": "Tweestapsverificatie, accountblokkering bij aanvallen, veilige sessies met CSRF-bescherming.",
-    "l.sec3": "Strikte scheiding tussen klanten, apparaattokens per station, alleen gehasht opgeslagen.",
-    "l.sec4": "Versleutelde overdracht (TLS), strenge beveiligingsheaders, auditlog.",
-    "l.sec5": "Dataminimalisatie: automatisch verwijderen na bewaartermijn, export en verwijderen met één klik.",
-    "l.sec6": "Meldingen zijn aanwijzingen, geen beschuldiging – bewust zakelijk geformuleerd.",
-    "l.pricing_lead": "Maandelijks opzegbaar. Prijzen excl. btw.", "l.choose": "Kiezen", "l.popular": "Populair",
-    "l.imprint": "Colofon", "l.privacy": "Privacy", "l.terms": "Gebruiksvoorwaarden", "l.footer": "Hackathon Euregio – prototype.",
+    "l.pricing": "Prijzen",
+    
+    
+    
+    
+    
+    "l.popular": "Meest gekozen",
+    "l.privacy": "Privacy", 
     "setup.title": "Platform inrichten", "setup.lead": "Maak het beheerdersaccount en uw organisatie aan. Dit kan precies één keer.", "setup.token": "Inrichtingstoken", "setup.token_hint": "Wordt door het installatiescript en in het serverlog getoond (bestand .setup-token in de datamap).", "setup.org_name": "Naam van uw organisatie", "setup.btn": "Beheerder en organisatie aanmaken", "setup.done_already": "Het platform is al ingericht. Meld u aan.", "setup.login_hint": "Dit platform is nog niet ingericht. Open de inrichtingslink uit het installatiescript.", "auth.approval_note": "Nieuwe organisaties worden door de beheerder van dit platform geactiveerd.", "auth.pending_title": "Bijna klaar", "auth.pending_text": "Uw organisatie is geregistreerd. De beheerder van dit platform activeert haar – daarna kunt u zich aanmelden.", "auth.forgot_no_mail": "Dit platform verstuurt geen e-mails. Vraag uw beheerder om een link om uw wachtwoord opnieuw in te stellen.", "err.pending_approval": "Uw organisatie is nog niet geactiveerd. Wacht op de goedkeuring van de beheerder.", "err.tenant_pending": "Uw organisatie is nog niet geactiveerd.", "err.use_password_change": "Uw eigen wachtwoord wijzigt u onder „Mijn account & beveiliging”.", "c.qr_alt": "QR-code van de link", "c.valid_until": "Geldig tot {t}", "tm.reset_link": "Resetlink", "tm.reset_confirm": "Eenmalige link voor het opnieuw instellen van het wachtwoord van {email} aanmaken?", "tm.reset_title": "Resetlink voor het wachtwoord van {email}", "tm.reset_hint": "Persoonlijk overhandigen (QR-code laten scannen of link kopiëren). Hij werkt één keer. Tweestapsaanmelding blijft actief.", "tm.invite_link_title": "Uitnodiging voor {email}", "tm.invite_link_hint": "Dit platform verstuurt geen e-mails. Geef de link door of laat de QR-code scannen – hij wordt alleen nu getoond.", "tm.invite_btn_link": "Uitnodigingslink aanmaken", "pf.pending": "Wacht op goedkeuring", "pf.pending_s": "wacht", "pf.approve": "Activeren", "pf.approve_confirm": "„{name}” activeren? De eigenaar kan zich daarna aanmelden.", "ag.ca_download_hint": "-k is hier in orde: de Pi vertrouwt het platform nog niet, de volgende stap controleert het script. Daarna pint het script het platformcertificaat voor elke verbinding.", "ag.ca_pinned": "Het platform gebruikt een eigen certificaatautoriteit. De agent pint deze (vingerafdruk):",
     "sec.banner_platform": "Als platformbeheerder moet u tweestapsaanmelding gebruiken. Stel deze nu in.",
+    "plan.free": "Gratis", "plan.school": "School", "plan.pro": "Pro",
+    "st.usage_day": "Laatste 24 u", "st.usage_week": "Typische week", "st.usage_week_title": "Bezetting per weekdag en uur (7 dagen)", "st.day": "Dag", "st.week_text": "Drukst: {d} om {h}:00 uur met {v} bezette plekken. Gemiddelde over de week: {a}.", "st.week_note": "Aandeel bezette plekken, lokale tijd ({tz}). Gearceerd: geen gegevens.", "pf.leads": "Demo-aanvragen", "pf.leads_hint": "Aanvragen via het contactformulier van de landingspagina. Worden na 180 dagen automatisch verwijderd.", "pf.leads_none": "Nog geen demo-aanvragen.", "pf.lead_org": "Organisatie", "pf.lead_msg": "Bericht", "pf.lead_open": "open", "pf.lead_done": "afgehandeld", "pf.lead_mark": "Als afgehandeld markeren", "pf.lead_reopen": "Heropenen", "pf.lead_delete_confirm": "Aanvraag van {name} verwijderen?",
   },
 
   en: {
@@ -445,30 +419,18 @@ export const STRINGS = {
     "pf.suspend_confirm": "Suspend customer “{name}”? All sessions and gateways will be rejected immediately.",
 
     "nav.devices": "Gateways", "err.invalid_or_expired_code": "The pairing code is invalid or has expired.", "err.device_not_managed": "This device was set up manually and cannot receive remote commands.", "ag.title": "Gateways (Raspberry Pi)", "ag.hint": "One Raspberry Pi per station reads the Arduino and transmits the data encrypted. Setup takes a few minutes: create a code, run a command on the Pi – done.", "ag.setup": "Set up gateway", "ag.setup_title": "Pair a new gateway", "ag.code_label": "Pairing code (single use):", "ag.code_expires": "valid until {t}", "ag.step_os": "Boot the Raspberry Pi with Raspberry Pi OS (Bookworm or newer), connect it to the network and open a terminal (or sign in via SSH). Connect the Arduino via USB.", "ag.step_download": "Download the install script:", "ag.step_verify": "Verify the checksum (must print “OK”):", "ag.step_install": "Install and pair:", "ag.step_done": "After about a minute the gateway appears below as “online”.", "ag.oneliner": "Alternative: one-line command", "ag.oneliner_hint": "More convenient, but without checking the script first. Only use in trusted networks.", "ag.simulator_hint": "Test without an Arduino:", "ag.pending": "Open pairing codes", "ag.none": "No gateway set up yet.", "ag.version": "Version", "ag.health": "Health", "ag.last_contact": "Last contact", "ag.online": "online", "ag.offline": "offline", "ag.unmanaged": "manual", "ag.arduino": "Arduino", "ag.buffer": "{n} buffered", "ag.free": "free", "ag.uptime": "up {h} h", "ag.uptime_m": "up {m} min", "ag.update_avail": "Update {v} available", "ag.restart": "Restart", "ag.rotate": "Renew token", "ag.update": "Update", "ag.rotate_confirm": "The gateway will receive a new token on its next contact. Continue?", "ag.revoke_confirm": "Revoke gateway “{name}”? It will no longer be able to send data.", "ag.queued": "Command will run on the next contact (≤ 1 min).", "ag.auto_update": "Install updates automatically", "ag.manual": "Advanced: device token for custom hardware", "ag.fleet_hint": "All gateways of your organisation. A gateway counts as offline after 3 minutes without contact.", "ag.fleet_summary": "{online} of {total} gateways online · current agent version {v}",
-    "l.features": "Features", "l.how": "How it works", "l.security": "Security", "l.pricing": "Pricing", "l.login": "Sign in",
-    "l.start": "Start for free", "l.hero_title": "Available bike spaces at a glance.",
-    "l.hero_lead": "The Smart Bike Station detects the occupancy of every space, suggests free spaces and reports unusual movements – for schools, companies and municipalities in the Euregio.",
-    "l.cta": "Start for free now", "l.cta2": "See pricing", "l.preview": "Live preview (example)",
-    "l.f1_t": "Real-time occupancy", "l.f1": "Available, occupied or unknown – with timestamp. Missing data is never shown as “available”.",
-    "l.f2_t": "Space suggestion", "l.f2": "Arriving cyclists instantly see the next free space – transparently by a fixed rule.",
-    "l.f3_t": "Movement alerts", "l.f3": "Unusual vibrations are reported factually. AI and rule are compared traceably.",
-    "l.f4_t": "Occupancy", "l.f4": "Hourly occupancy as a heatmap with a text summary – a basis for planning.",
-    "l.f5_t": "Multilingual & accessible", "l.f5": "German, Dutch and English. States always with text and symbol, keyboard operable.",
-    "l.f6_t": "Team & roles", "l.f6": "Owners, administrators, operators and viewers – with invitations and audit log.",
-    "l.how_lead": "Your own hardware at the rack, operation and analytics in the cloud.",
-    "l.s1": "Sensors", "l.s1s": "presence & vibration", "l.s2": "Arduino", "l.s2s": "debounced, LEDs", "l.s3": "Raspberry Pi",
-    "l.s3s": "gateway, buffer", "l.s4": "Platform", "l.s4s": "API, AI, data", "l.s5": "Dashboard", "l.s5s": "portal & display",
-    "l.sec_title": "Security and privacy built in",
-    "l.sec1": "No cameras, no names, no identification of people – only space, state and time.",
-    "l.sec2": "Two-factor sign-in, account lockout against attacks, secure sessions with CSRF protection.",
-    "l.sec3": "Strict tenant isolation, device tokens per station, stored only as hashes.",
-    "l.sec4": "Encrypted transport (TLS), strict security headers, audit log.",
-    "l.sec5": "Data minimisation: automatic deletion after retention period, export and deletion in one click.",
-    "l.sec6": "Warnings are hints, not accusations – deliberately phrased factually.",
-    "l.pricing_lead": "Cancel monthly. Prices excl. VAT.", "l.choose": "Choose", "l.popular": "Popular",
-    "l.imprint": "Imprint", "l.privacy": "Privacy", "l.terms": "Terms", "l.footer": "Hackathon Euregio – prototype.",
+    "l.pricing": "Pricing", 
+    
+    
+    
+    
+    
+    "l.popular": "Most popular",
+    "l.privacy": "Privacy", 
     "setup.title": "Set up your platform", "setup.lead": "Create the administrator account and your organisation. This works exactly once.", "setup.token": "Setup token", "setup.token_hint": "Printed by the installer and in the server log (file .setup-token in the data directory).", "setup.org_name": "Name of your organisation", "setup.btn": "Create admin and organisation", "setup.done_already": "The platform is already set up. Please sign in.", "setup.login_hint": "This platform is not set up yet. Open the setup link printed by the installer.", "auth.approval_note": "New organisations are activated by the operator of this platform.", "auth.pending_title": "Almost done", "auth.pending_text": "Your organisation has been registered. The operator of this platform will activate it – you can sign in afterwards.", "auth.forgot_no_mail": "This platform does not send e-mails. Please ask your administrator for a password reset link.", "err.pending_approval": "Your organisation has not been activated yet. Please wait for the operator's approval.", "err.tenant_pending": "Your organisation has not been activated yet.", "err.use_password_change": "Change your own password under “My account & security”.", "c.qr_alt": "QR code of the link", "c.valid_until": "Valid until {t}", "tm.reset_link": "Reset link", "tm.reset_confirm": "Create a one-time password reset link for {email}?", "tm.reset_title": "Password reset link for {email}", "tm.reset_hint": "Hand it over in person (scan the QR code or copy the link). It works once. Two-factor sign-in stays active.", "tm.invite_link_title": "Invitation for {email}", "tm.invite_link_hint": "This platform does not send e-mails. Hand over the link or let the person scan the QR code – it is shown only now.", "tm.invite_btn_link": "Create invitation link", "pf.pending": "Awaiting approval", "pf.pending_s": "pending", "pf.approve": "Approve", "pf.approve_confirm": "Activate “{name}”? The owner can sign in afterwards.", "ag.ca_download_hint": "-k is fine here: the Pi does not trust the platform yet, the next step verifies the script. The script then pins the platform certificate for every connection.", "ag.ca_pinned": "The platform uses its own certificate authority. The agent pins it (fingerprint):",
     "sec.banner_platform": "As platform administrator you must use two-factor sign-in. Please set it up now.",
+    "plan.free": "Free", "plan.school": "School", "plan.pro": "Pro",
+    "st.usage_day": "Last 24 h", "st.usage_week": "Typical week", "st.usage_week_title": "Occupancy by weekday and hour (7 days)", "st.day": "Day", "st.week_text": "Busiest: {d} at {h}:00 with {v} of the spaces occupied. Average over the week: {a}.", "st.week_note": "Share of occupied spaces, local time ({tz}). Hatched: no data.", "pf.leads": "Demo requests", "pf.leads_hint": "Requests from the contact form of the landing page. Deleted automatically after 180 days.", "pf.leads_none": "No demo requests yet.", "pf.lead_org": "Organisation", "pf.lead_msg": "Message", "pf.lead_open": "open", "pf.lead_done": "handled", "pf.lead_mark": "Mark handled", "pf.lead_reopen": "Reopen", "pf.lead_delete_confirm": "Delete the request from {name}?",
   },
 };
 
@@ -498,6 +460,9 @@ export function t(key, vars) {
   if (vars) for (const [k, v] of Object.entries(vars)) s = s.split(`{${k}}`).join(String(v));
   return s;
 }
+
+// Plan names are translated in the UI; the server sends a fallback name.
+export const planName = (p) => (STRINGS[current]["plan." + p.id] ?? p.name);
 
 export function applyStatic(root = document) {
   root.querySelectorAll("[data-i18n]").forEach((n) => (n.textContent = t(n.dataset.i18n)));

@@ -106,7 +106,7 @@ export function heatmap(summary, slots) {
   const top = buckets.filter((b) => b.avg_occupied_slots !== null).reduce((a, b) => (b.avg_occupied_slots > a.avg_occupied_slots ? b : a));
   return el("div", {},
     el("p", {}, t("st.usage_text", { h: hourOf(top.hour_start), v: top.avg_occupied_slots.toLocaleString(getLang()) })),
-    el("div", { class: "table-wrap" }, el("table", { class: "heatmap" },
+    el("div", { class: "table-wrap", tabindex: "0", role: "region", "aria-label": t("st.usage") }, el("table", { class: "heatmap" },
       el("caption", { class: "visually-hidden" }, t("st.usage")),
       el("thead", {}, el("tr", {}, el("th", { scope: "col" }, t("st.hour")), slots.map((s) => el("th", { scope: "col" }, s.label)))),
       el("tbody", {}, buckets.map((b) => el("tr", {}, el("th", { scope: "row" }, hourOf(b.hour_start)),
@@ -117,6 +117,28 @@ export function heatmap(summary, slots) {
         })))))),
     el("p", { class: summary.contains_simulated ? "badge sim" : "small muted" },
       summary.contains_simulated ? t("st.src_sim") : summary.contains_live ? t("st.src_live") : ""));
+}
+
+// Typical week: rows = weekdays, columns = hours (local time of the station). Planning data.
+export function weekHeatmap(w) {
+  if (!w.matrix.some((row) => row.some((v) => v !== null))) return el("p", { class: "muted" }, t("st.usage_none"));
+  const days = Array.from({ length: 7 }, (_, d) =>
+    new Date(Date.UTC(2024, 0, 1 + d)).toLocaleDateString(getLang(), { weekday: "short", timeZone: "UTC" }));
+  const pct = (v) => `${Math.round(v * 100)} %`;
+  const summary = w.peak ? t("st.week_text", { d: new Date(Date.UTC(2024, 0, 1 + w.peak.weekday)).toLocaleDateString(getLang(),
+    { weekday: "long", timeZone: "UTC" }), h: String(w.peak.hour).padStart(2, "0"), v: pct(w.peak.share), a: pct(w.average ?? 0) }) : "";
+  return el("div", {},
+    el("p", {}, summary),
+    el("div", { class: "table-wrap", tabindex: "0", role: "region", "aria-label": t("st.usage_week_title") }, el("table", { class: "heatmap week" },
+      el("caption", { class: "visually-hidden" }, t("st.usage_week_title")),
+      el("thead", {}, el("tr", {}, el("th", { scope: "col" }, t("st.day")),
+        Array.from({ length: 24 }, (_, h) => el("th", { scope: "col" }, String(h).padStart(2, "0"))))),
+      el("tbody", {}, w.matrix.map((row, d) => el("tr", {}, el("th", { scope: "row" }, days[d]),
+        row.map((v) => v === null ? el("td", { class: "nodata", title: "–" }, "")
+          : el("td", { class: `lvl${Math.min(4, Math.floor(v * 5))}`, title: `${days[d]} ${pct(v)}` },
+            el("span", { class: "visually-hidden" }, pct(v))))))))),
+    el("p", { class: "small muted" }, t("st.week_note", { tz: w.timezone }),
+      w.contains_simulated ? el("span", { class: "badge sim" }, " " + t("st.src_sim")) : null));
 }
 
 function eventsTable(events, reload, { showStation = true } = {}) {
@@ -152,7 +174,7 @@ export function viewStation(id, setTitle) {
   let alertText = "";
 
   const node = el("div", {}, summary, alerts, el("section", { "aria-label": t("st.slots") }, slotsBox),
-    el("div", { class: "grid cols-2" }, usage, el("div", {}, ai, recent)));
+    usage, el("div", { class: "grid cols-2" }, ai, recent));
 
   const render = () => {
     if (!last) return;
@@ -195,10 +217,19 @@ export function viewStation(id, setTitle) {
     }
     render();
   };
+  let usageView = "day";
+  const usageToggle = () => el("div", { class: "btn-row", role: "group", "aria-label": t("st.usage") },
+    ["day", "week"].map((v) => el("button", { class: "btn small", type: "button", "aria-pressed": String(usageView === v),
+      onclick: () => { usageView = v; loadUsage(); } }, t(v === "day" ? "st.usage_day" : "st.usage_week"))));
   const loadUsage = async () => {
     try {
-      const s = await get(`/api/v1/stations/${id}/occupancy?hours=24`);
-      if (last) clear(usage, el("h2", {}, t("st.usage")), heatmap(s, last.slots));
+      if (usageView === "week") {
+        const w = await get(`/api/v1/stations/${id}/occupancy/week?days=7`);
+        clear(usage, el("h2", {}, t("st.usage_week_title")), usageToggle(), weekHeatmap(w));
+      } else {
+        const s = await get(`/api/v1/stations/${id}/occupancy?hours=24`);
+        if (last) clear(usage, el("h2", {}, t("st.usage")), usageToggle(), heatmap(s, last.slots));
+      }
     } catch (_) {}
   };
   const loadRecent = async () => {

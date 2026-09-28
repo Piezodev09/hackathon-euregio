@@ -41,6 +41,18 @@ Run everything locally without hardware: `scripts/dev.sh` (see README).
   `el()` from `web/static/js/ui.js`.
 - Simulated data must always stay labelled as simulated (`source = "simulated"`).
 
+## Design system
+
+The UI follows the "premium" design system (Apple-inspired): Inter / JetBrains Mono (self-hosted in
+`web/static/fonts`, SIL OFL), type scale 12/14/16/18/24/30/36 px, spacing scale 4/8/12/16/24/32 px,
+brand #3B82F6 / #8B5CF6. All values are tokens at the top of `web/static/css/app.css` – use
+`var(--sp-4)`, `var(--fs-18)`, `var(--primary)` instead of raw values. Accessibility wins over raw
+tokens: text and filled buttons use `--primary` (#2563EB, 5.2:1), form controls `--control-border`
+(≥ 3:1). Check pages with axe-core (0 serious/critical findings, light and dark mode).
+
+The social preview `web/static/img/og.png` is rendered from `scripts/og/og.html`:
+`node scripts/render-og.mjs` (needs Playwright).
+
 ## Versions
 
 | What | Where | When to bump |

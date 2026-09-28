@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ..core import Ctx, core_of, require
 from ..plans import PLANS, get_plan
-from ..schemas import TenantPatch
+from ..schemas import Strict, TenantPatch
 from ..service import iso
 from .org import issue_reset_link
 
@@ -71,6 +71,7 @@ def stats(request: Request, ctx: Ctx = Depends(require(platform=True))):
         "tenants": len(tenants),
         "active_tenants": sum(1 for t in tenants if t["status"] == "active"),
         "pending_tenants": sum(1 for t in tenants if t["status"] == "pending"),
+        "open_leads": db.scalar("SELECT COUNT(*) FROM lead WHERE handled_at IS NULL"),
         "mrr_eur": sum(get_plan(t["plan"]).price_eur_month for t in tenants if t["status"] == "active"),
         "users": db.scalar("SELECT COUNT(*) FROM user WHERE tenant_id IS NOT NULL"),
         "stations": db.scalar("SELECT COUNT(*) FROM station"),
@@ -78,6 +79,41 @@ def stats(request: Request, ctx: Ctx = Depends(require(platform=True))):
         "measurements_24h": db.scalar("SELECT COUNT(*) FROM measurement WHERE server_time > ?", (core.clock() - 86400,)),
         "by_plan": {p: sum(1 for t in tenants if t["plan"] == p) for p in PLANS},
     }
+
+
+# ---------------------------------------------------------------------- leads (demo requests)
+class LeadPatch(Strict):
+    handled: bool
+
+
+@router.get("/leads")
+def list_leads(request: Request, ctx: Ctx = Depends(require(platform=True))):
+    core = core_of(request)
+    rows = core.db.all("SELECT * FROM lead ORDER BY handled_at IS NOT NULL, created_at DESC LIMIT 500")
+    return {"leads": [{"id": r["id"], "name": r["name"], "organisation": r["organisation"], "email": r["email"],
+                       "message": r["message"], "locale": r["locale"], "created_at": iso(r["created_at"]),
+                       "handled_at": iso(r["handled_at"]), "handled_by": r["handled_by"]} for r in rows]}
+
+
+@router.patch("/leads/{lead_id}")
+def patch_lead(lead_id: str, body: LeadPatch, request: Request, ctx: Ctx = Depends(require(platform=True))):
+    core = core_of(request)
+    cur = core.db.execute("UPDATE lead SET handled_at = ?, handled_by = ? WHERE id = ?",
+                          (core.clock() if body.handled else None, ctx.actor if body.handled else None, lead_id[:64]))
+    if cur.rowcount == 0:
+        raise HTTPException(404, "not_found")
+    core.audit("lead_updated", user_id=ctx.user["id"], actor=ctx.actor, ip=ctx.ip, target=lead_id[:64],
+               detail={"handled": body.handled})
+    return {"status": "ok"}
+
+
+@router.delete("/leads/{lead_id}")
+def delete_lead(lead_id: str, request: Request, ctx: Ctx = Depends(require(platform=True))):
+    core = core_of(request)
+    if core.db.execute("DELETE FROM lead WHERE id = ?", (lead_id[:64],)).rowcount == 0:
+        raise HTTPException(404, "not_found")
+    core.audit("lead_deleted", user_id=ctx.user["id"], actor=ctx.actor, ip=ctx.ip, target=lead_id[:64])
+    return {"status": "deleted"}
 
 
 @router.get("/audit")

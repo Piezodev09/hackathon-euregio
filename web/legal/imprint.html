@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Imprint · {{product_name}}</title>
+  <link rel="icon" href="/static/img/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/css/app.css">
+  <link rel="stylesheet" href="/static/css/landing.css">
+</head>
+<body>
+  <main class="legal" id="main">
+    <p><a href="/">← {{product_name}}</a></p>
+    <h1>Imprint</h1>
+    {{missing_notice}}
+    <h2>Service provider</h2>
+    <p>{{operator_name}}<br>{{operator_address}}</p>
+    <h2>Contact</h2>
+    <p>E-mail: {{contact_link}}</p>
+    <h2>Responsible for the content</h2>
+    <p>{{operator_name}}, address as above.</p>
+    <h2>Note</h2>
+    <p>{{product_name}} is operated by the organisation named above. The software was created at the
+      Hackathon Euregio. Depending on your country further details may be required (e.g. register
+      number, VAT ID, supervisory authority) – please add them before public use.</p>
+    <p class="small muted"><a href="/legal/privacy">Privacy policy</a> · <a href="/">Home</a></p>
+  </main>
+</body>
+</html>

@@ -40,6 +40,8 @@ class Core:
         self.auth_limiter = RateLimiter(settings.auth_per_minute / 60.0, settings.auth_per_minute)
         # sign-up, forgotten password etc.: at most 5 per hour and IP
         self.mail_limiter = RateLimiter(5 / 3600.0, 5)
+        # demo requests from the landing page: at most 3 per hour and IP
+        self.lead_limiter = RateLimiter(3 / 3600.0, 3)
 
     @property
     def cookie_name(self) -> str:
@@ -115,6 +117,19 @@ class Core:
             "SELECT * FROM auth_token WHERE token_hash = ? AND purpose = ? AND used_at IS NULL AND expires_at > ?",
             (hash_token(token), purpose, self.clock()),
         )
+
+    # ------------------------------------------------------------------ runtime settings
+    def get_setting(self, key: str, default: str | None = None) -> str | None:
+        value = self.db.scalar("SELECT value FROM setting WHERE key = ?", (key,))
+        return default if value is None else value
+
+    def set_setting(self, key: str, value: str | None) -> None:
+        if value is None:
+            self.db.execute("DELETE FROM setting WHERE key = ?", (key,))
+        else:
+            self.db.execute("INSERT INTO setting (key, value, updated_at) VALUES (?,?,?) "
+                            "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+                            (key, value, self.clock()))
 
     # ------------------------------------------------------------------ first-run setup
     @property

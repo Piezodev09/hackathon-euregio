@@ -55,6 +55,17 @@ Docker is an alternative, see [`deploy/docker/`](../deploy/docker/).
 4. Create a station, then *Set up gateway* and run the three commands on the Pi
    ([agent.md](agent.md)). The install script embeds and pins the platform CA.
 
+### Landing page, legal pages and the live demo
+
+- Operator details for `/legal/imprint` and `/legal/privacy`: `BIKE_OPERATOR_NAME`, `BIKE_OPERATOR_ADDRESS`
+  (lines separated by `\n`) and `BIKE_CONTACT_EMAIL` in `server.env.local`. Until they are set, both pages show
+  a clearly visible "template" warning.
+- Live demo on the landing page: `bike-station demo --reset` creates a demo organisation with two stations,
+  7 days of **simulated** history and a public display link; the platform keeps it alive with simulated readings
+  (always labelled). Remove it with `bike-station demo-remove`.
+- Demo requests from the landing page appear in *Platform → Demo requests* (no e-mail needed) and are deleted
+  after 180 days.
+
 ## 3. Operation without a mail server
 
 `install-server.sh` sets `BIKE_MAIL_BACKEND=none`. Nothing is ever sent; each attempt is audited

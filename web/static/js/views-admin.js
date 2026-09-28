@@ -1,6 +1,6 @@
 // Administration: team, account & security, organisation, plan, audit log, platform.
 import { api, get, post, patch, del, describeError, setCsrf } from "./api.js";
-import { getLang, setLang, t, LANGS } from "./i18n.js";
+import { getLang, planName, setLang, t, LANGS } from "./i18n.js";
 import { el, clear, field, toast, confirmDialog, fmtDateTime, fmtMoney, copyText, passwordMeter, linkHandover } from "./ui.js";
 import { state, can, go } from "./state.js";
 import { getMeta } from "./views-auth.js";
@@ -289,7 +289,7 @@ function planFeatures(p) {
 }
 export function planCard(p, { current, action, featured } = {}) {
   return el("article", { class: `card plan${featured ? " featured" : ""}` },
-    el("h3", {}, p.name, current ? el("span", { class: "badge ok" }, " " + t("bill.current_badge")) : null,
+    el("h3", {}, planName(p), current ? el("span", { class: "badge ok" }, " " + t("bill.current_badge")) : null,
       featured && !current ? el("span", { class: "badge" }, " " + t("l.popular")) : null),
     el("p", { class: "price" }, p.price_eur_month ? fmtMoney(p.price_eur_month) : t("bill.free"),
       p.price_eur_month ? el("span", { class: "small muted" }, " " + t("bill.per_month")) : null),
@@ -313,7 +313,7 @@ export function viewBilling(rerender) {
   get("/api/v1/org/plans").then(({ plans: list }) => {
     clear(plans, list.map((pl) => planCard(pl, { current: pl.id === p.id, featured: pl.id === "school",
       action: pl.id !== p.id && can("owner") ? el("button", { class: "btn primary", type: "button", onclick: async () => {
-        if (!(await confirmDialog(t("bill.confirm", { plan: pl.name })))) return;
+        if (!(await confirmDialog(t("bill.confirm", { plan: planName(pl) })))) return;
         try { await post("/api/v1/org/plan", { plan: pl.id }); await refreshMe(); toast(t("bill.changed")); rerender(); }
         catch (e) { toast(describeError(e), "error"); }
       } }, t("bill.choose")) : null })));
@@ -338,6 +338,30 @@ export function viewPlatform() {
   const kpis = el("div", { class: "grid cols-4" });
   const handover = el("div");
   const table = el("div", { class: "card" }, t("c.loading"));
+  let tab = "tenants";
+  const tabs = el("div", { class: "btn-row", role: "group", "aria-label": t("pf.title") });
+  const renderTabs = (openLeads) => clear(tabs, [["tenants", t("pf.tenants")], ["leads", t("pf.leads")]].map(([id, label]) =>
+    el("button", { class: "btn small", type: "button", "aria-pressed": String(tab === id), onclick: () => { tab = id; load(); } },
+      label, id === "leads" && openLeads ? el("span", { class: "badge warn" }, String(openLeads)) : null)));
+  const loadLeads = async () => {
+    const { leads } = await get("/api/v1/platform/leads");
+    clear(table, el("h2", {}, t("pf.leads")), el("p", { class: "small muted" }, t("pf.leads_hint")),
+      leads.length ? el("div", { class: "table-wrap" }, el("table", {},
+        th(t("c.created"), t("c.name"), t("pf.lead_org"), t("c.email"), t("pf.lead_msg"), t("c.status"), t("c.actions")),
+        el("tbody", {}, leads.map((l) => el("tr", {},
+          el("td", {}, fmtDateTime(l.created_at)), el("td", {}, l.name), el("td", {}, l.organisation),
+          el("td", {}, el("a", { href: `mailto:${l.email}` }, l.email)), el("td", { class: "small pre" }, l.message || "–"),
+          el("td", {}, l.handled_at ? el("span", { class: "badge ok" }, t("pf.lead_done")) : el("span", { class: "badge warn" }, t("pf.lead_open"))),
+          el("td", {}, el("div", { class: "btn-row" },
+            el("button", { class: "btn small", type: "button", onclick: async () => {
+              try { await patch(`/api/v1/platform/leads/${l.id}`, { handled: !l.handled_at }); load(); } catch (e) { toast(describeError(e), "error"); }
+            } }, l.handled_at ? t("pf.lead_reopen") : t("pf.lead_mark")),
+            el("button", { class: "btn small danger", type: "button", onclick: async () => {
+              if (!(await confirmDialog(t("pf.lead_delete_confirm", { name: l.name }), { danger: true }))) return;
+              try { await del(`/api/v1/platform/leads/${l.id}`); load(); } catch (e) { toast(describeError(e), "error"); }
+            } }, t("c.delete")))))))))
+        : el("p", { class: "muted" }, t("pf.leads_none")));
+  };
   const setStatus = async (tn, status, confirmText) => {
     if (confirmText && !(await confirmDialog(confirmText, { danger: status === "suspended" }))) return;
     try { await patch(`/api/v1/platform/tenants/${tn.id}`, { status }); toast(t("c.saved")); load(); }
@@ -352,6 +376,8 @@ export function viewPlatform() {
       clear(kpis, k(stats.tenants, t("pf.tenants")), k(stats.active_tenants, t("pf.active")), k(stats.pending_tenants, t("pf.pending")),
         k(fmtMoney(stats.mrr_eur), t("pf.mrr")), k(stats.users, t("pf.users")), k(stats.stations, t("ov.stations")),
         k(stats.devices_online, t("pf.devices_online")), k(stats.measurements_24h, t("pf.meas24")));
+      renderTabs(stats.open_leads);
+      if (tab === "leads") return await loadLeads();
       const own = state.me.tenant?.id;
       clear(table, el("h2", {}, t("pf.tenants")), el("div", { class: "table-wrap" }, el("table", {},
         th(t("org.name"), t("pf.owner"), t("pf.plan"), t("c.status"), t("ov.stations"), t("pf.users"), t("c.created"), t("c.actions")),
@@ -379,5 +405,5 @@ export function viewPlatform() {
     } catch (e) { clear(table, errorCard(e)); }
   };
   load();
-  return el("div", {}, kpis, handover, table);
+  return el("div", {}, kpis, handover, tabs, table);
 }

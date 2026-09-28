@@ -1,4 +1,7 @@
 /* High contrast, large type, states always also as text/symbol (plan 9.2). */
+/* Self-hosted Inter (same files as the portal). */
+@font-face { font-family: "Inter"; font-style: normal; font-display: swap; font-weight: 100 900;
+  src: url("/static/fonts/inter-latin-wght-normal.woff2") format("woff2"); }
 :root {
   --bg: #ffffff;
   --fg: #111111;
@@ -14,11 +17,6 @@
   --warn-bg: #fef3c7;
   --warn-fg: #78350f;
   --focus: #1d4ed8;
-  --heat0: #f3f4f6;
-  --heat1: #dbeafe;
-  --heat2: #93c5fd;
-  --heat3: #3b82f6;
-  --heat4: #1e3a8a;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -37,11 +35,6 @@
     --warn-bg: #78350f;
     --warn-fg: #fffbeb;
     --focus: #93c5fd;
-    --heat0: #1f2937;
-    --heat1: #1e3a8a;
-    --heat2: #1d4ed8;
-    --heat3: #3b82f6;
-    --heat4: #93c5fd;
   }
 }
 
@@ -50,7 +43,7 @@
 body {
   margin: 0;
   padding: 0 16px 32px;
-  font: 18px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font: 18px/1.5 "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   background: var(--bg);
   color: var(--fg);
 }
@@ -116,20 +109,15 @@ h2 { font-size: 1.3rem; margin: 28px 0 10px; }
 .table-wrap { overflow-x: auto; }
 table { border-collapse: collapse; min-width: 100%; }
 th, td { border: 1px solid var(--border); padding: 6px 10px; text-align: center; }
-.heatmap td.lvl0 { background: var(--heat0); color: var(--fg); }
-.heatmap td.lvl1 { background: var(--heat1); color: var(--fg); }
-.heatmap td.lvl2 { background: var(--heat2); color: #0b1530; }
-.heatmap td.lvl3 { background: var(--heat3); color: #ffffff; }
-.heatmap td.lvl4 { background: var(--heat4); color: var(--bg); }
-.heatmap td.nodata { color: var(--muted); }
 
-.admin { margin-top: 32px; border: 2px solid var(--border); border-radius: 10px; padding: 10px 16px; }
-.admin summary { cursor: pointer; font-weight: 700; min-height: 32px; }
-.admin form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0; }
-.admin input { font: inherit; padding: 6px 10px; min-height: 44px; border: 2px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--fg); }
-.events tr.shadow { color: var(--muted); font-style: italic; }
 
 footer { margin-top: 32px; }
 
 .alert { background: var(--warn-bg); color: var(--warn-fg); border: 3px solid var(--warn-fg); border-radius: 8px; padding: 10px 14px; font-weight: 700; }
 .small { font-size: 0.95rem; color: var(--muted); }
+
+/* QR code to the phone view */
+.phone { display: flex; gap: 1.2rem; align-items: center; margin: 1.5rem 0; padding: 1rem; border: 2px solid currentColor; border-radius: 12px; }
+.phone img { background: #fff; padding: 6px; border-radius: 8px; flex: none; }
+.phone h2 { margin: 0 0 .3rem; }
+.phone[hidden] { display: none; }

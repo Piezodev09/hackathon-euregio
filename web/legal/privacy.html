@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Privacy policy · {{product_name}}</title>
+  <link rel="icon" href="/static/img/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/css/app.css">
+  <link rel="stylesheet" href="/static/css/landing.css">
+</head>
+<body>
+  <main class="legal" id="main">
+    <p><a href="/">← {{product_name}}</a></p>
+    <h1>Privacy policy</h1>
+    {{missing_notice}}
+    <p class="small muted">Template for the operator – check it with your data protection officer before public use.</p>
+
+    <h2>1. Controller</h2>
+    <p>{{operator_name}}<br>{{operator_address}}<br>E-mail: {{contact_link}}</p>
+
+    <h2>2. What we process – and what we do not</h2>
+    <ul>
+      <li><strong>Bike spaces:</strong> occupancy (free / occupied / unknown), a vibration value and the time,
+        per space. <strong>No cameras, no names, no RFID, no identification of people.</strong></li>
+      <li><strong>User accounts</strong> of the portal: name, e-mail address, role, language, password hash,
+        optional two-factor secret (encrypted).</li>
+      <li><strong>Security:</strong> sessions (IP address and browser identifier, max. 12 hours), an audit log of
+        security-relevant actions (kept 365 days).</li>
+      <li><strong>Demo requests</strong> from this website: name, organisation, e-mail address and your message
+        (kept at most 180 days; no IP address is stored).</li>
+    </ul>
+
+    <h2>3. Purposes and legal bases (GDPR)</h2>
+    <ul>
+      <li>Providing the service to customers: Art. 6 (1) (b) GDPR (contract).</li>
+      <li>Security of the service (sessions, audit log, rate limits): Art. 6 (1) (f) GDPR (legitimate interest).</li>
+      <li>Answering demo requests: Art. 6 (1) (a) GDPR (your consent in the form; revocable at any time).</li>
+    </ul>
+
+    <h2>4. Retention</h2>
+    <p>Measurements and events are deleted automatically after the retention period of the customer's plan
+      (7, 30 or 90 days). Expired sessions and one-time links are deleted automatically.</p>
+
+    <h2>5. Cookies and tracking</h2>
+    <p>Only one technically necessary session cookie after sign-in. No tracking, no advertising, no third-party
+      content: fonts, scripts and images are served from this server.</p>
+
+    <h2>6. Recipients and hosting</h2>
+    <p>The platform runs on servers of the operator ({{base_url}}). Data is not passed on to third parties unless
+      the operator configured an integration (e.g. a webhook to a chat service) – the operator must document it here.</p>
+
+    <h2>7. Your rights</h2>
+    <p>Access, rectification, erasure, restriction, data portability (the portal offers a complete JSON export and
+      deletion of accounts and organisations), objection, withdrawal of consent, and a complaint with a
+      supervisory authority. Contact: {{contact_link}}.</p>
+    <p class="small muted"><a href="/legal/imprint">Imprint</a> · <a href="/">Home</a></p>
+  </main>
+</body>
+</html>

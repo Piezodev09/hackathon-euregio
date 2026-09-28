@@ -4,3 +4,4 @@ uvicorn>=0.27
 cryptography>=41
 # QR codes (pure Python, MIT) for handing over links without e-mail
 segno>=1.5
+tzdata>=2024.1      # time zone database for containers without system tzdata

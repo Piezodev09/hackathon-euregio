@@ -187,4 +187,42 @@ def test_migration_from_schema_2(tmp_path):
     db = Database(p)
     cols = {r[1] for r in db.all("PRAGMA table_info(device)")}
     assert {"hostname", "prev_token_hash", "last_heartbeat_at"} <= cols
-    assert db.scalar("PRAGMA user_version") == 3
+    assert db.scalar("PRAGMA user_version") == 4
+
+
+def test_migration_from_schema_3_keeps_events(tmp_path):
+    import sqlite3
+
+    from app.db import SCHEMA_VERSION, Database
+
+    p = tmp_path / "v3.db"
+    con = sqlite3.connect(p)
+    con.executescript(
+        "CREATE TABLE tenant (id TEXT PRIMARY KEY, name TEXT, plan TEXT, status TEXT, mfa_required INTEGER, created_at REAL);"
+        "CREATE TABLE station (id TEXT PRIMARY KEY, tenant_id TEXT, name TEXT, location TEXT, alert_source TEXT, "
+        "display_token_hash TEXT, display_enabled INTEGER, config_version INTEGER, auto_update INTEGER, created_at REAL);"
+        "CREATE TABLE slot (id TEXT PRIMARY KEY, station_id TEXT, key TEXT, label TEXT, position INTEGER);"
+        "CREATE TABLE device (id TEXT PRIMARY KEY, tenant_id TEXT, station_id TEXT, name TEXT, token_prefix TEXT, "
+        "token_hash TEXT UNIQUE, created_at REAL, created_by TEXT, last_seen_at REAL, last_ip TEXT, revoked_at REAL, "
+        "enrolled_at REAL, hostname TEXT, agent_version TEXT, os_info TEXT, source TEXT, last_heartbeat_at REAL, health TEXT, "
+        "pending_command TEXT, update_requested INTEGER NOT NULL DEFAULT 0, prev_token_hash TEXT, "
+        "prev_token_valid_until REAL, token_rotated_at REAL);"
+        "CREATE TABLE event (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, station_id TEXT NOT NULL, slot_id TEXT NOT NULL, "
+        "kind TEXT NOT NULL, severity TEXT NOT NULL, detector TEXT, detail TEXT, occurred_at REAL NOT NULL, "
+        "acknowledged_at REAL, acknowledged_by TEXT, source TEXT NOT NULL DEFAULT 'live');"
+        "INSERT INTO tenant VALUES ('org_1', 'A', 'free', 'active', 0, 1);"
+        "INSERT INTO station VALUES ('st_1', 'org_1', 'S', '', 'rule', NULL, 0, 1, 1, 1);"
+        "INSERT INTO slot VALUES ('sl_1', 'st_1', 'A', 'Space A', 1);"
+        "INSERT INTO event VALUES ('evt_1', 'org_1', 'st_1', 'sl_1', 'sensor_fault', 'info', NULL, NULL, 5, NULL, NULL, 'live');"
+        "PRAGMA user_version = 3;")
+    con.close()
+    db = Database(p)
+    assert db.scalar("PRAGMA user_version") == SCHEMA_VERSION == 4
+    assert db.one("SELECT slot_id, kind FROM event WHERE id = 'evt_1'")["slot_id"] == "sl_1"
+    cols = {r[1]: r for r in db.all("PRAGMA table_info(event)")}
+    assert "device_id" in cols and cols["slot_id"][3] == 0  # slot_id is nullable now
+    assert "offline_notified" in {r[1] for r in db.all("PRAGMA table_info(device)")}
+    assert {"lead", "api_key", "webhook", "setting"} <= {r[0] for r in db.all("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    assert db.scalar("PRAGMA foreign_keys") == 1
+    db.close()
+    Database(p).close()  # opening again is a no-op

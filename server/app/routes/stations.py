@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from ..core import Ctx, client_ip, core_of, limit, require
 from ..plans import get_plan
 from ..schemas import DeviceIn, MeasurementBatchIn, MeasurementIn, SlotIn, SlotPatch, StationIn, StationPatch
+from ..qr import qr_data_uri
 from ..security import hash_token, new_id, new_token
 from ..service import Monitoring, UnknownSlotError, iso
 
@@ -172,6 +173,13 @@ def station_occupancy(station_id: str, request: Request, hours: int = Query(24, 
     return mon(request).occupancy_summary(_station(core, ctx, station_id), hours)
 
 
+@router.get("/api/v1/stations/{station_id}/occupancy/week")
+def station_occupancy_week(station_id: str, request: Request, days: int = Query(7, ge=1, le=28),
+                           ctx: Ctx = Depends(require("viewer"))):
+    core = core_of(request)
+    return mon(request).occupancy_week(_station(core, ctx, station_id), days)
+
+
 @router.get("/api/v1/events")
 def list_events(request: Request, station_id: str | None = Query(None, max_length=64), limit: int = Query(100, ge=1, le=500),
                 include_shadow: bool = False, open_only: bool = False, ctx: Ctx = Depends(require("viewer"))):
@@ -246,16 +254,30 @@ def rotate_display_link(station_id: str, request: Request, ctx: Ctx = Depends(re
 @router.get("/api/v1/public/display/status", dependencies=[read_limit])
 def public_status(request: Request):
     # Token in a header instead of the URL: never ends up in proxy/server logs.
-    token = request.headers.get("x-display-token", "")
-    core = core_of(request)
-    if not token or len(token) > 200:
-        raise HTTPException(404, "not_found")
-    st = core.db.one(
-        "SELECT st.* FROM station st JOIN tenant t ON t.id = st.tenant_id "
-        "WHERE st.display_token_hash = ? AND st.display_enabled = 1 AND t.status = 'active'", (hash_token(token),))
+    st = display_station(core_of(request), request.headers.get("x-display-token", ""))
     if st is None:
         raise HTTPException(404, "not_found")
     return mon(request).status(st, public=True)
+
+
+def display_station(core, token: str):
+    """Station of a public display token (enabled link, active tenant) or None."""
+    if not token or len(token) > 200:
+        return None
+    return core.db.one(
+        "SELECT st.* FROM station st JOIN tenant t ON t.id = st.tenant_id "
+        "WHERE st.display_token_hash = ? AND st.display_enabled = 1 AND t.status = 'active'", (hash_token(token),))
+
+
+@router.get("/api/v1/public/display/qr", dependencies=[read_limit])
+def public_display_qr(request: Request):
+    """QR code of the display link, so people at the station can open the same view on their phone."""
+    core = core_of(request)
+    token = request.headers.get("x-display-token", "")
+    if display_station(core, token) is None:
+        raise HTTPException(404, "not_found")
+    url = f"{core.s.base_url}/display#{token}"
+    return {"url": url, "qr": qr_data_uri(url, scale=5)}
 
 
 # ---------------------------------------------------------------------- telemetry (gateway)

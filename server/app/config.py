@@ -14,6 +14,7 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlparse
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 SERVER_DIR = Path(__file__).resolve().parent.parent
 log = logging.getLogger(__name__)
@@ -73,6 +74,12 @@ class Settings:
     ca_file: Path | None = None
     # webhooks may target private/loopback addresses (LAN self-hosting, e.g. Home Assistant)
     webhook_allow_private: bool = False
+    # landing page / legal
+    timezone: str = "Europe/Berlin"            # local time for weekly occupancy patterns
+    landing_demo_display_token: str = ""       # overrides the demo station set by "cli demo"
+    operator_name: str = ""
+    operator_address: str = ""
+    contact_email: str = ""
     # paths / secrets
     db_path: Path = SERVER_DIR / "bike_station.db"
     data_key: bytes = field(default=b"", repr=False)
@@ -165,6 +172,7 @@ def load_settings(config_path: str | os.PathLike | None = None) -> Settings:
     an = cfg.get("anomaly", {})
     ret = cfg.get("retention", {})
     sec = cfg.get("security", {})
+    legal = cfg.get("legal", {})
 
     environment = env("BIKE_ENV", app.get("environment", "development"))
     if environment not in ("development", "production"):
@@ -234,6 +242,11 @@ def load_settings(config_path: str | os.PathLike | None = None) -> Settings:
         trust_proxy=_flag(env("BIKE_TRUST_PROXY", sec.get("trust_proxy", False))),
         ca_file=Path(ca_file) if ca_file else None,
         webhook_allow_private=_flag(env("BIKE_WEBHOOK_ALLOW_PRIVATE", sec.get("webhook_allow_private", False))),
+        timezone=str(env("BIKE_TIMEZONE", app.get("timezone", "Europe/Berlin"))),
+        landing_demo_display_token=str(env("BIKE_LANDING_DEMO_TOKEN", app.get("landing_demo_display_token", ""))),
+        operator_name=str(env("BIKE_OPERATOR_NAME", legal.get("operator_name", ""))).strip(),
+        operator_address=str(env("BIKE_OPERATOR_ADDRESS", legal.get("address", ""))).strip(),
+        contact_email=str(env("BIKE_CONTACT_EMAIL", legal.get("contact_email", ""))).strip(),
         db_path=db_path,
         data_key=_data_key(environment, db_path),
     )
@@ -247,6 +260,10 @@ def validate(s: Settings) -> None:
     Allowed for self-hosting: an IP address as base URL, a self-signed CA and no e-mail at all.
     Still mandatory: HTTPS, a data key, an explicit host list and a strong password hash.
     """
+    try:
+        ZoneInfo(s.timezone)
+    except (ZoneInfoNotFoundError, ValueError) as exc:
+        raise ConfigError(f"unknown time zone: {s.timezone}") from exc
     if s.ca_file is not None and not s.ca_file.is_file():
         raise ConfigError(f"CA file not found: {s.ca_file}")
     if not s.production:

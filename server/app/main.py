@@ -12,15 +12,16 @@ from typing import Callable
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from .config import Settings, load_settings
 from .core import Core
+from .demo import DemoFeeder
 from .agent_bundle import AgentBundle, ca_fingerprint
-from .routes import agent, auth, org, platform, stations
+from .routes import agent, auth, org, platform, public, stations
 from .service import Monitoring
 
 log = logging.getLogger("bike_station")
@@ -82,11 +83,22 @@ def create_app(settings: Settings | None = None, clock: Callable[[], float] = ti
                 log.exception("Maintenance run failed")
             await asyncio.sleep(3600)
 
+    feeder = DemoFeeder(core, monitoring)
+
+    async def demo_loop():
+        while True:
+            try:
+                await asyncio.to_thread(feeder.step)
+            except Exception:
+                log.exception("Demo feeder failed")
+            await asyncio.sleep(feeder.interval_s)
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        task = asyncio.create_task(maintenance_loop())
+        tasks = [asyncio.create_task(maintenance_loop()), asyncio.create_task(demo_loop())]
         yield
-        task.cancel()
+        for task in tasks:
+            task.cancel()
         core.db.close()
 
     app = FastAPI(title=f"{settings.product_name} API", version="1.0.0", lifespan=lifespan,
@@ -153,7 +165,7 @@ def create_app(settings: Settings | None = None, clock: Callable[[], float] = ti
         return JSONResponse({"detail": "internal_error"}, 500)
 
     # ------------------------------------------------------------------ routers
-    for r in (auth.router, org.router, stations.router, agent.router, platform.router):
+    for r in (auth.router, org.router, stations.router, agent.router, platform.router, public.router):
         app.include_router(r)
 
     @app.get("/health", include_in_schema=False)
@@ -168,11 +180,22 @@ def create_app(settings: Settings | None = None, clock: Callable[[], float] = ti
         return {"product_name": settings.product_name, "signup": settings.signup,
                 "signup_enabled": settings.signup != "closed", "mail_enabled": settings.mail_enabled,
                 "setup_required": core.setup_needed(), "plans": [p.to_dict() for p in PLANS.values()],
-                "password_min_length": settings.password_min_length}
+                "password_min_length": settings.password_min_length, "demo": public.demo_info(core),
+                "contact_email": settings.contact_email or None}
 
     # ------------------------------------------------------------------ web pages
     if WEB_DIR.exists():
-        pages = {"/": "index.html", "/app": "app.html", "/display": "display.html"}
+        # Social previews need absolute URLs: fill them in from the base URL once.
+        landing = (WEB_DIR / "index.html").read_text(encoding="utf-8").replace(
+            'content="/static/img/og.png"', f'content="{settings.base_url}/static/img/og.png"').replace(
+            '<meta property="og:type" content="website">',
+            f'<meta property="og:type" content="website">\n  <meta property="og:url" content="{settings.base_url}/">')
+
+        @app.get("/", include_in_schema=False)
+        def landing_page():
+            return HTMLResponse(landing)
+
+        pages = {"/app": "app.html", "/display": "display.html"}
         for route, file in pages.items():
             def page(file=file):
                 return FileResponse(WEB_DIR / file)
@@ -180,7 +203,8 @@ def create_app(settings: Settings | None = None, clock: Callable[[], float] = ti
 
         @app.get("/robots.txt", include_in_schema=False)
         def robots():
-            return PlainTextResponse("User-agent: *\nAllow: /$\nDisallow: /app\nDisallow: /display\nDisallow: /api/\n")
+            return PlainTextResponse("User-agent: *\nAllow: /$\nAllow: /legal/\nDisallow: /app\nDisallow: /display\n"
+                                     "Disallow: /api/\nDisallow: /install/\n")
 
         @app.get("/.well-known/security.txt", include_in_schema=False)
         def security_txt():

@@ -1,7 +1,7 @@
 """Administration commands for the operator.
 
     python -m app.cli create-platform-admin --email ops@example.org --name "Operations"
-    python -m app.cli create-demo --email demo@example.org     # demo tenant with station + device token
+    python -m app.cli demo --reset                             # demo organisation, 2 stations, 7 days of history
     python -m app.cli enrollment-code --station st_...         # pairing code for scripts
     python -m app.cli purge                                    # apply retention periods
 
@@ -44,28 +44,24 @@ def create_platform_admin(core: Core, email: str, name: str) -> None:
     print(f"Platform admin {email} created. Two-factor sign-in must be set up at the first login.")
 
 
-def create_demo(core: Core, email: str, org: str, plan: str) -> None:
-    email = email.strip().lower()
-    if core.db.one("SELECT 1 FROM user WHERE email = ?", (email,)):
-        sys.exit("E-mail address already in use")
-    now = time.time()
-    tid, sid = new_id("org"), new_id("st")
-    token = new_token("bsd_")
-    display = new_token("bsp_")
-    with core.db.tx() as c:
-        c.execute("INSERT INTO tenant (id, name, plan, status, created_at) VALUES (?,?,?,?,?)", (tid, org, plan, "active", now))
-        c.execute(
-            "INSERT INTO user (id, tenant_id, email, name, role, password_hash, email_verified_at, created_at, password_changed_at) "
-            "VALUES (?,?,?,?,?,?,?,?,?)",
-            (new_id("usr"), tid, email, "Demo Owner", "owner", _password(core, email, "Demo Owner"), now, now, now))
-        c.execute("INSERT INTO station (id, tenant_id, name, location, display_token_hash, display_enabled, created_at) VALUES (?,?,?,?,?,1,?)",
-                  (sid, tid, "Schoolyard bike station", "Main entrance", hash_token(display), now))
-        for i, k in enumerate("ABC", start=1):
-            c.execute("INSERT INTO slot (id, station_id, key, label, position) VALUES (?,?,?,?,?)", (new_id("sl"), sid, k, f"Space {k}", i))
-        c.execute("INSERT INTO device (id, tenant_id, station_id, name, token_prefix, token_hash, created_at, created_by) VALUES (?,?,?,?,?,?,?,?)",
-                  (new_id("dev"), tid, sid, "Pi-Gateway", token[:10], hash_token(token), now, "cli"))
-    core.audit("demo_created", tenant_id=tid, actor="cli", target=email)
-    print(f"STATION_ID={sid}\nDEVICE_TOKEN={token}\nDISPLAY_URL={core.s.base_url}/display#{display}")
+def demo(core: Core, email: str, reset: bool, days: int, live: bool) -> None:
+    from .demo import create_demo
+
+    pw = os.environ.get("BIKE_CLI_PASSWORD") or None
+    if pw:
+        problems = password_problems(pw, core.s.password_min_length, email, "Demo Owner")
+        if problems:
+            sys.exit(f"Password rejected: {', '.join(problems)}")
+    try:
+        r = create_demo(core, email=email, password=pw, days=days, reset=reset, live=live)
+    except ValueError as exc:
+        sys.exit(str(exc))
+    # KEY=value lines so scripts can "source" the output; comments explain the rest.
+    print(f"# Demo organisation with 2 stations, {r.measurements} simulated measurements, {r.events} events")
+    print(f"TENANT_ID={r.tenant_id}\nSTATION_ID={r.station_id}\nSTATION2_ID={r.second_station_id}")
+    print(f"DEMO_EMAIL={r.email}\nDISPLAY_URL={r.display_url}")
+    if r.password:
+        print(f"DEMO_PASSWORD={r.password}")
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -74,10 +70,13 @@ def main(argv: list[str] | None = None) -> None:
     a = sub.add_parser("create-platform-admin")
     a.add_argument("--email", required=True)
     a.add_argument("--name", default="Platform admin")
-    d = sub.add_parser("create-demo")
-    d.add_argument("--email", required=True)
-    d.add_argument("--org", default="Demo School")
-    d.add_argument("--plan", default="school")
+    d = sub.add_parser("demo", help="demo organisation with 2 stations and 7 days of simulated history")
+    d.add_argument("--email", default="demo@example.org")
+    d.add_argument("--reset", action="store_true", help="delete an existing demo organisation first")
+    d.add_argument("--days", type=int, default=7, choices=range(1, 29), metavar="1..28")
+    d.add_argument("--no-live", action="store_true",
+                   help="do not let the platform simulate live readings (e.g. when a simulated agent is paired)")
+    sub.add_parser("demo-remove", help="delete the demo organisation")
     en = sub.add_parser("enrollment-code", help="create a pairing code for a station (e.g. for scripts)")
     en.add_argument("--station", required=True)
     sub.add_parser("purge")
@@ -86,8 +85,12 @@ def main(argv: list[str] | None = None) -> None:
     core = Core(load_settings())
     if args.cmd == "create-platform-admin":
         create_platform_admin(core, args.email, args.name)
-    elif args.cmd == "create-demo":
-        create_demo(core, args.email, args.org, args.plan)
+    elif args.cmd == "demo":
+        demo(core, args.email, args.reset, args.days, not args.no_live)
+    elif args.cmd == "demo-remove":
+        from .demo import remove_demo
+
+        print("Demo removed." if remove_demo(core) else "No demo organisation found.")
     elif args.cmd == "enrollment-code":
         from .routes.agent import CODE_LIFETIME_S, new_code
 

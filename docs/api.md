@@ -75,15 +75,26 @@ server `POST /auth/password/forgot` answers `{"status": "ask_admin"}`.
 | `GET/PATCH/DELETE /stations/{id}` | viewer · admin |
 | `POST /stations/{id}/slots` · `PATCH/DELETE /stations/{id}/slots/{slot}` | admin |
 | `GET /stations/{id}/status` · `GET /stations/{id}/occupancy?hours=24` | viewer |
+| `GET /stations/{id}/occupancy/week?days=7` → `{matrix[7][24], peak, average, timezone}` (weekday × local hour, share occupied) | viewer |
 | `GET/POST /stations/{id}/devices` · `DELETE /stations/{id}/devices/{dev}` | admin |
 | `POST /stations/{id}/display-link` | admin |
 | `GET /events?station_id&open_only&include_shadow` · `POST /events/{id}/ack` | viewer · operator |
-| `GET /public/display/status` (header `X-Display-Token`) | public, read only |
+| `GET /public/display/status` · `GET /public/display/qr` (header `X-Display-Token`) | public, read only |
 
 ## Platform operator (`/platform`, platform admin with 2FA)
 
 `GET /platform/tenants`, `PATCH /platform/tenants/{id}` `{status, plan}` (`status: active` also approves a
 pending organisation), `POST /platform/tenants/{id}/owner-reset-link`, `GET /platform/stats`, `GET /platform/audit`.
+
+## Landing page
+
+| Method/path | Purpose |
+|---|---|
+| `POST /leads` `{name, organisation, email, message, consent: true, website: ""}` | demo request; `website` is a honeypot (filled → silently dropped); 3 per hour and IP; always `202 {"status":"received"}` |
+| `GET /platform/leads` · `PATCH /platform/leads/{id}` `{handled}` · `DELETE /platform/leads/{id}` | platform admin; leads are deleted after 180 days |
+| `GET /legal/imprint` · `GET /legal/privacy` | templates filled from `[legal]` in `config.toml` / `BIKE_OPERATOR_*`; show a warning while fields are empty |
+
+`GET /meta` also returns `demo` (`display_url`, `qr`, `token` of the live demo station) when a demo exists.
 
 ## Other
 
@@ -102,8 +113,9 @@ pending organisation), `POST /platform/tenants/{id}/owner-reset-link`, `GET /pla
 
 `state`: `free` / `occupied` / `unknown` (`unknown_reason`: `no_data`, `stale`, `sensor_error`).
 
-## Data model (SQLite, schema version 3, migrated automatically from 2)
+## Data model (SQLite, schema version 4, migrated automatically from 2 and 3)
 
-`tenant` → `user`, `station` → `slot`, `device`, `measurement`, `event`; plus `session`, `auth_token`
-(one-time tokens), `recovery_code`, `enrollment` (pairing codes), `audit_log`. Deleting a tenant
-removes everything by cascade.
+`tenant` → `user`, `station` → `slot`, `device`, `measurement`, `event` (slot or gateway events), `api_key`,
+`webhook`; plus `session`, `auth_token` (one-time tokens), `recovery_code`, `enrollment` (pairing codes),
+`audit_log`, `lead` (demo requests), `setting` (runtime settings such as the landing demo station).
+Deleting a tenant removes everything by cascade.
