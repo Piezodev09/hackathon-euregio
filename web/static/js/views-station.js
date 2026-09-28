@@ -4,6 +4,7 @@ import { getLang, t } from "./i18n.js";
 import { el, clear, field, toast, confirmDialog, fmtDateTime, fmtTime, copyText, slotSymbol } from "./ui.js";
 import { state, can, every, go } from "./state.js";
 
+let devicesTimer = null;
 const errorCard = (e) => el("div", { class: "alert-box error", role: "alert" }, describeError(e));
 
 function kpi(value, label) {
@@ -265,39 +266,100 @@ export function viewStationSettings(id, setTitle) {
   }
 
   function devicesCard(st) {
-    const card = el("section", { class: "card" }, el("h2", {}, t("ss.devices")), el("p", { class: "muted" }, t("ss.devices_hint")));
+    const card = el("section", { class: "card" }, el("h2", {}, t("ag.title")), el("p", { class: "muted" }, t("ag.hint")));
     const list = el("div", {}, t("c.loading"));
+    const pending = el("div");
     const reveal = el("div");
+
+    const autoUpd = el("input", { type: "checkbox", checked: st.auto_update });
+    autoUpd.addEventListener("change", async () => {
+      try { await patch(`/api/v1/stations/${id}`, { auto_update: autoUpd.checked }); toast(t("c.saved")); }
+      catch (e) { autoUpd.checked = !autoUpd.checked; toast(describeError(e), "error"); }
+    });
+
+    const cmdRow = (label, text) => el("div", { class: "field" }, el("div", { class: "small muted" }, label),
+      el("div", { class: "btn-row" }, el("code", { class: "secret-box mono small cmd" }, text),
+        el("button", { class: "btn small", type: "button", onclick: () => copyText(text) }, t("c.copy"))));
+
+    const setup = el("button", { class: "btn primary", type: "button", onclick: async () => {
+      try {
+        const r = await post(`/api/v1/stations/${id}/enrollments`, { name: "Pi-Gateway" });
+        const c = r.install.commands;
+        clear(reveal, el("div", { class: "alert-box info" },
+          el("h3", {}, t("ag.setup_title")),
+          el("p", {}, t("ag.code_label")), el("p", { class: "enroll-code mono" }, r.code),
+          el("p", { class: "small muted" }, t("ag.code_expires", { t: fmtDateTime(r.expires_at) })),
+          el("ol", { class: "steps" },
+            el("li", {}, t("ag.step_os")),
+            el("li", {}, cmdRow(t("ag.step_download"), c.download)),
+            el("li", {}, cmdRow(t("ag.step_verify"), c.verify)),
+            el("li", {}, cmdRow(t("ag.step_install"), c.install)),
+            el("li", {}, t("ag.step_done"))),
+          el("details", {}, el("summary", {}, t("ag.oneliner")), el("p", { class: "small muted" }, t("ag.oneliner_hint")),
+            cmdRow("", c.oneliner)),
+          el("p", { class: "small muted" }, t("ag.simulator_hint"), " ", el("code", { class: "mono" }, "--source simulator"))));
+        loadAll();
+      } catch (e) { toast(describeError(e), "error"); }
+    } }, "+ " + t("ag.setup"));
+
+    const command = async (d, cmd, confirmText) => {
+      if (confirmText && !(await confirmDialog(confirmText))) return;
+      try { await post(`/api/v1/stations/${id}/devices/${d.id}/command`, { command: cmd }); toast(t("ag.queued")); loadAll(); }
+      catch (e) { toast(describeError(e), "error"); }
+    };
+
+    const loadAll = async () => {
+      try {
+        const [{ devices, latest_version }, { enrollments }] = await Promise.all([
+          get(`/api/v1/stations/${id}/devices`), get(`/api/v1/stations/${id}/enrollments`)]);
+        clear(list, devices.length ? el("div", { class: "table-wrap" }, el("table", {},
+          el("thead", {}, el("tr", {}, [t("ss.device_name"), t("c.status"), t("ag.version"), t("ag.health"), t("ag.last_contact"), t("c.actions")]
+            .map((h) => el("th", { scope: "col" }, h)))),
+          el("tbody", {}, devices.map((d) => el("tr", {},
+            el("td", {}, el("strong", {}, d.name), d.hostname ? el("div", { class: "small muted mono" }, d.hostname) : null,
+              el("div", { class: "small muted mono" }, d.token_prefix + "…")),
+            el("td", {}, deviceStatus(d)),
+            el("td", {}, d.agent_version || "–", d.update_available ? el("div", {}, el("span", { class: "badge warn" }, t("ag.update_avail", { v: latest_version }))) : null),
+            el("td", { class: "small" }, healthSummary(d)),
+            el("td", { class: "small" }, fmtDateTime(d.last_heartbeat_at || d.last_seen_at)),
+            el("td", {}, d.revoked_at ? "–" : el("div", { class: "btn-row" },
+              d.managed ? el("button", { class: "btn small", type: "button", onclick: () => command(d, "restart") }, t("ag.restart")) : null,
+              d.managed ? el("button", { class: "btn small", type: "button", onclick: () => command(d, "rotate_token", t("ag.rotate_confirm")) }, t("ag.rotate")) : null,
+              d.managed && d.update_available ? el("button", { class: "btn small", type: "button", onclick: () => command(d, "update") }, t("ag.update")) : null,
+              el("button", { class: "btn small danger", type: "button", onclick: async () => {
+                if (!(await confirmDialog(t("ag.revoke_confirm", { name: d.name }), { danger: true }))) return;
+                try { await del(`/api/v1/stations/${id}/devices/${d.id}`); loadAll(); } catch (e) { toast(describeError(e), "error"); }
+              } }, t("ss.revoke"))))))))) : el("p", { class: "muted" }, t("ag.none")));
+        clear(pending, enrollments.length ? el("div", {}, el("h3", {}, t("ag.pending")), el("ul", {}, enrollments.map((e) =>
+          el("li", {}, `${e.name} – ${t("ag.code_expires", { t: fmtDateTime(e.expires_at) })} `,
+            el("button", { class: "btn small", type: "button", onclick: async () => {
+              try { await del(`/api/v1/stations/${id}/enrollments/${e.id}`); loadAll(); } catch (err) { toast(describeError(err), "error"); }
+            } }, t("tm.withdraw")))))) : null);
+      } catch (e) { clear(list, errorCard(e)); }
+    };
+
+    // Manuelles Token (Fortgeschrittene / ohne Installationsskript)
     const name = el("input", { type: "text", required: true, maxlength: "100", value: "Pi-Gateway" });
-    const form = el("form", { class: "btn-row" }, field(t("ss.device_name"), name), el("button", { class: "btn primary", type: "submit" }, t("ss.add_device")));
-    form.addEventListener("submit", async (ev) => {
+    const manual = el("form", { class: "btn-row" }, field(t("ss.device_name"), name), el("button", { class: "btn", type: "submit" }, t("ss.add_device")));
+    const manualReveal = el("div");
+    manual.addEventListener("submit", async (ev) => {
       ev.preventDefault();
       try {
         const d = await post(`/api/v1/stations/${id}/devices`, { name: name.value });
         const cfg = `[api]\nurl = "${location.origin}"\n\n[station]\nid = "${d.station_id}"\n[station.slot_map]\n${st.slots.map((s) => `${s.key} = "${s.key}"`).join("\n")}\n\n# /etc/bike-gateway/gateway.env\n# BIKE_DEVICE_TOKEN=${d.token}`;
-        clear(reveal, el("div", { class: "alert-box warn" }, el("p", {}, t("ss.token_once")),
+        clear(manualReveal, el("div", { class: "alert-box warn" }, el("p", {}, t("ss.token_once")),
           el("p", { class: "secret-box mono" }, d.token), el("button", { class: "btn small", type: "button", onclick: () => copyText(d.token) }, t("c.copy"))),
-          el("h3", {}, t("ss.gateway")), el("p", { class: "small muted" }, t("ss.gateway_hint")),
-          el("pre", { class: "secret-box mono small" }, cfg), el("button", { class: "btn small", type: "button", onclick: () => copyText(cfg) }, t("c.copy")));
-        loadDevices();
+          el("p", { class: "small muted" }, t("ss.gateway_hint")), el("pre", { class: "secret-box mono small" }, cfg),
+          el("button", { class: "btn small", type: "button", onclick: () => copyText(cfg) }, t("c.copy")));
+        loadAll();
       } catch (e) { toast(describeError(e), "error"); }
     });
-    const loadDevices = async () => {
-      try {
-        const { devices } = await get(`/api/v1/stations/${id}/devices`);
-        clear(list, devices.length ? el("div", { class: "table-wrap" }, el("table", {},
-          el("thead", {}, el("tr", {}, [t("ss.device_name"), t("ss.prefix"), t("c.status"), t("ss.last_seen"), t("c.actions")].map((h) => el("th", { scope: "col" }, h)))),
-          el("tbody", {}, devices.map((d) => el("tr", {}, el("td", {}, d.name), el("td", { class: "mono" }, d.token_prefix + "…"),
-            el("td", {}, d.revoked_at ? el("span", { class: "badge err" }, t("ss.revoked")) : el("span", { class: "badge ok" }, t("ss.active"))),
-            el("td", {}, d.last_seen_at ? `${fmtDateTime(d.last_seen_at)} · ${d.last_ip || ""}` : t("c.never")),
-            el("td", {}, d.revoked_at ? "–" : el("button", { class: "btn small danger", type: "button", onclick: async () => {
-              if (!(await confirmDialog(`${d.name}: ${t("ss.revoke")}?`, { danger: true }))) return;
-              try { await del(`/api/v1/stations/${id}/devices/${d.id}`); loadDevices(); } catch (e) { toast(describeError(e), "error"); }
-            } }, t("ss.revoke")))))))) : el("p", { class: "muted" }, "–"));
-      } catch (e) { clear(list, errorCard(e)); }
-    };
-    loadDevices();
-    card.append(list, form, reveal);
+
+    if (devicesTimer) clearInterval(devicesTimer);
+    devicesTimer = every(15000, loadAll);
+    card.append(el("div", { class: "btn-row" }, setup, el("label", { class: "check" }, autoUpd, el("span", {}, t("ag.auto_update")))),
+      reveal, pending, list,
+      el("details", { class: "advanced" }, el("summary", {}, t("ag.manual")), el("p", { class: "small muted" }, t("ss.devices_hint")), manual, manualReveal));
     return card;
   }
 
@@ -333,6 +395,56 @@ export function viewStationSettings(id, setTitle) {
 
   load();
   return node;
+}
+
+// ---------------------------------------------------------------------- Gateways
+export function deviceStatus(d) {
+  if (d.revoked_at) return el("span", { class: "badge err" }, t("ss.revoked"));
+  if (!d.managed) return el("span", { class: "badge" }, t("ag.unmanaged"));
+  return d.online ? el("span", { class: "badge ok" }, "● " + t("ag.online")) : el("span", { class: "badge err" }, "○ " + t("ag.offline"));
+}
+
+export function healthSummary(d) {
+  const h = d.health || {};
+  if (!d.managed || !d.last_heartbeat_at) return "–";
+  const parts = [];
+  if (h.serial_connected !== undefined && h.serial_connected !== null) {
+    parts.push(el("span", { class: h.serial_connected ? "badge ok" : "badge err" }, (h.serial_connected ? "✓ " : "✗ ") + t("ag.arduino")));
+  }
+  if (d.source === "simulator") parts.push(el("span", { class: "badge sim" }, t("c.simulated")));
+  const facts = [];
+  if (h.cpu_temp_c !== undefined && h.cpu_temp_c !== null) facts.push(`${h.cpu_temp_c} °C`);
+  if (h.buffer_len) facts.push(t("ag.buffer", { n: h.buffer_len }));
+  if (h.disk_free_mb !== undefined && h.disk_free_mb !== null) facts.push(`${Math.round(h.disk_free_mb / 1024 * 10) / 10} GB ${t("ag.free")}`);
+  if (h.uptime_s) facts.push(h.uptime_s < 3600 ? t("ag.uptime_m", { m: Math.max(1, Math.round(h.uptime_s / 60)) })
+    : t("ag.uptime", { h: Math.round(h.uptime_s / 360) / 10 }));
+  return el("div", {}, el("div", { class: "btn-row" }, parts), facts.length ? el("div", { class: "muted" }, facts.join(" · ")) : null,
+    h.last_error ? el("div", { class: "small", title: h.last_error }, "⚠ " + h.last_error.slice(0, 80)) : null);
+}
+
+export function viewDevices() {
+  const box = el("div", { class: "card" }, t("c.loading"));
+  const load = async () => {
+    try {
+      const { devices, latest_version } = await get("/api/v1/devices");
+      const active = devices.filter((d) => !d.revoked_at);
+      const online = active.filter((d) => d.online).length;
+      clear(box, el("p", {}, t("ag.fleet_summary", { online, total: active.length, v: latest_version })),
+        active.length ? el("div", { class: "table-wrap" }, el("table", {},
+          el("thead", {}, el("tr", {}, [t("ev.station"), t("ss.device_name"), t("c.status"), t("ag.version"), t("ag.health"), t("ag.last_contact")]
+            .map((h) => el("th", { scope: "col" }, h)))),
+          el("tbody", {}, active.map((d) => el("tr", {},
+            el("td", {}, can("admin") ? el("a", { href: `#/stations/${d.station_id}/settings` }, d.station_name) : d.station_name),
+            el("td", {}, d.name, d.hostname ? el("div", { class: "small muted mono" }, d.hostname) : null),
+            el("td", {}, deviceStatus(d)),
+            el("td", {}, d.agent_version || "–", d.update_available ? el("div", {}, el("span", { class: "badge warn" }, t("ag.update_avail", { v: latest_version }))) : null),
+            el("td", { class: "small" }, healthSummary(d)),
+            el("td", { class: "small" }, fmtDateTime(d.last_heartbeat_at || d.last_seen_at)))))))
+          : el("p", { class: "muted" }, t("ag.none")));
+    } catch (e) { clear(box, errorCard(e)); }
+  };
+  every(15000, load);
+  return el("div", {}, el("p", { class: "muted" }, t("ag.fleet_hint")), box);
 }
 
 // ---------------------------------------------------------------------- Meldungen

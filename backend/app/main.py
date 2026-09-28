@@ -19,13 +19,14 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from .config import Settings, load_settings
 from .core import Core
-from .routes import auth, org, platform, stations
+from .agent_bundle import AgentBundle
+from .routes import agent, auth, org, platform, stations
 from .service import Monitoring
 
 log = logging.getLogger("bike_station")
 WEB_DIR = Path(__file__).resolve().parents[2] / "web"
 MAX_BODY_BYTES = 64 * 1024
-DEVICE_PATHS = ("/api/v1/measurements",)
+DEVICE_PATHS = ("/api/v1/measurements", "/api/v1/agent/enroll", "/api/v1/agent/heartbeat", "/api/v1/agent/rotate-token")
 UNSAFE = {"POST", "PUT", "PATCH", "DELETE"}
 
 CSP = (
@@ -92,6 +93,8 @@ def create_app(settings: Settings | None = None, clock: Callable[[], float] = ti
                   docs_url=None, redoc_url=None, openapi_url=None)  # keine öffentliche API-Doku/Debug-Ausgabe
     app.state.core = core
     app.state.monitoring = monitoring
+    app.state.agent_bundle = AgentBundle.build(settings.base_url)
+    log.info("Agent-Paket %s bereit (sha256 %s)", app.state.agent_bundle.version, app.state.agent_bundle.sha256[:12])
 
     # ------------------------------------------------------------------ Middlewares
     @app.middleware("http")
@@ -141,7 +144,7 @@ def create_app(settings: Settings | None = None, clock: Callable[[], float] = ti
         return JSONResponse({"detail": "internal_error"}, 500)
 
     # ------------------------------------------------------------------ Router
-    for r in (auth.router, org.router, stations.router, platform.router):
+    for r in (auth.router, org.router, stations.router, agent.router, platform.router):
         app.include_router(r)
 
     @app.get("/health", include_in_schema=False)

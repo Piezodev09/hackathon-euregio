@@ -19,6 +19,18 @@ Fehler: `{"detail": "<code>"}` oder `{"detail": {"code": …}}`; Codes siehe `we
 
 Arduino → Pi (JSON-Zeilen): `{"slot_id":"A","presence":1,"vibration":12,"seq":1042,"state":"ok"}`.
 
+## Agent (Raspberry Pi) – siehe auch [agent.md](agent.md)
+
+| Methode/Pfad | Zweck | Auth |
+|---|---|---|
+| `GET /install/agent.sh` · `/install/agent.tar.gz` · `/install/agent.sha256` | Installationsskript, Paket, Prüfsummen | öffentlich |
+| `POST /agent/enroll` `{code, hostname, agent_version, os_info, source}` | Kopplung → `{device_id, token, station_id, slot_map, config_version}` | Einmal-Code |
+| `POST /agent/heartbeat` `{agent_version, serial_connected, buffer_len, cpu_temp_c, …}` | Zustand melden → `{slot_map, config_version, commands, update}` | Geräte-Token |
+| `POST /agent/rotate-token` | neues Token (altes 15 min gültig) | Geräte-Token |
+| `POST /stations/{id}/enrollments` · `GET` · `DELETE …/{eid}` | Kopplungscodes (Portal) | Admin |
+| `POST /stations/{id}/devices/{dev}/command` `{command: restart\|rotate_token\|update}` | Fernbefehl | Admin |
+| `GET /devices` | Flottenübersicht | Lesend |
+
 ## Authentifizierung (`/auth`)
 
 | Methode/Pfad | Zweck |
@@ -81,7 +93,7 @@ Arduino → Pi (JSON-Zeilen): `{"slot_id":"A","presence":1,"vibration":12,"seq":
 
 `state`: `free` / `occupied` / `unknown` (`unknown_reason`: `no_data`, `stale`, `sensor_error`).
 
-## Datenmodell (SQLite, Schema-Version 2)
+## Datenmodell (SQLite, Schema-Version 3, Migration von 2 automatisch)
 
 `tenant` → `user`, `station` → `slot`, `device`, `measurement`, `event`; dazu `session`, `auth_token`
-(Einmal-Tokens), `recovery_code`, `audit_log`. Löschen eines Mandanten entfernt alles per Kaskade.
+(Einmal-Tokens), `recovery_code`, `enrollment` (Kopplungscodes), `audit_log`. Löschen eines Mandanten entfernt alles per Kaskade.

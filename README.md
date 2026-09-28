@@ -26,6 +26,7 @@ in der Plattform-Ansicht.
 | **Kundenportal** `/app` | Übersicht mit Kennzahlen, Live-Ansicht je Station (Belegung, Empfehlung, Warnungen, Heatmap, KI-Status), Stationsverwaltung (Plätze, Geräte-Tokens, Anzeige-Link, Gateway-Konfiguration), Meldungen mit Quittieren, Team mit Rollen und Einladungen, Konto & Sicherheit (2FA, Sitzungen, Passwort), Organisation (2FA-Pflicht, Export, Löschung), Tarif & Nutzung, Audit-Log |
 | **Kiosk-Anzeige** `/display#<token>` | öffentliche Nur-Lese-Anzeige für Bildschirme an der Station (DE/NL/EN) |
 | **Plattform** `/app#/platform` | Betreiber: Kunden, Tarife, Sperren, MRR, Kennzahlen |
+| **Agent für Raspberry Pi** `/install/agent.sh` | Installation per Kopplungscode aus dem Portal, Heartbeat mit Zustand, Konfiguration aus der Cloud, Fernbefehle, Token-Rotation, Selbst-Update mit Prüfsumme und Rollback – siehe [docs/agent.md](docs/agent.md) |
 
 Rollen: **Inhaber** (alles inkl. Tarif/Export/Löschung) · **Administrator** (Stationen, Geräte, Team) ·
 **Betreuer** (Live-Daten, Meldungen quittieren) · **Lesend**.
@@ -50,13 +51,17 @@ pip install -r backend/requirements-dev.txt pyserial
 scripts/dev.sh
 ```
 
-Das Skript legt beim ersten Start einen Demo-Kunden mit Station und Geräte-Token an, startet die
-Plattform und verbindet Simulator → Gateway. Dann:
+Das Skript legt beim ersten Start einen Demo-Kunden mit Station an, startet die Plattform und
+koppelt einen lokalen Agenten (wie auf dem Pi) mit eingebautem Simulator. Dann:
 
 - Portal: <http://127.0.0.1:8000/app> – Login `demo@example.org` / `Fahrradplatz-Euregio-2026!`
 - Kiosk-Link: steht in der Konsole (`Kiosk-Anzeige: …`)
 - Eigene Registrierung: <http://127.0.0.1:8000/app#/register> – der Bestätigungslink erscheint im Log
-- Simulator-Befehle im Terminal: `p A` (belegen/freigeben), `b A` (anstoßen), `s A` (rütteln), `e A` (Sensorfehler), `q`
+- Gateway im Portal unter **Gateways**: Status, Neustart, Token erneuern, Updates
+- Tastaturgesteuerter Simulator: `scripts/dev.sh --interactive`, dann `p A` (belegen/freigeben), `b A` (anstoßen), `s A` (rütteln), `e A` (Sensorfehler), `q`
+
+Echten Raspberry Pi einbinden: Portal → Station → Einstellungen → **Gateway einrichten** und die
+angezeigten drei Befehle auf dem Pi ausführen ([docs/agent.md](docs/agent.md)).
 
 Plattform-Admin anlegen: `cd backend && python3 -m app.cli create-platform-admin --email ops@example.org`
 
@@ -65,8 +70,8 @@ KI-Modell für die Pipeline-Probe (simulierte Daten): `python3 ml/generate_synth
 ## Tests
 
 ```bash
-cd backend && python3 -m pytest -q          # 43 Tests: Abnahmetests, Auth, 2FA, CSRF, Mandantentrennung, Rollen, Tarife, Header
-cd pi-gateway && python3 -m pytest -q tests # 20 Tests: Parser, Puffer, Watchdog, Sequenzen
+cd backend && python3 -m pytest -q          # 54 Tests: Abnahmetests, Auth, 2FA, CSRF, Mandantentrennung, Rollen, Tarife, Header, Agent-Verwaltung
+cd pi-gateway && python3 -m pytest -q tests # 33 Tests: Parser, Puffer, Watchdog, Sequenzen, Agent (Zustand, Updates, Rollback, Befehle)
 ```
 
 ## Verzeichnisse
@@ -74,7 +79,7 @@ cd pi-gateway && python3 -m pytest -q tests # 20 Tests: Parser, Puffer, Watchdog
 | Pfad | Inhalt |
 |---|---|
 | `arduino/` | Arduino-Sketch |
-| `pi-gateway/` | Gateway, Simulator, Beispielkonfiguration |
+| `pi-gateway/` | Agent (`agent.py`), Gateway, Simulator, `VERSION` des Agent-Pakets |
 | `backend/` | FastAPI-Plattform (Auth, Mandanten, Stationen, Telemetrie, Plattform-Admin), CLI, Tests |
 | `web/` | Landingpage, Kundenportal, Kiosk-Anzeige (HTML/CSS/JS-Module ohne Framework) |
 | `ml/` | Datenexport, Training, Vergleich Regel vs. KI |
@@ -84,6 +89,7 @@ cd pi-gateway && python3 -m pytest -q tests # 20 Tests: Parser, Puffer, Watchdog
 ## Dokumentation
 
 - [Architektur und Datenfluss](docs/architecture.md)
+- [Agent für Raspberry Pi: Installation, Kopplung, Updates](docs/agent.md)
 - [API und Datenformat](docs/api.md)
 - [Hardware und Aufbau](docs/hardware.md) – Inventur vor der Verdrahtung ausfüllen!
 - [Sicherheit und Datenschutz](docs/security-privacy.md)

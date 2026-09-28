@@ -25,9 +25,15 @@ def _station(core, ctx: Ctx, station_id: str):
     return st
 
 
+def _bump_config(core, station_id: str) -> None:
+    """Gateways holen sich die neue Platzliste beim nächsten Heartbeat."""
+    core.db.execute("UPDATE station SET config_version = config_version + 1 WHERE id = ?", (station_id,))
+
+
 def _station_out(core, st, m: Monitoring | None = None) -> dict:
     out = {"id": st["id"], "name": st["name"], "location": st["location"], "alert_source": st["alert_source"],
            "display_enabled": bool(st["display_enabled"]), "display_configured": st["display_token_hash"] is not None,
+           "auto_update": bool(st["auto_update"]), "config_version": st["config_version"],
            "created_at": iso(st["created_at"])}
     if m is not None:
         s = m.status(st)
@@ -118,6 +124,7 @@ def add_slot(station_id: str, body: SlotIn, request: Request, ctx: Ctx = Depends
     slot_id = new_id("sl")
     core.db.execute("INSERT INTO slot (id, station_id, key, label, position) VALUES (?,?,?,?,?)",
                     (slot_id, st["id"], body.key, body.label, pos))
+    _bump_config(core, st["id"])
     core.audit("slot_created", tenant_id=ctx.tenant_id, user_id=ctx.user["id"], actor=ctx.actor, ip=ctx.ip, target=slot_id)
     return {"id": slot_id, "key": body.key, "label": body.label, "position": pos}
 
@@ -137,6 +144,7 @@ def patch_slot(station_id: str, slot_id: str, body: SlotPatch, request: Request,
         core.db.execute("UPDATE slot SET label = ? WHERE id = ?", (body.label, sl["id"]))
     if body.position is not None:
         core.db.execute("UPDATE slot SET position = ? WHERE id = ?", (body.position, sl["id"]))
+    _bump_config(core, sl["station_id"])
     return {"status": "ok"}
 
 
@@ -145,6 +153,7 @@ def delete_slot(station_id: str, slot_id: str, request: Request, ctx: Ctx = Depe
     core = core_of(request)
     sl = _slot(core, _station(core, ctx, station_id), slot_id)
     core.db.execute("DELETE FROM slot WHERE id = ?", (sl["id"],))
+    _bump_config(core, sl["station_id"])
     core.audit("slot_deleted", tenant_id=ctx.tenant_id, user_id=ctx.user["id"], actor=ctx.actor, ip=ctx.ip, target=sl["id"])
     return {"status": "deleted"}
 
@@ -184,10 +193,11 @@ def ack_event(event_id: str, request: Request, ctx: Ctx = Depends(require("opera
 def list_devices(station_id: str, request: Request, ctx: Ctx = Depends(require("admin"))):
     core = core_of(request)
     st = _station(core, ctx, station_id)
-    rows = core.db.all("SELECT * FROM device WHERE station_id = ? ORDER BY created_at DESC", (st["id"],))
-    return {"devices": [{"id": r["id"], "name": r["name"], "token_prefix": r["token_prefix"], "created_at": iso(r["created_at"]),
-                         "created_by": r["created_by"], "last_seen_at": iso(r["last_seen_at"]), "last_ip": r["last_ip"],
-                         "revoked_at": iso(r["revoked_at"])} for r in rows]}
+    rows = core.db.all("SELECT * FROM device WHERE station_id = ? ORDER BY revoked_at IS NOT NULL, created_at DESC", (st["id"],))
+    from .agent import device_out
+
+    latest = request.app.state.agent_bundle.version
+    return {"devices": [device_out(core, r, latest) for r in rows], "latest_version": latest}
 
 
 @router.post("/api/v1/stations/{station_id}/devices", status_code=201)
@@ -258,9 +268,18 @@ def require_device(request: Request):
         raise HTTPException(429, "rate_limited")
     dev = None
     if token and len(token) <= 200:
+        h = hash_token(token)
         dev = core.db.one(
             "SELECT d.*, t.status AS tenant_status FROM device d JOIN tenant t ON t.id = d.tenant_id "
-            "WHERE d.token_hash = ? AND d.revoked_at IS NULL", (hash_token(token),))
+            "WHERE d.token_hash = ? AND d.revoked_at IS NULL", (h,))
+        if dev is not None and dev["prev_token_hash"]:
+            # Neues Token wurde benutzt -> altes sofort ungültig machen.
+            core.db.execute("UPDATE device SET prev_token_hash = NULL, prev_token_valid_until = NULL WHERE id = ?", (dev["id"],))
+        if dev is None:
+            # Übergangsfrist nach Rotation: altes Token noch kurz gültig
+            dev = core.db.one(
+                "SELECT d.*, t.status AS tenant_status FROM device d JOIN tenant t ON t.id = d.tenant_id "
+                "WHERE d.prev_token_hash = ? AND d.prev_token_valid_until > ? AND d.revoked_at IS NULL", (h, core.clock()))
     if dev is None:
         core.audit("rejected_device_write", ip=ip, detail={"path": request.url.path})
         raise HTTPException(401, "invalid_device_token", headers={"WWW-Authenticate": "Bearer"})

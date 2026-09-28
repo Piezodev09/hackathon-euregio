@@ -36,6 +36,9 @@ als Ziel), OWASP Top 10 und NIST SP 800-63B für Passwörter.
   der letzte Inhaber kann weder entfernt noch herabgestuft werden.
 - Geräte-Tokens gelten nur für **eine** Station (`station_mismatch` bei Abweichung), sind widerrufbar,
   nur gehasht gespeichert und werden genau einmal angezeigt.
+- Agent-Kopplung per Einmal-Code (~50 Bit, 30 min, nur gehasht, rate-limitiert); Geräte-Tokens rotieren
+  automatisch alle 30 Tage mit kurzer Übergangsfrist; Fernbefehle nur aus fester Liste; Updates nur mit
+  passender SHA-256, sicherem Entpacken und automatischem Rollback (Details: [agent.md](agent.md)).
 - Öffentliche Anzeige-Links: nur lesend, eingeschränkte Daten (keine KI-/Ereignisdetails), rotierbar,
   deaktivierbar; Token im URL-Fragment und im Header – nie in Server-Logs.
 - Tarif-Limits (Stationen, Plätze, Nutzer, Funktionen) werden serverseitig erzwungen.
@@ -70,7 +73,9 @@ als Ziel), OWASP Top 10 und NIST SP 800-63B für Passwörter.
 | CSRF | Token + Origin + SameSite=Strict |
 | Mandant A liest Daten von B (IDOR) | Tenant-Filter in jeder Abfrage, 404, nicht erratbare IDs, Tests `test_tenancy.py` |
 | Gefälschte Sensordaten | Geräte-Token je Station, Validierung, Audit |
-| Gestohlenes Geräte-Token | nur eine Station betroffen, widerrufbar, „zuletzt gesehen“ + IP sichtbar |
+| Gestohlenes Geräte-Token | nur eine Station betroffen, widerrufbar, automatische Rotation, „zuletzt gesehen“ + IP sichtbar |
+| Manipuliertes Agent-Update | SHA-256 über authentifizierten Kanal, sicheres Entpacken, Versionsprüfung, Rollback (offen: Release-Signatur) |
+| Erratener Kopplungscode | 50 Bit, 30 min, einmalig, Rate-Limit je IP |
 | DB-Leak | Passwörter scrypt, Tokens gehasht, 2FA-Geheimnisse AES-GCM |
 | Missbrauch von Anzeige-Links | nur Lesen, begrenzte Daten, rotierbar, Rate-Limit |
 | Fehlinterpretation eines Alarms | sachlicher Text, kein Personenbezug |
@@ -91,4 +96,5 @@ als Ziel), OWASP Top 10 und NIST SP 800-63B für Passwörter.
 - Ratenbegrenzung im Speicher je Prozess (bei mehreren Instanzen: Redis o. ä. nötig).
 - SQLite für kleinen Betrieb; für viele Kunden auf PostgreSQL mit Row-Level-Security umstellen.
 - Kein QR-Code für die 2FA-Einrichtung (Schlüssel + `otpauth://`-Link); WebAuthn/Passkeys als Erweiterung.
+- Agent-Releases sind per Prüfsumme, aber noch nicht kryptografisch signiert.
 - Kein externer Penetrationstest durchgeführt.

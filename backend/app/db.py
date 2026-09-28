@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS tenant (
@@ -85,6 +85,8 @@ CREATE TABLE IF NOT EXISTS station (
     alert_source        TEXT NOT NULL DEFAULT 'rule',   -- rule | ml
     display_token_hash  TEXT UNIQUE,
     display_enabled     INTEGER NOT NULL DEFAULT 0,
+    config_version      INTEGER NOT NULL DEFAULT 1,     -- steigt bei Änderungen, die Gateways betreffen
+    auto_update         INTEGER NOT NULL DEFAULT 1,     -- Agent-Updates automatisch einspielen
     created_at          REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_station_tenant ON station (tenant_id);
@@ -109,7 +111,35 @@ CREATE TABLE IF NOT EXISTS device (
     created_by    TEXT,
     last_seen_at  REAL,
     last_ip       TEXT,
-    revoked_at    REAL
+    revoked_at    REAL,
+    -- Agent (Raspberry Pi)
+    enrolled_at             REAL,
+    hostname                TEXT,
+    agent_version           TEXT,
+    os_info                 TEXT,
+    source                  TEXT,
+    last_heartbeat_at       REAL,
+    health                  TEXT,
+    pending_command         TEXT,       -- restart | rotate_token (nur feste Befehle, kein Code)
+    update_requested        INTEGER NOT NULL DEFAULT 0,
+    prev_token_hash         TEXT,       -- altes Token bleibt kurz gültig (Rotation ohne Aussperren)
+    prev_token_valid_until  REAL,
+    token_rotated_at        REAL
+);
+CREATE INDEX IF NOT EXISTS idx_device_prev_token ON device (prev_token_hash);
+
+-- Kopplungscodes für die Agent-Installation (Einmal-Code, kurz gültig, nur gehasht gespeichert).
+CREATE TABLE IF NOT EXISTS enrollment (
+    id          TEXT PRIMARY KEY,
+    tenant_id   TEXT NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+    station_id  TEXT NOT NULL REFERENCES station(id) ON DELETE CASCADE,
+    code_hash   TEXT NOT NULL UNIQUE,
+    name        TEXT NOT NULL,
+    created_by  TEXT,
+    created_at  REAL NOT NULL,
+    expires_at  REAL NOT NULL,
+    used_at     REAL,
+    device_id   TEXT
 );
 
 CREATE TABLE IF NOT EXISTS measurement (
@@ -173,6 +203,9 @@ class Database:
             self._conn.execute("PRAGMA foreign_keys=ON")
             self._conn.execute("PRAGMA secure_delete=ON")  # gelöschte Daten überschreiben
             version = self._conn.execute("PRAGMA user_version").fetchone()[0]
+            if version == 2:
+                self._migrate_2_to_3()
+                version = 3
             if version not in (0, SCHEMA_VERSION):
                 raise RuntimeError(
                     f"Datenbank hat Schema-Version {version}, erwartet {SCHEMA_VERSION}. "
@@ -185,6 +218,21 @@ class Database:
                 Path(self.path).chmod(0o600)
             except OSError:
                 pass
+
+    def _migrate_2_to_3(self) -> None:
+        """Agent-Verwaltung: neue Spalten für Station und Gerät."""
+        cols = {
+            "station": ["config_version INTEGER NOT NULL DEFAULT 1", "auto_update INTEGER NOT NULL DEFAULT 1"],
+            "device": ["enrolled_at REAL", "hostname TEXT", "agent_version TEXT", "os_info TEXT", "source TEXT",
+                       "last_heartbeat_at REAL", "health TEXT", "pending_command TEXT",
+                       "update_requested INTEGER NOT NULL DEFAULT 0", "prev_token_hash TEXT",
+                       "prev_token_valid_until REAL", "token_rotated_at REAL"],
+        }
+        for table, defs in cols.items():
+            existing = {r[1] for r in self._conn.execute(f"PRAGMA table_info({table})")}
+            for d in defs:
+                if d.split()[0] not in existing:
+                    self._conn.execute(f"ALTER TABLE {table} ADD COLUMN {d}")
 
     @contextmanager
     def tx(self) -> Iterator[sqlite3.Connection]:

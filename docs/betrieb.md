@@ -17,20 +17,20 @@ Kunden registrieren sich danach selbst unter `https://<host>/app#/register`.
 
 ## Raspberry Pi (je Station, beim Kunden)
 
-1. Im Portal: Station → Einstellungen → **Token erzeugen**. Token und Konfigurationsauszug werden einmal angezeigt.
-2. Repo nach `/opt/smart-bike-station`, `sudo deploy/install-pi.sh`.
-3. Auszug in `/etc/bike-gateway/config.toml` übernehmen (API-URL, Station-ID, `slot_map`, ggf. `ca_file`),
-   Token in `/etc/bike-gateway/gateway.env` (`BIKE_DEVICE_TOKEN=…`, Rechte 600).
-4. `sudo systemctl enable --now bike-gateway`. Im Portal erscheint „Zuletzt gesehen“.
-5. Bei Verlust oder Tausch des Pi: Token im Portal sperren und neues erzeugen.
+Empfohlen: **Agent-Installation per Kopplungscode** – Portal → Station → Einstellungen → *Gateway
+einrichten*, die drei angezeigten Befehle auf dem Pi ausführen. Details, Optionen und Fehlersuche:
+[agent.md](agent.md).
+
+Alternative ohne Portal-Kopplung (manuell): Token unter *Erweitert: Token manuell erzeugen*,
+dann `deploy/install-pi.sh` und `/etc/bike-gateway/config.toml` wie früher (keine Fernverwaltung).
 
 ## Start / Stopp / Neustart
 
 | Aktion | VM | Pi |
 |---|---|---|
-| Status | `systemctl status bike-api` | `systemctl status bike-gateway` |
-| Logs | `journalctl -u bike-api -f` | `journalctl -u bike-gateway -f` |
-| Neustart | `systemctl restart bike-api` | `systemctl restart bike-gateway` |
+| Status | `systemctl status bike-api` | `systemctl status bike-agent` · `bike-agent status` |
+| Logs | `journalctl -u bike-api -f` | `journalctl -u bike-agent -f` |
+| Neustart | `systemctl restart bike-api` | Portal → Gateways → *Neu starten* oder `systemctl restart bike-agent` |
 
 Nach einem Neustart gelten alte Zustände nicht automatisch: Der Arduino meldet zunächst
 „unbekannt“, bis 2 s stabile Messungen vorliegen; das Dashboard zeigt veraltete Daten als unbekannt.

@@ -175,6 +175,7 @@ class StationPatch(Strict):
     location: ShortText | None = None
     alert_source: Literal["rule", "ml"] | None = None
     display_enabled: bool | None = None
+    auto_update: bool | None = None
 
 
 class DeviceIn(Strict):

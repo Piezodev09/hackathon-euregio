@@ -76,6 +76,8 @@ def main(argv: list[str] | None = None) -> None:
     d.add_argument("--email", required=True)
     d.add_argument("--org", default="Demo-Schule")
     d.add_argument("--plan", default="school")
+    en = sub.add_parser("enrollment-code", help="Kopplungscode für eine Station erzeugen (z. B. für Skripte)")
+    en.add_argument("--station", required=True)
     sub.add_parser("purge")
     args = ap.parse_args(argv)
 
@@ -84,6 +86,18 @@ def main(argv: list[str] | None = None) -> None:
         create_platform_admin(core, args.email, args.name)
     elif args.cmd == "create-demo":
         create_demo(core, args.email, args.org, args.plan)
+    elif args.cmd == "enrollment-code":
+        from .routes.agent import CODE_LIFETIME_S, new_code
+
+        st = core.db.one("SELECT * FROM station WHERE id = ?", (args.station,))
+        if st is None:
+            sys.exit("Station nicht gefunden")
+        code = new_code()
+        now = time.time()
+        core.db.execute("INSERT INTO enrollment (id, tenant_id, station_id, code_hash, name, created_by, created_at, expires_at) "
+                        "VALUES (?,?,?,?,?,?,?,?)", (new_id("enr"), st["tenant_id"], st["id"], hash_token(code), "Pi-Gateway", "cli",
+                                                    now, now + CODE_LIFETIME_S))
+        print(code)
     elif args.cmd == "purge":
         print(Monitoring(core).purge())
 

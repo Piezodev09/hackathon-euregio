@@ -23,6 +23,16 @@ Belegung, Empfehlung, Warnung beim Rütteln (Regel + KI-Schatten), Sensorfehler 
 Simulator gestoppt → nach 30 s alle Plätze „unbekannt – Daten veraltet“, Quittieren im Browser,
 Sprachen DE/NL/EN, schmale Ansicht (390 px). Alles mit **simulierten** Daten.
 
+### Agent-Installation (Ende-zu-Ende, 28.09., ohne echten Pi)
+
+Kopplungscode im Portal erzeugt → exakt die angezeigten Befehle ausgeführt (Download, `sha256sum -c`
+→ OK, `agent.sh --code … --no-systemd --source simulator`) → Gerät gekoppelt, Zustandsdatei `0600`,
+gleicher Code zweites Mal abgelehnt → Agent gestartet, im Portal *online* mit Zustandsdaten →
+Platz D im Portal ergänzt → Agent übernimmt Konfiguration 2 ohne Neustart → *Token erneuern* →
+Rotation ohne Unterbrechung → *Neu starten* → Agent beendet sich mit Code 3 (systemd startet neu) →
+Plattform mit Agent-Version 1.0.1 → Agent lädt Update, prüft SHA-256, schaltet um, startet neu,
+meldet 1.0.1 und bestätigt das Update. **Offen:** Test auf echtem Raspberry Pi mit systemd und Arduino.
+
 ## Abnahmetests mit Hardware (Plan Kapitel 14)
 
 | ID | Durchführung | Bestanden, wenn … | Datum | Version | Wdh. | Beobachtung | Ergebnis | Bearbeiter |
