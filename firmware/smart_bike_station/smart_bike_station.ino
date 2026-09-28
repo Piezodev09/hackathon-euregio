@@ -22,8 +22,12 @@
 #define NUM_SLOTS 3
 
 // Presence sensor type per station (same for all spaces):
-//   PRESENCE_ULTRASONIC: HC-SR04 or similar (trigger + echo), occupied if distance < threshold
-//   PRESENCE_DIGITAL:    IR obstacle sensor / contact, digital level
+//   PRESENCE_ULTRASONIC: HC-SR04 or similar (trigger + echo), occupied if distance < threshold.
+//                        Recommended: a missing echo (broken wire, dead sensor) is detected -> "unknown".
+//   PRESENCE_DIGITAL:    IR obstacle sensor / contact, digital level. A digital line CANNOT reveal a
+//                        broken wire: the input pull-up then reads "no obstacle". With an active-low
+//                        sensor that means "free" - prefer a sensor/wiring where a broken wire reads
+//                        "occupied" (DIGITAL_ACTIVE_LOW = false), see firmware/README.md.
 #define PRESENCE_ULTRASONIC 1
 #define PRESENCE_DIGITAL    2
 #define PRESENCE_TYPE PRESENCE_ULTRASONIC
@@ -152,6 +156,12 @@ void sendSlot(uint8_t i, uint16_t vib) {
   state[i].lastSent = millis();
 }
 
+// Defined before use so the sketch also builds outside the Arduino IDE (PlatformIO, plain avr-g++).
+void analogOrDigital(uint8_t pin, bool on) {
+  if (LED_BRIGHTNESS < 255 && digitalPinHasPWM(pin)) analogWrite(pin, on ? LED_BRIGHTNESS : 0);
+  else digitalWrite(pin, on ? HIGH : LOW);
+}
+
 void updateLeds(uint8_t i, unsigned long now) {
   // Local signal in addition to the printed label at the space (never colour alone - plan 9.2).
   if (state[i].stable < 0) {
@@ -162,11 +172,6 @@ void updateLeds(uint8_t i, unsigned long now) {
     analogOrDigital(SLOTS[i].ledFree, state[i].stable == 0);
     analogOrDigital(SLOTS[i].ledOccupied, state[i].stable == 1);
   }
-}
-
-void analogOrDigital(uint8_t pin, bool on) {
-  if (LED_BRIGHTNESS < 255 && digitalPinHasPWM(pin)) analogWrite(pin, on ? LED_BRIGHTNESS : 0);
-  else digitalWrite(pin, on ? HIGH : LOW);
 }
 
 void readCommands() {

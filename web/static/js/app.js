@@ -1,7 +1,7 @@
 // Customer portal: router, layout, permission checks in the UI (the server is always authoritative).
 import { get, post, setCsrf, setAuthLostHandler } from "./api.js";
 import { applyStatic, getLang, planName, setLang, t } from "./i18n.js";
-import { el, clear, langSwitcher } from "./ui.js";
+import { el, clear, langSwitcher, watchScrollRegions } from "./ui.js";
 import { state, can, clearTimers, go } from "./state.js";
 import * as A from "./views-auth.js";
 import * as S from "./views-station.js";
@@ -9,6 +9,7 @@ import * as M from "./views-admin.js";
 import { viewIntegrations } from "./views-integrations.js";
 
 const root = document.getElementById("root");
+watchScrollRegions(root);
 const PUBLIC = new Set(["login", "register", "check-email", "pending", "verify", "forgot", "reset", "invite", "setup"]);
 
 function parseHash() {

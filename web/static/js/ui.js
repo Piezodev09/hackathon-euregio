@@ -111,3 +111,32 @@ export function linkHandover(title, data, hint) {
         el("div", { class: "btn-row" }, el("button", { class: "btn small", type: "button", onclick: () => copyText(data.link) }, t("c.copy"))),
         data.expires_at ? el("p", { class: "small muted" }, t("c.valid_until", { t: fmtDateTime(data.expires_at) })) : null)));
 }
+
+// Tables that scroll sideways on narrow screens must be reachable by keyboard (WCAG 2.1.1): such a
+// wrapper becomes a focusable, labelled region while it overflows. Wrappers that declare their own
+// role (e.g. the heatmaps) are left alone.
+export function watchScrollRegions(root) {
+  let queued = false;
+  const update = () => {
+    queued = false;
+    for (const w of root.querySelectorAll(".table-wrap")) {
+      if (w.hasAttribute("role") && !w.dataset.autoRegion) continue;
+      const scrolls = w.scrollWidth > w.clientWidth + 1;
+      if (scrolls && !w.dataset.autoRegion) {
+        const heading = w.closest("section, .card")?.querySelector("h2, h3");
+        w.dataset.autoRegion = "1";
+        w.tabIndex = 0;
+        w.setAttribute("role", "region");
+        w.setAttribute("aria-label", heading ? heading.textContent : document.title);
+      } else if (!scrolls && w.dataset.autoRegion) {
+        delete w.dataset.autoRegion;
+        w.removeAttribute("tabindex");
+        w.removeAttribute("role");
+        w.removeAttribute("aria-label");
+      }
+    }
+  };
+  const schedule = () => { if (!queued) { queued = true; requestAnimationFrame(update); } };
+  new MutationObserver(schedule).observe(root, { childList: true, subtree: true });
+  window.addEventListener("resize", schedule);
+}

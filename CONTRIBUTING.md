@@ -18,7 +18,7 @@ Shell scripts must pass `sh -n` / `bash -n` and [ShellCheck](https://www.shellch
 (`pip install shellcheck-py`):
 
 ```bash
-shellcheck scripts/*.sh deploy/*.sh deploy/proxmox/*.sh deploy/docker/*.sh agent/*.sh integrations/home-assistant/*/run.sh
+shellcheck scripts/*.sh deploy/*.sh deploy/proxmox/*.sh deploy/docker/*.sh agent/*.sh firmware/*.sh integrations/home-assistant/*/run.sh
 bash deploy/proxmox/selftest.sh     # create-lxc.sh against fake Proxmox commands
 ```
 
@@ -29,7 +29,13 @@ cd server && python3 -c "from app.agent_bundle import AgentBundle; open('/tmp/ag
 shellcheck -s sh /tmp/agent.sh
 ```
 
-Run everything locally without hardware: `scripts/dev.sh` (see README).
+Firmware without hardware (`sudo apt install gcc-avr avr-libc arduino-core-avr simavr`):
+`firmware/check.sh` builds the sketch in all sensor variants and runs it in the simulator.
+
+Run everything locally without hardware: `scripts/dev.sh` (see README). With it running, check
+accessibility and layout in a real browser (`npm install --no-save playwright axe-core`):
+`node scripts/check-a11y.mjs` – 0 serious/critical axe findings, no console errors, no horizontal
+scrolling on a phone. `node scripts/capture-screenshots.mjs` refreshes `docs/competition/screenshots/`.
 
 Docker images (from the repository root):
 
@@ -57,7 +63,7 @@ The UI follows the "premium" design system (Apple-inspired): Inter / JetBrains M
 brand #3B82F6 / #8B5CF6. All values are tokens at the top of `web/static/css/app.css` – use
 `var(--sp-4)`, `var(--fs-18)`, `var(--primary)` instead of raw values. Accessibility wins over raw
 tokens: text and filled buttons use `--primary` (#2563EB, 5.2:1), form controls `--control-border`
-(≥ 3:1). Check pages with axe-core (0 serious/critical findings, light and dark mode).
+(≥ 3:1). Check pages with `node scripts/check-a11y.mjs` (0 serious/critical findings, light and dark mode).
 
 The social preview `web/static/img/og.png` is rendered from `scripts/og/og.html`:
 `node scripts/render-og.mjs` (needs Playwright). The Home Assistant add-on icon/logo come from

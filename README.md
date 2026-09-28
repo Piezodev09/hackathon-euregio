@@ -26,11 +26,11 @@ flowchart LR
 | `server/app/webhooks.py` | outgoing webhooks: SSRF checks, signature, delivery with retries | `Dispatcher` |
 | `agent/` | Raspberry Pi agent: Arduino → validated measurements → buffered HTTPS upload, heartbeat, self-update, optional MQTT/Home Assistant | `python3 -m bikeagent` (`agent/bikeagent/agent.py`), `agent/Dockerfile` |
 | `integrations/home-assistant/` | Home Assistant add-on (agent on the HA machine, MQTT discovery); code is a synced copy of `agent/` | `bike-station-agent/config.yaml`, `repository.yaml` (repo root) |
-| `firmware/` | Arduino sketch + bill of materials and wiring | `firmware/smart_bike_station/smart_bike_station.ino` |
+| `firmware/` | Arduino sketch + bill of materials, wiring, build/simulator check | `firmware/smart_bike_station/smart_bike_station.ino`, `firmware/check.sh` |
 | `web/` | landing page, customer portal, kiosk display, legal templates (plain HTML/CSS/JS modules, no framework; design tokens in `web/static/css/app.css`) | `web/index.html`, `web/app.html`, `web/display.html` |
 | `ml/` | data export, training, honest comparison rule vs. AI | `ml/train.py` |
 | `deploy/` | Proxmox one-liner, server installer (own CA, no mail needed), systemd units, Docker image + Compose, backup, firewall example | `deploy/proxmox/create-lxc.sh`, `deploy/install-server.sh`, `deploy/docker/compose.yaml` |
-| `scripts/` | local development without hardware, translation check, add-on sync, image rendering | `scripts/dev.sh`, `scripts/check-i18n.mjs`, `scripts/sync-ha-addon.sh` |
+| `scripts/` | local development without hardware, translation and accessibility checks, add-on sync, screenshots and image rendering | `scripts/dev.sh`, `scripts/check-i18n.mjs`, `scripts/check-a11y.mjs`, `scripts/sync-ha-addon.sh` |
 | `docs/` | architecture, agent, API, security/privacy, AI fact sheet, tests, operations | `docs/architecture.md` |
 
 ## What the platform offers
@@ -116,6 +116,7 @@ AI model for the pipeline check (simulated data): `python3 ml/generate_synthetic
 ```bash
 cd server && python3 -m pytest -q    # acceptance tests, auth, 2FA, CSRF, tenant isolation, roles, plans, headers, agent management
 cd agent && python3 -m pytest -q     # parser, buffer, watchdog, sequences, agent (state, updates, rollback, commands), MQTT, HA add-on
+firmware/check.sh                    # sketch: 4 sensor variants with -Werror, run in the simavr simulator
 ```
 
 ## Documentation
@@ -130,6 +131,7 @@ cd agent && python3 -m pytest -q     # parser, buffer, watchdog, sequences, agen
 - [Test report](docs/test-report.md)
 - [Operations: installation, restart, logs, backup, deletion](docs/operations.md)
 - [Contributing: tests, versions, translations](CONTRIBUTING.md)
+- [Competition package: criteria matrix, 7-minute demo, pitch, offline kit, German jury summary](docs/competition/)
 
 ## Principles
 
