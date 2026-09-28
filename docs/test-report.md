@@ -28,6 +28,12 @@ wiederholen. T08/T14 nur kontrolliert und nach Absprache mit der IT.
 | Stellplatz-Ansicht: Link, Rotation, „Problem melden“ mit Ratenbegrenzung | `test_stall_view.py` (3 Tests) | bestanden |
 | Gateway: NFC-Zeilen, Versand, Rückmeldung an Arduino | `pi-gateway/tests/test_gateway.py::test_parse_nfc_line`, `test_gateway_sends_nfc_tap_immediately_and_reports_back`, `test_gateway_nfc_rejected_is_not_retried` | bestanden |
 | Agent: Kamera-Erkennung, Upload bei Warnung, `doctor` | `pi-gateway/tests/test_agent.py` (Kamera-, Upload- und Doctor-Tests) | bestanden |
+| Testphase ab erstem bezahlten Tarif, einmalig; ältere Konten; Grundgebühr anteilig | `test_parking.py::test_trial_starts_on_first_paid_plan_and_only_once`, `test_legacy_paid_tenant_keeps_created_at_as_trial_start`, `test_license_invoice_per_stall_day` | bestanden |
+| Statistik gegen Hand-Rechnung (Auslastung ohne Daten ≠ frei, Heatmap, Parkdauer, NFC), Tagesgrenze Berlin, Free-Vorschau, Mandantentrennung | `test_stats.py` (3 Tests) | bestanden |
+| Karten anlernen (Zeitfenster, bekannte Karte, Abbruch, Rechte), Dezimal-UIDs | `test_parking.py::test_card_learn_mode`, `test_card_learn_needs_reader`, `test_uid_formats_for_usb_readers` | bestanden |
+| Ein Pi für mehrere Stellplätze: Kopplung, Token je Stellplatz, Hardware-Meldung, Portal-Zuordnung mit Tausch, Identifizieren, Leser je Stellplatz | `test_agent.py::test_one_pi_for_several_stalls`, `test_readers_keep_pn532_per_stall` | bestanden |
+| Agent 1.4: Migration des Zustands (Rollback-fähig), Hinzufügen von Stellplätzen, serielle Erkennung, USB-HID- und PC/SC-Leser, Zuordnung, lokale Übersicht | `pi-gateway/tests/test_hardware.py` (11 Tests, gefälschte `/dev`-/`/proc`-Daten) | bestanden |
+| E2E (Browser, 2 simulierte Stellplätze an einem Agent): Rechner-Empfehlung, Hilfe-Menü, Tour fortsetzen, Karte anlernen, Statistik (hell/dunkel/390 px), lokale Übersicht | Playwright, manuell ausgeführt | bestanden |
 
 | Registrierung ohne E-Mail-Bestätigung, strenger Modus, Tour-Status | `test_auth.py::test_register_logs_in_immediately_verification_optional`, `test_strict_mode_requires_verification` | bestanden |
 | Reservierung: RESERVIERT nur bei sicher freiem Platz, Karte, Ablauf, Rollen, Tarif | `test_features.py::test_reservation_*`, `test_free_plan_has_no_reservations` | bestanden |

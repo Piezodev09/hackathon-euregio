@@ -617,7 +617,8 @@ export function viewDevices() {
                 el("td", {}, can("admin") ? el("a", { href: `#/stations/${d.station_id}/settings` }, d.station_name) : d.station_name),
                 el("td", {}, d.managed && can("admin") && ports.length ? assignSelect(d, "port", ports, t("ag.port"))
                   : el("span", { class: "mono small" }, d.hw?.port ? shortPort(d.hw.port) : "–"),
-                  d.hw && d.managed ? el("div", { class: "small muted" }, d.hw.port ? t("ag.in_use", { v: shortPort(d.hw.port) }) : t("ag.no_port")) : null),
+                  d.hw && d.managed ? el("div", { class: "small muted" }, d.source === "simulator" ? t("ag.sim_port")
+                    : d.hw.port ? t("ag.in_use", { v: shortPort(d.hw.port) }) : t("ag.no_port")) : null),
                 el("td", {}, d.managed && can("admin") && readers.length ? assignSelect(d, "reader", readers, t("ag.reader"))
                   : el("span", { class: "small" }, d.hw?.reader || "–")),
                 el("td", {}, deviceStatus(d)),
@@ -709,6 +710,7 @@ export function viewReaders() {
       const l = await get("/api/v1/cards/learn");
       renderLearn(l);
       if (l.state === "waiting" && document.body.contains(learnBox)) learnTimer = setTimeout(poll, 1500);
+      else load(); // Taps/Leser aktualisieren
     } catch (_) { /* nächster Versuch beim Neuladen */ }
   }
   every(30000, load);

@@ -15,7 +15,7 @@ from .plans import get_plan
 
 # Parkdauer-Klassen in Minuten (untere Grenze), letzte Klasse offen
 DURATION_BINS = [(0, "<15 min"), (15, "15–60 min"), (60, "1–3 h"), (180, "3–6 h"), (360, "6–12 h"), (720, "12–24 h"), (1440, "> 24 h")]
-TAP_OK = ("checked_in", "checked_out")
+TAP_OK = ("checked_in", "checked_out", "learned")  # erfolgreich gelesen und verarbeitet
 
 
 def day_start(d: date) -> float:

@@ -35,8 +35,9 @@ footer p { margin: 2px 0; }
 
 /* Übersicht mehrerer Stellplätze am Pi (local-overview.html) */
 .ov-grid { list-style: none; margin: 0; padding: 0; display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); }
-.ov-card { display: grid; grid-template-columns: auto 1fr; grid-template-areas: "sym name" "sym word"; align-items: center; gap: 4px 16px;
-  text-decoration: none; min-height: 0; padding: 20px; }
+main .sbb-status.ov-card { display: grid; grid-template-columns: auto 1fr; grid-template-areas: "sym name" "sym word" "sym sim"; align-items: center;
+  justify-items: start; text-align: left; gap: 4px 20px; text-decoration: none; min-height: 0; padding: 20px 24px; }
 .ov-sym { grid-area: sym; font-size: 48px; font-weight: 700; line-height: 1; }
 .ov-name { grid-area: name; font-size: 22px; font-weight: 700; }
-.ov-card .sbb-status__word { grid-area: word; font-size: 30px; margin: 0; }
+main .ov-card .sbb-status__word { grid-area: word; font-size: clamp(26px, 4vmin, 44px); margin: 0; }
+.ov-sim { grid-area: sim; font-size: 14px; font-weight: 700; letter-spacing: .06em; padding: 2px 8px; border: 2px solid currentColor; border-radius: 999px; justify-self: start; }

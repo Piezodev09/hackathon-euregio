@@ -41,6 +41,12 @@
       word.className = "sbb-status__word";
       word.textContent = s.maintenance ? T.maintenance.split(" – ")[0] : (T[state] || T.unknown);
       a.append(sym, name, word);
+      if (s.simulated_data) {  // Simulator-Daten immer kennzeichnen
+        const sim = document.createElement("span");
+        sim.className = "ov-sim";
+        sim.textContent = "SIMULATION";
+        a.append(sim);
+      }
       li.append(a);
       list.append(li);
     }

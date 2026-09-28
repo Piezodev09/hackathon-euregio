@@ -56,6 +56,21 @@ Beim Arduino Uno sind D0/D1 durch USB-Seriell belegt – nicht verwenden.
    Karte erscheint als „wartet auf Freigabe“ → benennen und freigeben → erneut halten = eingecheckt.
 
 Die LEDs zeigen kurz die Antwort (grün = ein-/ausgecheckt, rot = abgelehnt). Ohne Leser bleibt der Sketch wie bisher.
+Einfacher als „wartet auf Freigabe“: Portal → **Lesegeräte** → **Karte anlernen** (Bezeichnung eingeben, Karte innerhalb 60 s an einen Leser halten).
+
+### Andere Kartenleser (ohne Löten, am Pi)
+
+- **USB-Leser im Tastaturmodus** (13,56 MHz/125 kHz, „tippt“ die Nummer): einfach am Pi einstecken. Der Agent erkennt ihn
+  am Namen, liest ihn exklusiv und rechnet die Dezimalnummer in die Hex-UID um (siehe [agent.md](agent.md)).
+- **PC/SC-Leser** (z. B. ACR122U): einstecken, Installationsskript (erneut) ausführen – es installiert `pcscd` nur dann.
+- Mehrere Stellplätze an einem Pi: Leser werden in Reihenfolge zugeordnet, im Portal (Gateways) änderbar.
+- **Nicht mit echten Geräten getestet** (nur mit aufgezeichneten Eingaben bzw. simuliertem Leser).
+
+### Sketch 0.4.0
+
+Erste Zeile nach dem Verbinden: `{"type":"hello","name":"bike-stall","fw":"0.4.0","nfc":true|false}` – daran erkennt der Pi
+den Arduino und ob er einen PN532 hat. Befehl `IDENT` vom Pi lässt beide LEDs 10 s abwechselnd blinken
+(Portal → Gateways → **Identifizieren**). **Sketch nicht kompiliert und nicht auf Hardware getestet.**
 Zum Testen ohne Hardware: `scripts/dev.sh --interactive`, dann `n` (Demo-Karte) oder `n 04AABBCCDD`.
 
 ## Kamera am Raspberry Pi (optional, opt-in)

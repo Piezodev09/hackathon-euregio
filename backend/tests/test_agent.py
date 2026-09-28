@@ -327,3 +327,17 @@ def test_one_pi_for_several_stalls(env):
     other = env.register(org="Fremd", email="f@example.org", plan="school")
     assert other.post("/api/v1/stations/enrollments", {"station_ids": [a]}).status_code == 404
     assert other.put(f"/api/v1/devices/{d1}/assign", {"port": ""}).status_code == 404
+
+
+def test_readers_keep_pn532_per_stall(env):
+    owner = env.register(plan="school")
+    a, _ = env.station(owner, name="Platz 1")
+    b, _ = env.station(owner, name="Platz 2")
+    code = owner.post("/api/v1/stations/enrollments", {"station_ids": [a, b]}).json()["code"]
+    res = env.client().c.post("/api/v1/agent/enroll", json={"code": code, "hostname": "pi"}).json()
+    for st in res["stalls"]:
+        r = env.client().c.post("/api/v1/nfc/tap", json={"station_id": st["station_id"], "sequence": 1, "uid": "04AA0001", "reader": "pn532"},
+                                headers={"Authorization": f"Bearer {st['token']}"})
+        assert r.status_code == 200
+    g = [x for x in owner.get("/api/v1/readers").json()["gateways"] if x["gateway_id"] == res["gateway_id"]][0]
+    assert sorted(r["station_id"] for r in g["readers"]) == sorted([a, b]) and all(r["taps"] == 1 for r in g["readers"])

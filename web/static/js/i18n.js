@@ -107,7 +107,7 @@ export const STRINGS = {
     "bill.users": "Nutzer (inkl. Einladungen)", "bill.devices": "Aktive Gateways",
     "bill.choose": "Wechseln", "bill.current_badge": "Aktuell", "bill.per_month": "/ Monat", "bill.free": "kostenlos",
     "bill.note": "Die Abrechnung erfolgt derzeit per Rechnung. Eine Online-Zahlung ist noch nicht angebunden.",
-    "bill.f_stations": "{n} Stellplatz/Stellplätze", "bill.f_users": "{n} Nutzer",
+    "bill.f_stations": "bis {n} Stellplätze", "bill.f_users": "bis {n} Nutzer",
     "bill.f_retention": "{n} Tage Datenaufbewahrung", "bill.f_ml": "KI-Bewegungserkennung", "bill.f_audit": "Audit-Log",
     "bill.f_display": "Öffentliche Anzeige-Links", "bill.changed": "Tarif geändert.", "bill.confirm": "Zum Tarif „{plan}“ wechseln?",
     "au.title": "Audit-Log", "au.time": "Zeit", "au.actor": "Wer", "au.action": "Aktion", "au.target": "Ziel", "au.ip": "IP",
@@ -880,6 +880,7 @@ export const STRINGS = {
     "err.no_reader": "Noch kein Gateway mit Kartenleser gekoppelt – zuerst einen Raspberry Pi einrichten.",
     "err.duplicate_station": "Ein Stellplatz wurde doppelt ausgewählt.",
     "err.invalid_days": "Ungültiger Zeitraum.",
+    "ag.sim_port": "Simulator (keine Hardware)",
   },
 
   nl: {
@@ -982,7 +983,7 @@ export const STRINGS = {
     "bill.users": "Gebruikers (incl. uitnodigingen)", "bill.devices": "Actieve gateways",
     "bill.choose": "Wisselen", "bill.current_badge": "Huidig", "bill.per_month": "/ maand", "bill.free": "gratis",
     "bill.note": "Facturering gebeurt momenteel per factuur. Online betalen is nog niet gekoppeld.",
-    "bill.f_stations": "{n} fietsplek(ken)", "bill.f_users": "{n} gebruikers",
+    "bill.f_stations": "tot {n} fietsplekken", "bill.f_users": "tot {n} gebruikers",
     "bill.f_retention": "{n} dagen bewaartermijn", "bill.f_ml": "AI-bewegingsdetectie", "bill.f_audit": "Auditlog",
     "bill.f_display": "Openbare weergavelinks", "bill.changed": "Abonnement gewijzigd.", "bill.confirm": "Overstappen naar „{plan}”?",
     "au.title": "Auditlog", "au.time": "Tijd", "au.actor": "Wie", "au.action": "Actie", "au.target": "Doel", "au.ip": "IP",
@@ -1753,6 +1754,7 @@ export const STRINGS = {
     "err.no_reader": "Nog geen gateway met kaartlezer gekoppeld – richt eerst een Raspberry Pi in.",
     "err.duplicate_station": "Een fietsplek is dubbel gekozen.",
     "err.invalid_days": "Ongeldige periode.",
+    "ag.sim_port": "Simulator (geen hardware)",
   },
 
   en: {
@@ -1851,7 +1853,7 @@ export const STRINGS = {
     "bill.users": "Users (incl. invitations)", "bill.devices": "Active gateways", "bill.choose": "Switch",
     "bill.current_badge": "Current", "bill.per_month": "/ month", "bill.free": "free",
     "bill.note": "Billing is currently by invoice. Online payment is not connected yet.",
-    "bill.f_stations": "{n} bike stall(s)", "bill.f_users": "{n} users",
+    "bill.f_stations": "up to {n} stalls", "bill.f_users": "up to {n} users",
     "bill.f_retention": "{n} days data retention", "bill.f_ml": "AI movement detection", "bill.f_audit": "Audit log",
     "bill.f_display": "Public display links", "bill.changed": "Plan changed.", "bill.confirm": "Switch to plan “{plan}”?",
     "au.title": "Audit log", "au.time": "Time", "au.actor": "Who", "au.action": "Action", "au.target": "Target", "au.ip": "IP",
@@ -2622,6 +2624,7 @@ export const STRINGS = {
     "err.no_reader": "No gateway with a card reader paired yet – set up a Raspberry Pi first.",
     "err.duplicate_station": "A stall was selected twice.",
     "err.invalid_days": "Invalid period.",
+    "ag.sim_port": "Simulator (no hardware)",
   },
 };
 

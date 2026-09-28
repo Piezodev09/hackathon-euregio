@@ -45,6 +45,8 @@ Eine Warnung ist ein Hinweis auf ungewöhnliche Bewegung, kein Diebstahlnachweis
 | Parkgebühren, Monatsaufstellung, Guthaben je Karte | – | ✔ | ✔ |
 | Reservierungen | – | ✔ | ✔ |
 | Tages-/Wochen-/Monatsberichte (PDF/CSV, per E-Mail) | – | ✔ | ✔ |
+| Statistiken (Auslastung, Heatmap, Parkdauer, Kartenleser) | 7 Tage | 30 Tage | 90 Tage |
+| Mehrere Stellplätze an einem Raspberry Pi, USB-/PC-SC-Kartenleser, Karten anlernen | ✔ | ✔ | ✔ |
 | API-Schlüssel und Webhooks | – | ✔ | ✔ |
 | Kamera (optional, nach Freigabe), KI-Vergleich, Audit-Log | – | ✔ | ✔ |
 
@@ -105,7 +107,9 @@ jeden Montag einen Bericht. Ausprobieren dauert zwei Minuten, auch ohne Hardware
 | Teil | Stand |
 |---|---|
 | Plattform, Portal, Start-Tour, Gebühren, Guthaben, Reservierungen, Öffnungszeiten, Berichte, E-Mails, API/Webhooks | umgesetzt und automatisch getestet |
-| Raspberry-Pi-Agent inkl. Offline-Anzeige, NFC, Kamera | mit Simulator getestet |
+| Statistiken, Hilfe-Menü/Tour, Karten anlernen | umgesetzt und automatisch getestet |
+| Raspberry-Pi-Agent inkl. Offline-Anzeige, NFC, Kamera, mehrere Stellplätze je Pi, Hardware-Erkennung | mit Simulator bzw. gefälschten Gerätedaten getestet |
+| USB-/PC-SC-Kartenleser, mehrere echte Arduinos an einem Pi, Kiosk-Autostart | Hardwaretest steht aus |
 | Arduino mit echten Sensoren und NFC-Leser, echte Kamera | Hardwaretest steht aus |
 | Online-Zahlung, PDF-Rechnungen mit Umsatzsteuer | nicht enthalten |
 
@@ -114,4 +118,4 @@ jeden Montag einen Bericht. Ausprobieren dauert zwei Minuten, auch ohne Hardware
 - Pilot an einer Schule mit 2–5 Stellplätzen und echten Karten
 - Schul-App-Anbindung als Referenzprojekt, veröffentlicht als Beispiel
 - Online-Zahlung (SEPA/Karte) optional für Gemeinden
-- Mehrere Stellplätze zu einer Anlage bündeln (Übersicht „noch 3 von 10 frei“)
+- Anlagen-Übersicht „noch 3 von 10 frei“ auch im Portal und als öffentliche Anzeige (am Pi bereits vorhanden)

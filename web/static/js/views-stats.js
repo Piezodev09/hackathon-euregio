@@ -32,6 +32,9 @@ function dataTable(caption, head, rows) {
       el("tbody", {}, rows.map((r) => el("tr", {}, r.map((c) => el("td", {}, String(c)))))))));
 }
 
+// Achsenbeschriftung: jede step-te und die letzte, aber nicht, wenn sie die vorige überdecken würde
+const showTick = (i, n, step) => (i % step === 0 && (i === n - 1 || n - 1 - i >= step / 2)) || i === n - 1;
+
 // Liniendiagramm Auslastung je Tag; Tage ohne Daten als schraffierte Lücke, nicht als 0 %
 function occupancyChart(series) {
   const W = 640, H = 220, L = 44, R = 12, T = 12, B = 30;
@@ -61,7 +64,7 @@ function occupancyChart(series) {
       svg("title", {}, `${dayLabel(d.day, true)}: ${pct(d.occupancy)}`)));
   });
   const step = Math.ceil(n / 8);
-  series.forEach((d, i) => { if (i % step === 0 || i === n - 1) g.append(svg("text", { x: x(i), y: H - 8, class: "axis", "text-anchor": "middle" }, dayLabel(d.day))); });
+  series.forEach((d, i) => { if (showTick(i, n, step)) g.append(svg("text", { x: x(i), y: H - 8, class: "axis", "text-anchor": "middle" }, dayLabel(d.day))); });
   return g;
 }
 
@@ -74,7 +77,7 @@ function occSummary(series) {
 
 // Säulen je Tag (Check-ins)
 function barChart(series, key, label) {
-  const W = 640, H = 180, L = 36, R = 12, T = 12, B = 30;
+  const W = 400, H = 200, L = 36, R = 12, T = 12, B = 30;
   const n = series.length, w = (W - L - R) / n;
   const max = Math.max(1, ...series.map((d) => d[key]));
   const nice = max <= 5 ? max : Math.ceil(max / 5) * 5;
@@ -90,8 +93,8 @@ function barChart(series, key, label) {
     if (d[key] > 0) g.append(svg("rect", { x: L + w * i + w * 0.15, y: y(d[key]), width: w * 0.7, height: h, class: "bar", rx: 2 },
       svg("title", {}, `${dayLabel(d.day, true)}: ${d[key]}`)));
   });
-  const step = Math.ceil(n / 8);
-  series.forEach((d, i) => { if (i % step === 0 || i === n - 1) g.append(svg("text", { x: L + w * i + w / 2, y: H - 8, class: "axis", "text-anchor": "middle" }, dayLabel(d.day))); });
+  const step = Math.ceil(n / 5);
+  series.forEach((d, i) => { if (showTick(i, n, step)) g.append(svg("text", { x: L + w * i + w / 2, y: H - 8, class: "axis", "text-anchor": "middle" }, dayLabel(d.day))); });
   return g;
 }
 

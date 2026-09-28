@@ -301,7 +301,10 @@ def readers(request: Request, ctx: Ctx = Depends(require("admin"))):
             if dev_id != d["id"]:
                 continue
             key = reader or hw.get("reader") or "pn532"
-            rd = g["readers"].setdefault(key, {"id": key, "kind": key.split(":")[0].split("@")[0], "name": key,
+            if key.startswith("pn532"):  # Leser am Arduino: je Stellplatz ein eigener
+                key = hw["reader"] if (hw.get("reader") or "").startswith("pn532") else f"pn532@{d['id']}"
+            rd = g["readers"].setdefault(key, {"id": key, "kind": key.split(":")[0].split("@")[0],
+                                               "name": f"PN532 – {d['station_name']}" if key.startswith("pn532") else key,
                                                "station_id": d["station_id"], "station_name": d["station_name"], "device_id": d["id"],
                                                "taps": 0, "ok": 0, "last_at": None})
             rd["taps"] += st["taps"]
