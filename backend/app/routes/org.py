@@ -189,15 +189,24 @@ def export(request: Request, ctx: Ctx = Depends(require("owner"))):
 
     data = {
         "exported_at": iso(core.clock()),
-        "organization": {k: ctx.tenant[k] for k in ("id", "name", "plan", "status", "mfa_required", "created_at")},
+        "organization": {k: ctx.tenant[k] for k in ("id", "name", "plan", "status", "mfa_required", "payment_mode", "tariff", "created_at")},
         "users": rows("SELECT id, email, name, role, locale, created_at, last_login_at, totp_enabled FROM user WHERE tenant_id = ?"),
-        "stations": rows("SELECT id, name, location, alert_source, display_enabled, created_at FROM station WHERE tenant_id = ?"),
+        "stations": rows("SELECT id, name, location, alert_source, display_enabled, hours, maintenance, demo_sim, created_at "
+                         "FROM station WHERE tenant_id = ?"),
         "devices": rows("SELECT id, station_id, name, token_prefix, created_at, last_seen_at, revoked_at FROM device WHERE tenant_id = ?"),
         "events": rows("SELECT id, station_id, kind, severity, detector, occurred_at, acknowledged_at, acknowledged_by, source FROM event WHERE tenant_id = ?"),
         "measurements": rows("SELECT m.station_id, m.server_time, m.occupied, m.vibration_score, m.sensor_state, m.source "
                              "FROM measurement m JOIN station st ON st.id = m.station_id WHERE st.tenant_id = ? ORDER BY m.server_time"),
         # Karten ohne UID-Hash (nicht rückrechenbar, aber auch nicht nötig)
-        "cards": rows("SELECT id, label, status, created_at, last_seen_at FROM card WHERE tenant_id = ?"),
+        "cards": rows("SELECT id, label, status, created_at, last_seen_at, balance_cents FROM card WHERE tenant_id = ?"),
+        "card_transactions": rows("SELECT id, card_id, at, kind, amount_cents, balance_after, session_id, note, actor, source "
+                                  "FROM card_txn WHERE tenant_id = ? ORDER BY at"),
+        "reservations": rows("SELECT id, station_id, card_id, label, created_at, expires_at, ended_at, status, created_by, via "
+                             "FROM reservation WHERE tenant_id = ?"),
+        "closures": rows("SELECT id, station_id, starts_at, ends_at, note FROM closure WHERE tenant_id = ?"),
+        # Integrationen ohne Schlüssel-Hashes und Webhook-Geheimnisse
+        "api_keys": rows("SELECT id, name, prefix, scopes, created_at, created_by, last_used_at, revoked_at FROM api_key WHERE tenant_id = ?"),
+        "webhooks": rows("SELECT id, url, events, active, created_at, created_by FROM webhook WHERE tenant_id = ?"),
         "parking_sessions": rows("SELECT id, station_id, card_id, started_at, ended_at, amount_cents, tariff, status, source "
                                  "FROM parking_session WHERE tenant_id = ? ORDER BY started_at"),
         "invoices": rows("SELECT number, month, created_at, lines, total_cents, status, paid_at FROM invoice WHERE tenant_id = ?"),

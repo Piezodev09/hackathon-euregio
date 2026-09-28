@@ -76,6 +76,8 @@ class RegisterIn(Strict):
     password: Password
     accept_terms: Literal[True]
     locale: Locale = "de"
+    # Start mit kostenloser Testphase (Schule/Pro) oder direkt im Free-Tarif
+    plan: Literal["free", "school", "pro"] = "school"
 
 
 class LoginIn(Strict):
@@ -128,12 +130,21 @@ class InviteAcceptIn(Strict):
 class ProfilePatch(Strict):
     name: Name | None = None
     locale: Locale | None = None
+    tour_done: bool | None = None
+
+
+class NotifyIn(Strict):
+    alert: bool
+    problem: bool
+    tech: bool
+    report: Literal["off", "daily", "weekly"]
 
 
 # ---------------------------------------------------------------------- Organisation
 class OrgPatch(Strict):
     name: Name | None = None
     mfa_required: bool | None = None
+    onboarding_hidden: bool | None = None
 
 
 class RoleIn(Strict):
@@ -243,3 +254,55 @@ class CameraIn(Strict):
     retention_h: int = Field(default=24, ge=1, le=72)
     # Wer die Kamera genehmigt hat (z. B. "Schulleitung, 28.09.2026") – Pflicht beim Einschalten.
     approved_by: ShortText | None = None
+
+
+# ---------------------------------------------------------------------- Guthaben, Reservierung, Öffnungszeiten
+class TopupIn(Strict):
+    amount_cents: int = Field(ge=-50_000, le=50_000)
+    kind: Literal["topup", "correction"] = "topup"
+    note: ShortText = ""
+
+
+class PaymentModeIn(Strict):
+    mode: Literal["statement", "prepaid"]
+
+
+class ReservationIn(Strict):
+    minutes: int = Field(ge=5, le=240)
+    card_id: str | None = Field(default=None, pattern=ID_PATTERN)
+    label: ShortText = ""
+
+
+LocalDateTime = Annotated[str, Field(pattern=r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$")]
+
+
+class HoursIn(Strict):
+    # {"mon": [["07:00", "18:00"]], ...}; None = immer geöffnet
+    hours: dict[str, list[list[str]]] | None
+
+
+class ClosureIn(Strict):
+    station_id: str | None = Field(default=None, pattern=ID_PATTERN)  # None = alle Stellplätze
+    starts_at: LocalDateTime
+    ends_at: LocalDateTime
+    note: ShortText = ""
+
+
+# ---------------------------------------------------------------------- Integrationen
+class ApiKeyIn(Strict):
+    name: Name
+    scopes: list[Literal["read", "reservations"]] = Field(min_length=1, max_length=2)
+
+
+WebhookEvent = Literal["alert.created", "problem.reported", "sensor.fault", "stall.changed", "parking.checked_in",
+                       "parking.checked_out", "reservation.created", "reservation.ended", "gateway.offline", "gateway.online"]
+
+
+class WebhookIn(Strict):
+    url: Annotated[str, Field(min_length=8, max_length=500), AfterValidator(_text)]
+    events: list[WebhookEvent] = Field(min_length=1, max_length=10)
+
+
+class WebhookPatch(Strict):
+    active: bool | None = None
+    events: list[WebhookEvent] | None = Field(default=None, min_length=1, max_length=10)

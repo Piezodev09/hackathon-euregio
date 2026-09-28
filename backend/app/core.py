@@ -40,6 +40,18 @@ class Core:
         self.mail_limiter = RateLimiter(5 / 3600.0, 5)
         # "Problem melden" in der öffentlichen Stellplatz-Ansicht: je IP 3 pro 10 Minuten
         self.report_limiter = RateLimiter(3 / 600.0, 3)
+        # Registrierung: großzügiger als andere Mails (viele Personen hinter einer Schul-IP), trotzdem begrenzt
+        self.signup_limiter = RateLimiter(30 / 3600.0, 30)
+        # Ereignis-Kanal für E-Mail-Benachrichtigungen und Webhooks: listener(kind, tenant_id, data)
+        self.listeners: list[Callable[[str, str, dict], None]] = []
+
+    def emit(self, kind: str, tenant_id: str, data: dict) -> None:
+        """Fachliches Ereignis melden. Fehler eines Empfängers dürfen die Messkette nie unterbrechen."""
+        for listener in self.listeners:
+            try:
+                listener(kind, tenant_id, data)
+            except Exception:
+                log.exception("Ereignis-Empfänger fehlgeschlagen (%s)", kind)
 
     @property
     def cookie_name(self) -> str:

@@ -21,9 +21,14 @@ from .config import Settings, load_settings
 from .core import Core
 from .agent_bundle import AgentBundle
 from .tlsinfo import TlsInfo
+from .demo_sim import DemoSimulator
+from .integrations import Integrations
 from .licensing import Licensing
+from .notify import Notifier
 from .parking import Parking
-from .routes import agent, auth, camera, org, parking, platform, stations
+from .reports import Reports
+from .reservations import Reservations
+from .routes import agent, auth, camera, integrations, onboarding, ops, org, parking, platform, reports, stations
 from .snapshots import Snapshots
 from .service import Monitoring
 
@@ -80,6 +85,14 @@ def create_app(settings: Settings | None = None, clock: Callable[[], float] = ti
     monitoring = Monitoring(core)
     licensing = Licensing(core)
     snapshots = Snapshots(core)
+    reservations = Reservations(core)
+    parking_ = Parking(core, reservations)
+    monitoring.parking = parking_
+    monitoring.reservations = reservations
+    notifier = Notifier(core)
+    reports_ = Reports(core, monitoring)
+    integrations_ = Integrations(core)
+    demo = DemoSimulator(core, monitoring, parking_, reservations)
 
     async def maintenance_loop():
         while True:
@@ -93,11 +106,33 @@ def create_app(settings: Settings | None = None, clock: Callable[[], float] = ti
                 log.exception("Wartungslauf fehlgeschlagen")
             await asyncio.sleep(600)  # alle 10 min: Aufbewahrung, Kamerabilder, Nutzungstage
 
+    async def minute_loop():
+        while True:
+            await asyncio.sleep(60)
+            try:
+                reservations.expire()
+                notifier.check_devices()
+                notifier.send_due_reports(reports_)
+            except Exception:
+                log.exception("Minutenlauf fehlgeschlagen")
+
+    async def demo_loop():
+        while True:
+            await asyncio.sleep(2)
+            if demo.autorun:
+                try:
+                    await asyncio.to_thread(demo.step)
+                except Exception:
+                    log.exception("Simulation fehlgeschlagen")
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        task = asyncio.create_task(maintenance_loop())
+        tasks = [asyncio.create_task(maintenance_loop()), asyncio.create_task(minute_loop())]
+        if settings.demo_stalls:
+            tasks.append(asyncio.create_task(demo_loop()))
         yield
-        task.cancel()
+        for task in tasks:
+            task.cancel()
         core.db.close()
 
     app = FastAPI(title=f"{settings.product_name} API", version="1.0.0", lifespan=lifespan,
@@ -106,8 +141,12 @@ def create_app(settings: Settings | None = None, clock: Callable[[], float] = ti
     app.state.monitoring = monitoring
     app.state.licensing = licensing
     app.state.snapshots = snapshots
-    app.state.parking = Parking(core)
-    monitoring.parking = app.state.parking
+    app.state.parking = parking_
+    app.state.reservations = reservations
+    app.state.notifier = notifier
+    app.state.reports = reports_
+    app.state.integrations = integrations_
+    app.state.demo = demo
     app.state.tls = TlsInfo.load(settings.tls_cert_file) if settings.base_url.startswith("https://") else None
     app.state.agent_bundle = AgentBundle.build(settings.base_url, pin=app.state.tls.pin if app.state.tls else "")
     log.info("Agent-Paket %s bereit (sha256 %s)", app.state.agent_bundle.version, app.state.agent_bundle.sha256[:12])
@@ -160,7 +199,8 @@ def create_app(settings: Settings | None = None, clock: Callable[[], float] = ti
         return JSONResponse({"detail": "internal_error"}, 500)
 
     # ------------------------------------------------------------------ Router
-    for r in (auth.router, org.router, stations.router, agent.router, platform.router, parking.router, camera.router):
+    for r in (auth.router, org.router, stations.router, agent.router, platform.router, parking.router, camera.router,
+              ops.router, reports.router, integrations.router, onboarding.router):
         app.include_router(r)
 
     @app.get("/health", include_in_schema=False)

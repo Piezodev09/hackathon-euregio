@@ -7,20 +7,48 @@ from app.security import totp_now
 from conftest import PASSWORD
 
 
-def test_register_verify_login_logout(env):
-    api = env.register(login=False, verify=False, email="neu@example.org")
-    # Vor Bestätigung: richtiges Passwort -> email_not_verified
-    r = api.post("/api/v1/auth/login", {"email": "neu@example.org", "password": PASSWORD})
-    assert r.status_code == 403 and r.json()["detail"] == "email_not_verified"
-    assert api.post("/api/v1/auth/verify-email", {"token": env.last_token("neu@example.org")}).status_code == 200
-    # Token nur einmal verwendbar
-    assert api.post("/api/v1/auth/verify-email", {"token": env.last_token("neu@example.org")}).status_code == 400
-    r = api.post("/api/v1/auth/login", {"email": "NEU@example.org", "password": PASSWORD})
+def test_register_logs_in_immediately_verification_optional(env):
+    anon = env.client()
+    r = anon.post("/api/v1/auth/register", {"org_name": "Neu", "name": "Nora Neu", "email": "neu@example.org",
+                                             "password": PASSWORD, "accept_terms": True})
+    assert r.status_code == 201, r.text
+    me = r.json()
+    assert me["user"]["role"] == "owner" and me["user"]["email_verified"] is False and me["user"]["tour_done"] is False
+    # Start in der kostenlosen Testphase des Schul-Tarifs (alle Funktionen)
+    assert me["tenant"]["plan"]["id"] == "school"
+    assert anon.me().status_code == 200
+    welcome = [m for m in env.outbox if m.to == "neu@example.org"][-1]
+    assert "Willkommen" in welcome.subject and "Testphase" in welcome.body
+    # Bestätigung bleibt möglich (optional), Token nur einmal verwendbar
+    assert anon.post("/api/v1/auth/verify-email", {"token": env.last_token("neu@example.org")}).status_code == 200
+    assert anon.post("/api/v1/auth/verify-email", {"token": env.last_token("neu@example.org")}).status_code == 400
+    assert anon.me().json()["user"]["email_verified"] is True
+    assert anon.patch("/api/v1/auth/me", {"tour_done": True}).status_code == 200
+    assert anon.me().json()["user"]["tour_done"] is True
+    assert anon.post("/api/v1/auth/logout").status_code == 200
+    assert anon.get("/api/v1/auth/me").status_code == 401
+    r = anon.post("/api/v1/auth/login", {"email": "NEU@example.org", "password": PASSWORD})
     assert r.status_code == 200
-    me = api.me().json()
-    assert me["user"]["role"] == "owner" and me["tenant"]["plan"]["id"] == "free"
-    assert api.post("/api/v1/auth/logout").status_code == 200
-    assert api.get("/api/v1/auth/me").status_code == 401
+    # Gleiche Adresse noch einmal: klare Meldung statt stiller Zweitregistrierung
+    r = env.client().post("/api/v1/auth/register", {"org_name": "X", "name": "Y Z", "email": "neu@example.org",
+                                                     "password": PASSWORD, "accept_terms": True})
+    assert r.status_code == 409 and r.json()["detail"] == "email_in_use"
+
+
+def test_strict_mode_requires_verification(env):
+    object.__setattr__(env.core.s, "require_email_verification", True)
+    anon = env.client()
+    r = anon.post("/api/v1/auth/register", {"org_name": "Streng", "name": "Sven Streng", "email": "streng@example.org",
+                                             "password": PASSWORD, "accept_terms": True, "plan": "free"})
+    assert r.status_code == 202 and r.json() == {"status": "check_email"}
+    r = anon.post("/api/v1/auth/login", {"email": "streng@example.org", "password": PASSWORD})
+    assert r.status_code == 403 and r.json()["detail"] == "email_not_verified"
+    assert anon.post("/api/v1/auth/verify-email", {"token": env.last_token("streng@example.org")}).status_code == 200
+    assert anon.post("/api/v1/auth/login", {"email": "streng@example.org", "password": PASSWORD}).status_code == 200
+    # In diesem Modus bleibt die Registrierung ohne Konto-Aufzählung
+    r1 = env.client().post("/api/v1/auth/register", {"org_name": "X", "name": "Y Z", "email": "streng@example.org",
+                                                      "password": PASSWORD, "accept_terms": True})
+    assert r1.status_code == 202
 
 
 def test_session_cookie_flags(env):
@@ -39,11 +67,9 @@ def test_no_account_enumeration(env):
     a = anon.post("/api/v1/auth/login", {"email": "da@example.org", "password": "falsch-falsch-falsch"})
     b = anon.post("/api/v1/auth/login", {"email": "nicht-da@example.org", "password": "falsch-falsch-falsch"})
     assert a.status_code == b.status_code == 401 and a.json() == b.json()
-    r1 = anon.post("/api/v1/auth/register", {"org_name": "X", "name": "Y Z", "email": "da@example.org",
-                                              "password": PASSWORD, "accept_terms": True})
     r2 = anon.post("/api/v1/auth/password/forgot", {"email": "nicht-da@example.org"})
     r3 = anon.post("/api/v1/auth/password/forgot", {"email": "da@example.org"})
-    assert r1.status_code == 202 and r2.json() == r3.json()
+    assert r2.json() == r3.json()
 
 
 def test_weak_passwords_rejected(env):

@@ -10,9 +10,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 
 from .. import billing
 from ..core import Ctx, core_of, require
-from ..parking import Parking, normalize_uid
+from ..parking import Parking, normalize_uid, prepaid
 from ..plans import get_plan
-from ..schemas import CardIn, CardPatch, PaidIn, StationTariffIn, TapIn, TariffIn
+from ..schemas import CardIn, CardPatch, PaidIn, PaymentModeIn, StationTariffIn, TapIn, TariffIn, TopupIn
 from .stations import _station, require_device
 
 router = APIRouter(tags=["parking"])
@@ -50,7 +50,7 @@ def nfc_tap(body: TapIn, request: Request, dev=Depends(require_device)):
     st = core.db.one("SELECT * FROM station WHERE id = ?", (dev["station_id"],))
     out = parking(request).tap(st, dev["id"], body.sequence, uid, body.age_ms / 1000, body.source)
     # Die Antwort enthält keine Kartendaten – nur das Ergebnis für die Anzeige am Stellplatz.
-    return {k: v for k, v in out.items() if k in ("result", "amount_cents", "previous")}
+    return {k: v for k, v in out.items() if k in ("result", "amount_cents", "previous", "balance_cents")}
 
 
 # ---------------------------------------------------------------------- Karten
@@ -65,14 +65,39 @@ def _card_out(core, c) -> dict:
     open_s = core.db.one("SELECT station_id FROM parking_session WHERE card_id = ? AND status = 'open'", (c["id"],))
     st = core.db.scalar("SELECT name FROM station WHERE id = ?", (c["last_station_id"],)) if c["last_station_id"] else None
     return {"id": c["id"], "label": c["label"], "status": c["status"], "created_at": billing.iso(c["created_at"]),
-            "last_seen_at": billing.iso(c["last_seen_at"]), "last_station_name": st, "parked": open_s is not None}
+            "last_seen_at": billing.iso(c["last_seen_at"]), "last_station_name": st, "parked": open_s is not None,
+            "balance_cents": c["balance_cents"]}
 
 
 @router.get("/api/v1/cards")
 def list_cards(request: Request, ctx: Ctx = Depends(require("viewer"))):
     core = core_of(request)
     rows = core.db.all("SELECT * FROM card WHERE tenant_id = ? ORDER BY status = 'pending' DESC, label, created_at", (ctx.tenant_id,))
-    return {"cards": [_card_out(core, c) for c in rows]}
+    return {"cards": [_card_out(core, c) for c in rows], "prepaid": prepaid(core, ctx.tenant_id)}
+
+
+@router.post("/api/v1/cards/{card_id}/topup")
+def topup_card(card_id: str, body: TopupIn, request: Request, ctx: Ctx = Depends(require("operator"))):
+    """Guthaben aufladen (z. B. Bareinzahlung im Sekretariat) oder korrigieren. Kein Zahlungsanbieter."""
+    core = core_of(request)
+    _feature(ctx, "parking_billing")
+    c = _card(core, ctx, card_id)
+    if body.kind == "correction" and ctx.role not in ("admin", "owner"):
+        raise HTTPException(403, "forbidden")
+    try:
+        balance = parking(request).topup(c, body.amount_cents, note=body.note, actor=ctx.actor, kind=body.kind)
+    except ValueError:
+        raise HTTPException(422, "invalid_amount") from None
+    core.audit("card_" + body.kind, tenant_id=ctx.tenant_id, user_id=ctx.user["id"], actor=ctx.actor, ip=ctx.ip, target=c["id"],
+               detail={"amount_cents": body.amount_cents, "balance_cents": balance})
+    return {"balance_cents": balance, "card": _card_out(core, _card(core, ctx, card_id))}
+
+
+@router.get("/api/v1/cards/{card_id}/transactions")
+def card_transactions(card_id: str, request: Request, ctx: Ctx = Depends(require("viewer"))):
+    core = core_of(request)
+    c = _card(core, ctx, card_id)
+    return {"card": _card_out(core, c), "transactions": parking(request).transactions(c["id"])}
 
 
 @router.post("/api/v1/cards", status_code=201)
@@ -150,8 +175,13 @@ def close_session(sid: str, request: Request, ctx: Ctx = Depends(require("operat
     s = _session(core, ctx, sid)
     now = core.clock()
     amount = billing.compute_fee(s["started_at"], now, json.loads(s["tariff"]))
-    core.db.execute("UPDATE parking_session SET status = 'closed', ended_at = ?, amount_cents = ?, closed_by = ? WHERE id = ?",
-                    (now, amount, ctx.actor, s["id"]))
+    with core.db.tx() as c:
+        c.execute("UPDATE parking_session SET status = 'closed', ended_at = ?, amount_cents = ?, closed_by = ? WHERE id = ?",
+                  (now, amount, ctx.actor, s["id"]))
+        if amount and prepaid(core, ctx.tenant_id):
+            card = c.execute("SELECT * FROM card WHERE id = ?", (s["card_id"],)).fetchone()
+            parking(request).book(c, card, "fee", -amount, session_id=s["id"], note="Im Portal beendet", actor=ctx.actor,
+                                  source=s["source"])
     core.audit("session_closed", tenant_id=ctx.tenant_id, user_id=ctx.user["id"], actor=ctx.actor, ip=ctx.ip, target=s["id"])
     return parking(request).session_out(core.db.one("SELECT * FROM parking_session WHERE id = ?", (s["id"],)))
 
@@ -170,7 +200,18 @@ def cancel_session(sid: str, request: Request, ctx: Ctx = Depends(require("admin
 @router.get("/api/v1/billing/tariff")
 def get_tariff(request: Request, ctx: Ctx = Depends(require("viewer"))):
     plan = get_plan(ctx.tenant["plan"])
-    return {"tariff": billing.load_tariff(ctx.tenant["tariff"]), "enabled": plan.parking_billing}
+    return {"tariff": billing.load_tariff(ctx.tenant["tariff"]), "enabled": plan.parking_billing,
+            "payment_mode": ctx.tenant["payment_mode"]}
+
+
+@router.put("/api/v1/billing/payment-mode")
+def put_payment_mode(body: PaymentModeIn, request: Request, ctx: Ctx = Depends(require("admin"))):
+    """statement = Monatsaufstellung je Karte; prepaid = Guthaben je Karte, Gebühr wird beim Auschecken abgebucht."""
+    core = core_of(request)
+    _feature(ctx, "parking_billing")
+    core.db.execute("UPDATE tenant SET payment_mode = ? WHERE id = ?", (body.mode, ctx.tenant_id))
+    core.audit("payment_mode_updated", tenant_id=ctx.tenant_id, user_id=ctx.user["id"], actor=ctx.actor, ip=ctx.ip, detail={"mode": body.mode})
+    return {"payment_mode": body.mode}
 
 
 @router.put("/api/v1/billing/tariff")

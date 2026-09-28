@@ -12,7 +12,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS tenant (
@@ -281,6 +281,95 @@ CREATE TABLE IF NOT EXISTS snapshot (
 );
 CREATE INDEX IF NOT EXISTS idx_snapshot_station ON snapshot (station_id, taken_at);
 
+-- Reservierung: Stellplatz für X Minuten freihalten (optional nur für eine bestimmte Karte).
+CREATE TABLE IF NOT EXISTS reservation (
+    id          TEXT PRIMARY KEY,
+    tenant_id   TEXT NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+    station_id  TEXT NOT NULL REFERENCES station(id) ON DELETE CASCADE,
+    card_id     TEXT REFERENCES card(id) ON DELETE SET NULL,
+    label       TEXT NOT NULL DEFAULT '',
+    created_at  REAL NOT NULL,
+    expires_at  REAL NOT NULL,
+    ended_at    REAL,
+    status      TEXT NOT NULL DEFAULT 'active',   -- active | fulfilled | cancelled | expired
+    created_by  TEXT,
+    via         TEXT NOT NULL DEFAULT 'portal',   -- portal | api
+    source      TEXT NOT NULL DEFAULT 'live'
+);
+CREATE INDEX IF NOT EXISTS idx_reservation_station ON reservation (station_id, status, expires_at);
+
+-- Sperrzeiten (Ferien, Veranstaltungen). station_id NULL = alle Stellplätze der Organisation.
+CREATE TABLE IF NOT EXISTS closure (
+    id          TEXT PRIMARY KEY,
+    tenant_id   TEXT NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+    station_id  TEXT REFERENCES station(id) ON DELETE CASCADE,
+    starts_at   REAL NOT NULL,
+    ends_at     REAL NOT NULL,
+    note        TEXT NOT NULL DEFAULT '',
+    created_at  REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_closure_tenant ON closure (tenant_id, ends_at);
+
+-- Guthabenbuchungen je Karte (Aufladen, Parkgebühr, Korrektur). Betrag mit Vorzeichen, in Cent.
+CREATE TABLE IF NOT EXISTS card_txn (
+    id             TEXT PRIMARY KEY,
+    tenant_id      TEXT NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+    card_id        TEXT NOT NULL REFERENCES card(id) ON DELETE CASCADE,
+    at             REAL NOT NULL,
+    kind           TEXT NOT NULL,          -- topup | fee | correction
+    amount_cents   INTEGER NOT NULL,
+    balance_after  INTEGER NOT NULL,
+    session_id     TEXT,
+    note           TEXT NOT NULL DEFAULT '',
+    actor          TEXT,
+    source         TEXT NOT NULL DEFAULT 'live'
+);
+CREATE INDEX IF NOT EXISTS idx_card_txn ON card_txn (card_id, at);
+
+-- Bereits versendete Benachrichtigungen (Drosselung, keine Doppelversendung).
+CREATE TABLE IF NOT EXISTS notice_sent (
+    key   TEXT PRIMARY KEY,
+    at    REAL NOT NULL
+);
+
+-- API-Schlüssel für die Schul-IT (nur gehasht gespeichert).
+CREATE TABLE IF NOT EXISTS api_key (
+    id            TEXT PRIMARY KEY,
+    tenant_id     TEXT NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+    name          TEXT NOT NULL,
+    prefix        TEXT NOT NULL,
+    key_hash      TEXT NOT NULL UNIQUE,
+    scopes        TEXT NOT NULL,          -- JSON-Liste: read, reservations
+    created_at    REAL NOT NULL,
+    created_by    TEXT,
+    last_used_at  REAL,
+    revoked_at    REAL
+);
+
+-- Webhooks: signierte Ereignis-Meldungen an Systeme der Schule.
+CREATE TABLE IF NOT EXISTS webhook (
+    id            TEXT PRIMARY KEY,
+    tenant_id     TEXT NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+    url           TEXT NOT NULL,
+    secret_enc    BLOB NOT NULL,
+    events        TEXT NOT NULL,          -- JSON-Liste
+    active        INTEGER NOT NULL DEFAULT 1,
+    created_at    REAL NOT NULL,
+    created_by    TEXT
+);
+CREATE TABLE IF NOT EXISTS webhook_delivery (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    webhook_id   TEXT NOT NULL REFERENCES webhook(id) ON DELETE CASCADE,
+    tenant_id    TEXT NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+    event        TEXT NOT NULL,
+    at           REAL NOT NULL,
+    attempt      INTEGER NOT NULL,
+    status_code  INTEGER,
+    ok           INTEGER NOT NULL,
+    error        TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_webhook_delivery ON webhook_delivery (webhook_id, at);
+
 CREATE TABLE IF NOT EXISTS audit_log (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     tenant_id  TEXT,
@@ -316,8 +405,8 @@ class Database:
             single_stall = version == 3
             if single_stall:
                 version = 4
-            if version == 4:
-                version = 5  # nur neue Tabellen/Spalten (werden unten angelegt)
+            if version in (4, 5):
+                version = SCHEMA_VERSION  # nur neue Tabellen/Spalten (werden unten angelegt)
             if version not in (0, SCHEMA_VERSION):
                 raise RuntimeError(
                     f"Datenbank hat Schema-Version {version}, erwartet {SCHEMA_VERSION}. "
@@ -351,10 +440,14 @@ class Database:
 
     # Spalten, die nach Schema 4 dazukamen (idempotent, auch für neue Datenbanken).
     EXTRA_COLUMNS = {
-        "tenant": ["tariff TEXT"],
+        "tenant": ["tariff TEXT", "payment_mode TEXT NOT NULL DEFAULT 'statement'", "onboarding_hidden INTEGER NOT NULL DEFAULT 0"],
+        "user": ["notify TEXT", "tour_done_at REAL"],
+        "card": ["balance_cents INTEGER NOT NULL DEFAULT 0"],
+        "device": ["offline_notified_at REAL"],
+        "nfc_tap": ["balance_cents INTEGER"],
         "station": ["tariff TEXT", "camera_enabled INTEGER NOT NULL DEFAULT 0", "camera_retention_h INTEGER NOT NULL DEFAULT 24",
                     "camera_approved_by TEXT", "stall_token_hash TEXT", "stall_view_enabled INTEGER NOT NULL DEFAULT 0",
-                    "maintenance INTEGER NOT NULL DEFAULT 0"],
+                    "maintenance INTEGER NOT NULL DEFAULT 0", "hours TEXT", "demo_sim INTEGER NOT NULL DEFAULT 0"],
     }
 
     def _ensure_columns(self) -> None:
