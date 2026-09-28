@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex">
+  <title>Smart Bicycle Box</title>
+  <link rel="icon" href="/static/img/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/css/fonts.css">
+  <link rel="stylesheet" href="/static/css/tokens.css">
+  <link rel="stylesheet" href="/static/css/components.css">
+  <link rel="stylesheet" href="/static/css/stall.css">
+  <script src="/static/js/stall.js" defer></script>
+</head>
+<body class="sbb-root">
+  <header class="bar">
+    <span class="brand"><svg viewBox="0 0 48 48" aria-hidden="true" focusable="false"><path d="M6 42V12h36v30" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><rect x="14" y="14" width="20" height="8" rx="1" fill="currentColor"/><circle cx="16" cy="35" r="5" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="32" cy="35" r="5" fill="none" stroke="currentColor" stroke-width="3"/><path d="M16 35l5-8h7l4 8" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>Smart Bicycle Box</span>
+    <nav class="lang" aria-label="Sprache / Taal / Language">
+      <button type="button" data-lang="de" lang="de">DE</button>
+      <button type="button" data-lang="nl" lang="nl">NL</button>
+      <button type="button" data-lang="en" lang="en">EN</button>
+    </nav>
+  </header>
+  <main id="main">
+    <h1 id="name">…</h1>
+    <p id="location" class="muted"></p>
+    <p id="invalid" class="note err" hidden data-i18n="invalid"></p>
+    <p id="maint" class="note maint" hidden data-i18n="maintenance"></p>
+    <div id="status" class="sbb-status" data-state="unknown">
+      <span id="status-icon" aria-hidden="true"></span>
+      <div><p class="sbb-status__word" id="word">STATUS UNBEKANNT</p><p class="sbb-status__sub" id="sub"></p></div>
+      <span id="sim" class="sbb-status__corner sbb-tag sbb-tag--demo" hidden data-i18n="simulated"></span>
+    </div>
+    <p id="live" class="sbb-vh" aria-live="polite"></p>
+    <p id="tap" class="note tap" hidden role="status"></p>
+    <p id="session" class="note session" hidden></p>
+    <p id="alert" class="note warn" hidden></p>
+
+    <section id="howto" aria-labelledby="howto-h" hidden>
+      <h2 id="howto-h" data-i18n="howto"></h2>
+      <ol class="steps">
+        <li data-i18n="step1"></li>
+        <li data-i18n="step2"></li>
+        <li data-i18n="step3"></li>
+      </ol>
+    </section>
+
+    <section aria-labelledby="price-h">
+      <h2 id="price-h" data-i18n="prices"></h2>
+      <p id="price" class="price"></p>
+      <p class="muted small" data-i18n="price_hint"></p>
+    </section>
+
+    <p id="camera" class="note cam" hidden data-i18n="camera"></p>
+
+    <section aria-labelledby="report-h">
+      <h2 id="report-h" data-i18n="report"></h2>
+      <form id="report-form">
+        <fieldset class="sbb-seg">
+          <legend data-i18n="report_what"></legend>
+          <input type="radio" name="cat" id="c1" value="damaged" checked><label for="c1" data-i18n="cat_damaged"></label>
+          <input type="radio" name="cat" id="c2" value="blocked"><label for="c2" data-i18n="cat_blocked"></label>
+          <input type="radio" name="cat" id="c3" value="wrong_status"><label for="c3" data-i18n="cat_wrong_status"></label>
+          <input type="radio" name="cat" id="c4" value="other"><label for="c4" data-i18n="cat_other"></label>
+        </fieldset>
+        <label for="report-text" class="lbl" data-i18n="report_text"></label>
+        <textarea id="report-text" maxlength="300" rows="3"></textarea>
+        <p class="muted small" data-i18n="report_privacy"></p>
+        <button class="sbb-btn sbb-btn--primary" type="submit" data-i18n="send"></button>
+        <p id="report-result" class="note" hidden role="status"></p>
+      </form>
+    </section>
+  </main>
+  <footer class="muted small"><p data-i18n="privacy"></p></footer>
+</body>
+</html>

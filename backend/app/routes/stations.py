@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from ..core import Ctx, client_ip, core_of, limit, require
 from ..plans import get_plan
-from ..schemas import DeviceIn, MeasurementBatchIn, MeasurementIn, StationIn, StationPatch
+from ..schemas import DeviceIn, MeasurementBatchIn, MeasurementIn, ReportIn, StationIn, StationPatch
 from ..security import hash_token, new_id, new_token
 from ..service import STALL_KEY, Monitoring, UnknownSlotError, iso
 
@@ -102,6 +102,7 @@ def delete_station(station_id: str, request: Request, ctx: Ctx = Depends(require
     core = core_of(request)
     st = _station(core, ctx, station_id)
     core.db.execute("DELETE FROM station WHERE id = ?", (st["id"],))
+    request.app.state.snapshots.purge()  # Kamerabilder der Station sofort auch von der Platte
     core.audit("station_deleted", tenant_id=ctx.tenant_id, user_id=ctx.user["id"], actor=ctx.actor, ip=ctx.ip, target=st["id"],
                detail={"name": st["name"]})
     return {"status": "deleted"}
@@ -191,6 +192,57 @@ def rotate_display_link(station_id: str, request: Request, ctx: Ctx = Depends(re
     return {"url": f"{core.s.base_url}/display#{token}", "token": token}
 
 
+@router.post("/api/v1/stations/{station_id}/stall-link")
+def rotate_stall_link(station_id: str, request: Request, ctx: Ctx = Depends(require("admin"))):
+    """Öffentlicher Link für die Person am Stellplatz (QR-Code/NFC-Aufkleber). Ersetzt einen alten Link."""
+    core = core_of(request)
+    st = _station(core, ctx, station_id)
+    if not get_plan(ctx.tenant["plan"]).stall_view:
+        raise HTTPException(402, {"code": "plan_feature", "feature": "stall_view"})
+    token = new_token("bss_")
+    core.db.execute("UPDATE station SET stall_token_hash = ?, stall_view_enabled = 1 WHERE id = ?", (hash_token(token), st["id"]))
+    core.audit("stall_link_rotated", tenant_id=ctx.tenant_id, user_id=ctx.user["id"], actor=ctx.actor, ip=ctx.ip, target=st["id"])
+    return {"url": f"{core.s.base_url}/s#{token}", "token": token}
+
+
+def _stall_station(request: Request):
+    core = core_of(request)
+    token = request.headers.get("x-stall-token", "")
+    if not token or len(token) > 200:
+        raise HTTPException(404, "not_found")
+    st = core.db.one(
+        "SELECT st.* FROM station st JOIN tenant t ON t.id = st.tenant_id "
+        "WHERE st.stall_token_hash = ? AND st.stall_view_enabled = 1 AND t.status = 'active'", (hash_token(token),))
+    if st is None:
+        raise HTTPException(404, "not_found")
+    return st
+
+
+@router.get("/api/v1/public/stall/status", dependencies=[read_limit])
+def public_stall(request: Request):
+    """Ansicht für die Person am Stellplatz: Zustand, Preise, Hinweise – ohne Karten- oder Personendaten."""
+    from ..parking import tariff_for
+
+    core = core_of(request)
+    st = _stall_station(request)
+    plan = get_plan(core.db.scalar("SELECT plan FROM tenant WHERE id = ?", (st["tenant_id"],)))
+    body = mon(request).status(st, public=True)
+    body.update(tariff=tariff_for(core, st), nfc=plan.nfc, reports=True)
+    return body
+
+
+@router.post("/api/v1/public/stall/report", status_code=202)
+def public_report(body: ReportIn, request: Request):
+    core = core_of(request)
+    if not core.report_limiter.allow(f"rep:{client_ip(request)}"):
+        raise HTTPException(429, "rate_limited", headers={"Retry-After": "600"})
+    st = _stall_station(request)
+    m = mon(request)
+    m._create_event(st, m.stall(st["id"]), "user_report", "warning", None, core.clock(), "live",
+                    json.dumps({"category": body.category, "text": body.text}))
+    return {"status": "received"}
+
+
 # ---------------------------------------------------------------------- Öffentliche Anzeige
 @router.get("/api/v1/public/display/status", dependencies=[read_limit])
 def public_status(request: Request):
@@ -261,6 +313,7 @@ def post_measurement(m: MeasurementIn, request: Request, dev=Depends(require_dev
 @router.post("/api/v1/measurements/batch", status_code=202)
 def post_batch(batch: MeasurementBatchIn, request: Request, dev=Depends(require_device)):
     stored = duplicate = rejected = 0
+    capture_event = None
     for m in batch.measurements:
         if m.station_id != dev["station_id"]:
             rejected += 1
@@ -272,4 +325,11 @@ def post_batch(batch: MeasurementBatchIn, request: Request, dev=Depends(require_
             continue
         stored += r.stored
         duplicate += r.duplicate
-    return {"stored": stored, "duplicate": duplicate, "rejected": rejected}
+        if r.alert_created:
+            capture_event = r.event_id
+    out = {"stored": stored, "duplicate": duplicate, "rejected": rejected}
+    if capture_event:
+        st = core_of(request).db.one("SELECT camera_enabled FROM station WHERE id = ?", (dev["station_id"],))
+        if st and st["camera_enabled"]:
+            out.update(capture=True, event_id=capture_event)  # Gateway nimmt ein Einzelbild auf
+    return out

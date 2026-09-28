@@ -19,3 +19,4 @@ ml/data/*.csv
 # Entwicklung
 backend/.dev-demo.env
 *.datakey
+backend/snapshots/

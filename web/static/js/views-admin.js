@@ -305,7 +305,7 @@ export function viewBilling(rerender) {
         catch (e) { toast(describeError(e), "error"); }
       } }, t("bill.choose")) : null })));
   }).catch((e) => clear(plans, errorCard(e)));
-  return el("div", {}, el("div", { class: "grid cols-2" }, el("section", { class: "card" }, el("h2", {}, t("bill.current")), planCard(p, { current: true })), usage),
+  return el("div", { class: "page-stack" }, el("div", { class: "grid cols-2" }, el("section", { class: "card" }, el("h2", {}, t("bill.current")), planCard(p, { current: true })), usage),
     licenseCard(),
     el("h2", {}, t("l.pricing")), plans, el("p", { class: "small muted" }, t("bill.note")));
 }

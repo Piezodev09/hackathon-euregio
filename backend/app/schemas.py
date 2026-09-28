@@ -236,3 +236,10 @@ class InvoicePatch(Strict):
 class ReportIn(Strict):
     category: Literal["damaged", "blocked", "wrong_status", "other"]
     text: Annotated[str, Field(max_length=300), AfterValidator(_text)] = ""
+
+
+class CameraIn(Strict):
+    enabled: bool
+    retention_h: int = Field(default=24, ge=1, le=72)
+    # Wer die Kamera genehmigt hat (z. B. "Schulleitung, 28.09.2026") – Pflicht beim Einschalten.
+    approved_by: ShortText | None = None

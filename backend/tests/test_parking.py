@@ -168,10 +168,16 @@ def test_license_invoice_per_stall_day(env):
     assert lic["license"]["trial"] is True and lic["license"]["price_per_stall_day_cents"] == 20
     month = lic["current"]["month"]
     tid = owner.me().json()["tenant"]["id"]
-    env.core.db.execute("INSERT INTO usage_day (tenant_id, day, stalls) VALUES (?,?,?)", (tid, f"{month}-01", 5))
+    today = billing.day_str(env.clock())
+    env.core.db.execute("INSERT INTO usage_day (tenant_id, day, stalls) VALUES (?,?,?)", (tid, today, 5))
     p = owner.get("/api/v1/org/license").json()["current"]
-    assert p["stall_days"] >= 5 and p["total_cents"] == 900 + p["stall_days"] * 20
+    # Testphase ist kostenlos: keine Stellplatz-Tage, keine Grundgebühr
+    assert p["trial_until"] and p["stall_days"] == 0 and p["total_cents"] == 0 and p["lines"] == []
     ops = platform_admin(env)
+    # Vertrag ab heute (beendet die Testphase) -> Stellplatz-Tage des Monats werden abgerechnet
+    assert ops.put(f"/api/v1/platform/tenants/{tid}/license", {"valid_until": "2027-07-31"}).status_code == 200
+    p = owner.get("/api/v1/org/license").json()["current"]
+    assert p["trial_until"] is None and p["stall_days"] == 5 and p["total_cents"] == 900 + 5 * 20
     r = ops.get(f"/api/v1/platform/invoices?month={month}")
     assert r.status_code == 200, r.text
     row = [x for x in r.json()["rows"] if x["tenant_id"] == tid][0]

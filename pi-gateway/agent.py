@@ -42,6 +42,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
+from camera import Camera  # noqa: E402
 from gateway import Gateway, GatewayConfig, serial_lines  # noqa: E402
 
 VERSION = (HERE / "VERSION").read_text().strip() if (HERE / "VERSION").exists() else "0.0.0"
@@ -130,6 +131,16 @@ class Api:
             except Exception:
                 detail = None
             return e.code, {"detail": detail}
+
+    def upload(self, path: str, data: bytes, token: str, content_type: str = "image/jpeg") -> tuple[int, dict]:
+        url = self.base + path
+        req = urllib.request.Request(url, data=data, method="POST", headers={
+            "Content-Type": content_type, "Authorization": f"Bearer {token}", "User-Agent": f"bike-agent/{VERSION}"})
+        try:
+            with urllib.request.urlopen(req, timeout=max(self.timeout, 30), context=self.ctx if url.startswith("https") else None) as r:
+                return r.status, json.loads(r.read(65536) or b"{}")
+        except urllib.error.HTTPError as e:
+            return e.code, {}
 
 
 # ---------------------------------------------------------------------- Systeminfos
@@ -355,6 +366,10 @@ class Agent:
             state_dir=state.dir, source="simulated" if s.get("source") == "simulator" else "live",
         )
         self.gw = Gateway(self.cfg)
+        self.camera = Camera(simulated=s.get("source") == "simulator")
+        self.gw.uplink.on_response = self.on_uplink_response
+        self._last_capture = 0.0
+        self._capture_lock = threading.Lock()
 
     # ---- Steuerkanal
     def heartbeat_once(self) -> dict | None:
@@ -364,6 +379,7 @@ class Agent:
             "agent_version": VERSION, "hostname": safe_hostname(), "os_info": os_info(), "source": self.state.get("source", "serial"),
             "uptime_s": int(time.monotonic() - self.started), "serial_connected": serial_ok, "buffer_len": len(g.uplink.buffer),
             "api_online": g.uplink.online, "last_error": self.last_error[:300], "config_version": self.state.get("config_version", 0),
+            "camera": self.camera.kind,
             **system_health(),
         }
         status, resp = self.api.request("POST", "/api/v1/agent/heartbeat", body, token=self.cfg.token)
@@ -390,6 +406,8 @@ class Agent:
                 self.stop.set()
             elif cmd == "rotate_token":
                 self.rotate_token()
+            elif cmd == "snapshot":
+                threading.Thread(target=self.capture_and_upload, args=("manual",), daemon=True).start()
             else:
                 log.warning("Unbekannter Befehl ignoriert: %r", cmd)
         if self.clock() - self.state.get("token_issued_at", self.clock()) > TOKEN_MAX_AGE_S:
@@ -403,6 +421,25 @@ class Agent:
             except AgentError as exc:
                 self.last_error = str(exc)
                 log.error("Update fehlgeschlagen: %s", exc)
+
+    # ---- Kamera (nur wenn im Portal freigegeben; die Plattform lehnt sonst ab)
+    def on_uplink_response(self, resp: dict) -> None:
+        if resp.get("capture"):
+            threading.Thread(target=self.capture_and_upload, args=("alert", resp.get("event_id")), daemon=True).start()
+
+    def capture_and_upload(self, reason: str, event_id: str | None = None) -> int:
+        with self._capture_lock:
+            if time.monotonic() - self._last_capture < 10:
+                return 0  # höchstens ein Bild alle 10 s
+            self._last_capture = time.monotonic()
+            data = self.camera.capture()
+            if not data:
+                log.warning("Kein Kamerabild (%s)", self.camera.kind)
+                return 0
+            q = f"?reason={reason}" + (f"&event_id={event_id}" if event_id else "")
+            status, _ = self.api.upload(f"/api/v1/agent/snapshot{q}", data, self.cfg.token)
+            log.info("Kamerabild (%s, %d kB) hochgeladen: HTTP %s", reason, len(data) // 1024, status)
+            return status
 
     def rotate_token(self) -> bool:
         status, resp = self.api.request("POST", "/api/v1/agent/rotate-token", {}, token=self.cfg.token)
@@ -454,6 +491,67 @@ class Agent:
         return self.exit_code
 
 
+# ---------------------------------------------------------------------- Diagnose
+def doctor(state: State, out=print) -> int:
+    """Prüft die typischen Fehlerquellen vor Ort und gibt eine verständliche Liste aus. Rückgabe: Anzahl Fehler."""
+    errors = 0
+
+    def line(ok: bool | None, text: str, hint: str = "") -> None:
+        nonlocal errors
+        mark = "✓" if ok else ("–" if ok is None else "✗")
+        errors += ok is False
+        out(f" {mark} {text}" + (f"\n     → {hint}" if hint and ok is False else ""))
+
+    out(f"Smart Bicycle Box – Diagnose (Agent {VERSION})")
+    line(sys.version_info >= (3, 11), f"Python {platform.python_version()}", "Raspberry Pi OS Bookworm oder neuer verwenden")
+    try:
+        state.load()
+        line(True, f"Gekoppelt mit Station {state['station_id']} ({state.get('station_name')})")
+    except AgentError as exc:
+        line(False, "Nicht gekoppelt", f"sudo sh agent.sh --code … ({exc})")
+        return errors
+    src = state.get("source", "serial")
+    if src == "serial":
+        try:
+            import serial  # noqa: F401
+            line(True, "pyserial installiert")
+        except ImportError:
+            line(False, "pyserial fehlt", "sudo apt install python3-serial")
+        ports = sorted(str(p) for pat in ("ttyACM*", "ttyUSB*") for p in Path("/dev").glob(pat))
+        port = state.get("serial_port", "")
+        line(bool(ports), f"Serielle Ports: {', '.join(ports) or 'keine'}", "Arduino per USB anschließen, Kabel mit Datenleitung verwenden")
+        if ports:
+            line(port in ports, f"Konfigurierter Port {port}", f"neu koppeln mit --serial-port {ports[0]}")
+    else:
+        line(None, "Datenquelle: Simulator (keine Hardware)")
+    cam = Camera(simulated=src == "simulator")
+    line(None if cam.kind == "none" else True, f"Kamera: {cam.kind}",
+         "optional – nur nötig, wenn die Kamera im Portal freigegeben ist")
+    ca = state.get("ca_file")
+    if ca:
+        line(Path(ca).is_file(), f"Plattform-Zertifikat {ca}", "Datei fehlt – neu koppeln")
+    try:
+        api = Api(state["api_url"], ca, state.get("allow_http", False), timeout=8)
+        t0 = time.time()
+        status, _ = api.request("GET", "/health")
+        line(status == 200, f"Plattform erreichbar: {state['api_url']} ({int((time.time() - t0) * 1000)} ms)", f"HTTP {status}")
+        status, who = api.request("GET", "/api/v1/agent/whoami", token=state["token"])
+        line(status == 200, f"Geräte-Token gültig (Stellplatz: {who.get('station_name', '?')})", "Gerät im Portal gesperrt? Neu koppeln")
+        if status == 200 and isinstance(who.get("server_time"), (int, float)):
+            skew = time.time() - who["server_time"]
+            line(abs(skew) <= 5, f"Uhrzeit weicht {skew:+.1f} s von der Plattform ab",
+                 "Zeitsynchronisation prüfen: timedatectl (NTP aktiv?) – sonst erscheinen Messungen als veraltet")
+    except (urllib.error.URLError, OSError, AgentError) as exc:
+        reason = getattr(exc, "reason", exc)  # urllib verpackt TLS-Fehler in URLError
+        if isinstance(reason, ssl.SSLError):
+            line(False, f"TLS-Fehler: {reason}",
+                 "Zertifikat geändert oder IP fehlt im Zertifikat → Befehle im Portal neu anzeigen und neu koppeln")
+        else:
+            line(False, f"Plattform nicht erreichbar: {exc}", "Netzwerk, Firewall (Port) und Adresse prüfen")
+    out("Fertig: " + ("keine Fehler." if not errors else f"{errors} Problem(e) gefunden."))
+    return errors
+
+
 # ---------------------------------------------------------------------- CLI
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Agent der Smart Bicycle Box")
@@ -472,6 +570,7 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("status", help="Zustand anzeigen (ohne Geheimnisse)")
     sub.add_parser("rollback", help="Auf die vorherige Version zurückschalten")
     sub.add_parser("version")
+    sub.add_parser("doctor", help="Diagnose: Kopplung, Arduino, Kamera, Plattform, Zertifikat")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -500,6 +599,8 @@ def main(argv: list[str] | None = None) -> int:
                 raise AgentError("keine vorherige Version vorhanden")
             switch_current(prefix, others[0])
             print(f"Zurückgeschaltet auf {others[0].name}. Neustart: sudo systemctl restart bike-agent")
+        elif args.cmd == "doctor":
+            return 1 if doctor(state) else 0
         elif args.cmd == "run":
             state.load()
             check_rollback(state.dir)

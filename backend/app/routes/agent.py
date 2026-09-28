@@ -25,7 +25,7 @@ HEARTBEAT_S = 60
 ONLINE_WITHIN_S = 3 * HEARTBEAT_S
 PREV_TOKEN_GRACE_S = 15 * 60
 MAX_DEVICES_PER_STATION = 5
-COMMANDS = ("restart", "rotate_token", "update")
+COMMANDS = ("restart", "rotate_token", "update", "snapshot")
 
 
 def new_code() -> str:
@@ -272,6 +272,15 @@ class HeartbeatIn(Strict):
     disk_free_mb: int | None = Field(default=None, ge=0, le=10**8)
     last_error: str = Field(default="", max_length=300)
     config_version: int = Field(default=0, ge=0)
+    camera: str = Field(default="", max_length=20, pattern=r"^[a-z-]*$")
+
+
+@router.get("/api/v1/agent/whoami")
+def whoami(request: Request, dev=Depends(require_device)):
+    """Nebenwirkungsfreie Prüfung des Geräte-Tokens (für `agent.py doctor`)."""
+    core = core_of(request)
+    st = core.db.one("SELECT id, name FROM station WHERE id = ?", (dev["station_id"],))
+    return {"device_id": dev["id"], "station_id": st["id"], "station_name": st["name"], "server_time": core.clock()}
 
 
 @router.post("/api/v1/agent/heartbeat")

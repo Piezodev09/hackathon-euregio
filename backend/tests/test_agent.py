@@ -161,7 +161,7 @@ def test_install_script_and_bundle(env):
     assert hashlib.sha256(tgz.content).hexdigest() == b.sha256 == tgz.headers["x-content-sha256"]
     with tarfile.open(fileobj=io.BytesIO(tgz.content), mode="r:gz") as tar:
         names = sorted(m.name for m in tar.getmembers())
-        assert names == ["VERSION", "agent.py", "gateway.py", "simulator.py"]
+        assert names == ["VERSION", "agent.py", "camera.py", "gateway.py", "sim-camera.jpg", "simulator.py"]
         assert all(m.isfile() and m.mtime == 0 for m in tar.getmembers())
     assert b.sha256 in anon.get("/install/agent.sha256").text
     # Reproduzierbar
@@ -252,3 +252,11 @@ def test_pinned_install_commands_for_self_signed_cert(env, tmp_path):
 
 def test_no_cert_endpoint_without_tls(env):
     assert env.client().get("/install/server.crt").status_code == 404
+
+
+def test_whoami_checks_token_without_side_effects(env):
+    owner, sid = setup_station(env)
+    token = owner.post(f"/api/v1/stations/{sid}/devices", {"name": "Pi"}).json()["token"]
+    r = env.client().c.get("/api/v1/agent/whoami", headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 200 and r.json()["station_id"] == sid and r.json()["server_time"] == env.clock()
+    assert env.client().c.get("/api/v1/agent/whoami", headers={"Authorization": "Bearer bsd_falsch_falsch"}).status_code == 401

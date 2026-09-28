@@ -112,6 +112,20 @@
       document.getElementById("live").textContent = `${t(state)}. ${sub}`;
     }
     document.getElementById("simulated").hidden = !(last && last.simulated_data);
+    document.getElementById("maint").hidden = !(last && last.maintenance && !connLost);
+    document.getElementById("camera").hidden = !(last && last.camera_active);
+    const eur = (c) => new Intl.NumberFormat(lang, { style: "currency", currency: "EUR" }).format((c || 0) / 100);
+    const tap = !connLost && last && last.last_tap;
+    const tapEl = document.getElementById("tap");
+    tapEl.hidden = !tap || !window.I18N.de["tap_" + tap.result];
+    if (tap && !tapEl.hidden) {
+      tapEl.textContent = t("tap_" + tap.result, eur(tap.amount_cents));
+      tapEl.dataset.ok = String(tap.result === "checked_in" || tap.result === "checked_out");
+    }
+    const ses = !connLost && last && last.session;
+    const sesEl = document.getElementById("session");
+    sesEl.hidden = !ses || !!tap;
+    if (ses) sesEl.textContent = t("session", new Date(ses.started_at).toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" }), eur(ses.amount_cents));
     document.getElementById("updated").textContent = t("updated", fmtTime(last && last.last_update));
 
     const a = !connLost && last && last.alert;

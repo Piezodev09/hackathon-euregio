@@ -1,0 +1,27 @@
+/* Ansicht für die Person am Stellplatz (Handy, per QR-Code/NFC-Aufkleber). */
+body { max-width: 640px; margin: 0 auto; padding: 0 16px 48px; }
+.bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.brand { display: inline-flex; gap: 10px; align-items: center; font-weight: 700; }
+.brand svg { width: 32px; height: 32px; color: var(--petrol); }
+.lang { display: flex; gap: 6px; }
+.lang button { font: inherit; font-size: 15px; font-weight: 700; min-height: 44px; min-width: 48px; border-radius: var(--radius-md);
+  border: 2px solid var(--line-strong); background: var(--surface-raised); color: var(--ink); cursor: pointer; }
+.lang button[aria-pressed=true] { background: var(--ink); color: var(--surface-raised); border-color: var(--ink); }
+h1 { font-size: 28px; line-height: 1.2; margin: 24px 0 4px; }
+h2 { font-size: 22px; margin: 32px 0 8px; }
+.muted { color: var(--ink-muted); }
+.small { font-size: 16px; }
+.note { padding: 12px 16px; border-radius: var(--radius-md); border: 2px solid var(--line-strong); font-weight: 700; margin: 12px 0; }
+.note.err { border-color: var(--danger-ink); color: var(--danger-ink); }
+.note.maint { border: 3px solid var(--ink); background: var(--surface-sunken); }
+.note.tap, .note.session { border-color: var(--petrol); background: var(--petrol-soft); color: var(--ink); }
+.note.warn { border-color: var(--warn-line); background: var(--warn-bg); color: var(--warn-ink); }
+.note.cam { border-style: dashed; border-color: var(--warn-line); color: var(--warn-ink); background: var(--warn-bg); font-weight: 400; }
+.sbb-status { margin-top: 16px; }
+.steps { padding-left: 1.4em; display: grid; gap: 8px; }
+.price { font-size: 22px; font-weight: 700; margin: 0; }
+form { display: grid; gap: 12px; }
+.lbl { font-weight: 700; }
+textarea { font: inherit; font-size: 18px; padding: 10px 12px; border: 2px solid var(--line-strong); border-radius: var(--radius-md);
+  background: var(--surface-raised); color: var(--ink); width: 100%; }
+footer { margin-top: 40px; border-top: 1px solid var(--line); padding-top: 12px; }
