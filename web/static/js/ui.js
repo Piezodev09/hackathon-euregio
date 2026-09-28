@@ -122,6 +122,14 @@ const ICONS = {
   card: `<svg ${NS}><rect x="5" y="11" width="38" height="26" rx="4" fill="none" stroke="currentColor" stroke-width="4"/><path d="M31 20a6 6 0 0 1 0 8M35 17a10 10 0 0 1 0 14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M11 30h12" stroke="currentColor" stroke-width="4" stroke-linecap="round"/></svg>`,
   camera: `<svg ${NS}><path d="M6 16h8l4-6h12l4 6h8v24H6Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><circle cx="24" cy="27" r="7" fill="none" stroke="currentColor" stroke-width="4"/></svg>`,
   wrench: `<svg ${NS}><path d="M30 6a10 10 0 0 0-9 14L7 34a4 4 0 0 0 6 6l14-14a10 10 0 0 0 14-9l-6 6-6-2-2-6Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/></svg>`,
+  reserved: `<svg ${NS}><circle cx="24" cy="27" r="16" fill="none" stroke="currentColor" stroke-width="4"/><path d="M24 18v9l6 5" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M18 5h12M24 5v6" stroke="currentColor" stroke-width="4" stroke-linecap="round"/></svg>`,
+  lock: `<svg ${NS}><rect x="10" y="21" width="28" height="21" rx="3" fill="none" stroke="currentColor" stroke-width="4"/><path d="M16 21v-5a8 8 0 0 1 16 0v5" fill="none" stroke="currentColor" stroke-width="4"/><circle cx="24" cy="31" r="3" fill="currentColor"/></svg>`,
+  bell: `<svg ${NS}><path d="M12 34V22a12 12 0 0 1 24 0v12l4 4H8Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M20 42a4 4 0 0 0 8 0" fill="none" stroke="currentColor" stroke-width="4"/></svg>`,
+  report: `<svg ${NS}><path d="M10 6h20l8 8v28H10Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M17 34v-6M24 34V22M31 34v-9" stroke="currentColor" stroke-width="4" stroke-linecap="round"/></svg>`,
+  plug: `<svg ${NS}><path d="M18 6v10M30 6v10M12 16h24v8a12 12 0 0 1-24 0Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/><path d="M24 36v8" stroke="currentColor" stroke-width="4" stroke-linecap="round"/></svg>`,
+  wallet: `<svg ${NS}><rect x="5" y="12" width="38" height="28" rx="4" fill="none" stroke="currentColor" stroke-width="4"/><path d="M5 18h33M31 29h6" stroke="currentColor" stroke-width="4" stroke-linecap="round"/></svg>`,
+  help: `<svg ${NS}><circle cx="24" cy="24" r="19" fill="none" stroke="currentColor" stroke-width="4"/><path d="M18.5 19a5.5 5.5 0 1 1 7.7 5c-1.4.7-2.2 1.8-2.2 3.2v1.3" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><circle cx="24" cy="35" r="2.6" fill="currentColor"/></svg>`,
+  play: `<svg ${NS}><circle cx="24" cy="24" r="19" fill="none" stroke="currentColor" stroke-width="4"/><path d="M20 16l12 8-12 8Z" fill="currentColor"/></svg>`,
   logo: `<svg ${NS}><path d="M6 42V12h36v30" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><rect x="14" y="14" width="20" height="8" rx="1" fill="currentColor"/><circle cx="16" cy="35" r="5" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="32" cy="35" r="5" fill="none" stroke="currentColor" stroke-width="3"/><path d="M16 35l5-8h7l4 8" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>`,
 };
 const parser = new DOMParser();
@@ -141,6 +149,20 @@ export function effectiveState(status, connLost) {
   return { state: status.state, reason: status.state === "unknown" ? status.unknown_reason || "no_data" : null };
 }
 
+// Restzeit einer Reservierung (lokal weitergezählt zwischen zwei Abfragen)
+export function remainingMin(reservation) {
+  if (!reservation) return 0;
+  return Math.max(1, Math.ceil((new Date(reservation.until) - Date.now()) / 60000));
+}
+
+// "Geschlossen"-Hinweis: Öffnungszeiten oder Sperrzeit (Ferien …)
+export function closedText(closed) {
+  if (!closed) return "";
+  const when = closed.opens_at ? new Date(closed.opens_at).toLocaleString(getLang(), { weekday: "short", hour: "2-digit", minute: "2-digit" }) : null;
+  const base = closed.reason === "closure" ? t("st.closed_closure", { note: closed.note || t("st.closure_default") }) : t("st.closed_hours");
+  return when ? `${base} ${t("st.opens_at", { t: when })}` : base;
+}
+
 export function reasonText(reason, staleAfterS = 30) {
   return t("st.r_" + reason, { s: staleAfterS });
 }
@@ -148,7 +170,8 @@ export function reasonText(reason, staleAfterS = 30) {
 // Große Status-Karte (Wort + Symbol + Farbe + bei UNBEKANNT Schraffur).
 export function stallStatus(status, { connLost = false, simulated = false } = {}) {
   const { state, reason } = effectiveState(status, connLost);
-  const sub = state === "unknown" ? reasonText(reason, status?.stale_after_s) : t("st.sub_" + state);
+  const sub = state === "unknown" ? reasonText(reason, status?.stale_after_s)
+    : state === "reserved" ? t("st.sub_reserved", { m: remainingMin(status.reservation) }) : t("st.sub_" + state);
   return el("div", { class: "sbb-status", "data-state": state },
     icon(state, "sbb-status__icon"),
     el("div", {}, el("p", { class: "sbb-status__word" }, t("st." + state)), el("p", { class: "sbb-status__sub" }, sub)),

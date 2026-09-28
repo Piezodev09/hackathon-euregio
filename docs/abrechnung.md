@@ -35,7 +35,15 @@ Beispiele (mit `backend/app/billing.py::compute_fee` nachgerechnet):
 | 0,20 € je Stunde, 30 Freiminuten, max. 1,00 €/Tag | Mo 07:40–09:40 | 0,40 € |
 | 0,20 € je Stunde, 30 Freiminuten, max. 1,00 €/Tag | Mo 07:40–13:10 | 1,00 € (Höchstbetrag) |
 
-**Monatsaufstellung** (Portal → Parkgebühren): Summe je Karte und Monat, CSV-Export, Status offen/bezahlt.
+Zwei Zahlungsarten (Portal → Parkgebühren → „Abrechnung für Radfahrende“, jederzeit umstellbar):
+
+- **Monatsaufstellung** – Gebühren werden je Karte gesammelt: Summe je Karte und Monat, CSV-Export, Status offen/bezahlt.
+- **Guthaben (Prepaid)** – Karten werden vorab aufgeladen (Portal → Karten → *Aufladen*, z. B. nach Bareinzahlung im
+  Sekretariat; Betreuer dürfen aufladen, Admins auch korrigieren). Beim Auschecken wird die Gebühr abgebucht; Display und
+  Stellplatz-Ansicht zeigen den neuen Stand. Ohne positives Guthaben ist kein Check-in möglich (`insufficient_balance`),
+  Auschecken geht immer (Guthaben kann dabei ins Minus gehen). Jede Buchung steht unter *Buchungen* der Karte.
+
+Die Monatsaufstellung:
 Enthält der Monat simulierte Vorgänge, ist die Aufstellung als **SIMULATION / DEMODATEN** gekennzeichnet.
 
 Sonderfälle:
@@ -46,7 +54,10 @@ Sonderfälle:
 | gesperrte Karte | abgelehnt |
 | anderes Fahrrad ist bereits eingecheckt | abgelehnt (`occupied_by_other`) |
 | Karte ist an einem anderen Stellplatz eingecheckt | abgelehnt (`open_elsewhere`) |
-| Wartungsmodus | abgelehnt, Display zeigt „AUSSER BETRIEB“ |
+| Wartungsmodus | abgelehnt, Display zeigt „AUSSER BETRIEB“; keine Warnungen |
+| außerhalb der Öffnungszeiten / Sperrzeit | Check-in abgelehnt (`closed`), Auschecken geht |
+| Platz für eine andere Karte reserviert oder freigehalten | abgelehnt (`reserved`); die reservierte Karte erfüllt die Reservierung beim Einchecken |
+| Guthaben-Modus ohne Guthaben | abgelehnt (`insufficient_balance`) |
 | Plattform > 60 s nicht erreichbar | Vorgang wird verworfen statt verspätet gebucht |
 | vergessenes Auschecken | Betreuer beenden den Vorgang im Portal (mit Gebühr) oder Admins stornieren ihn (ohne Gebühr) |
 
@@ -87,6 +98,6 @@ Regeln:
 
 ## Noch nicht enthalten
 
-Online-Zahlung (z. B. SEPA-Lastschrift oder Karte), Mahnwesen, Umsatzsteuer-Ausweis auf der Rechnung,
-PDF-Rechnungen und Guthabenkonten je Karte (Vorschlag 12). Vor dem echten Einsatz ist außerdem zu klären,
+Online-Zahlung (z. B. SEPA-Lastschrift oder Karte, auch zum Aufladen des Guthabens), Mahnwesen,
+Umsatzsteuer-Ausweis auf der Rechnung und PDF-Rechnungen. Vor dem echten Einsatz ist außerdem zu klären,
 ob die Schule überhaupt Gebühren erheben darf (Schulträger) und wie diese steuerlich zu behandeln sind.

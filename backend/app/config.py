@@ -37,6 +37,8 @@ class Settings:
     verify_token_s: float
     reset_token_s: float
     invite_token_s: float
+    # Ohne Bestätigung sofort loslegen (Standard). true = erst nach Klick auf den Link anmelden.
+    require_email_verification: bool
     # mail
     mail_backend: str
     mail_from: str
@@ -62,6 +64,10 @@ class Settings:
     device_burst: int = 60
     auth_per_minute: int = 10
     trust_proxy: bool = False
+    # Webhooks an Adressen im privaten Netz (z. B. Schul-App im LAN). Loopback/Link-Local bleiben immer gesperrt.
+    webhooks_allow_private: bool = False
+    # Beispiel-Stellplätze mit Simulation (Registrierung/Tour) erlauben.
+    demo_stalls: bool = True
     # paths / secrets
     db_path: Path = BACKEND_DIR / "bike_station.db"
     tls_cert_file: Path | None = None  # Zertifikat der Plattform (für Pinning bei der Gateway-Einrichtung)
@@ -159,6 +165,7 @@ def load_settings(config_path: str | os.PathLike | None = None) -> Settings:
         verify_token_s=float(auth.get("verify_token_hours", 48)) * 3600,
         reset_token_s=float(auth.get("reset_token_hours", 1)) * 3600,
         invite_token_s=float(auth.get("invite_token_hours", 72)) * 3600,
+        require_email_verification=bool(auth.get("require_email_verification", False)),
         mail_backend=mail_backend,
         mail_from=str(mail.get("from", "no-reply@example.org")),
         smtp_host=os.environ.get("BIKE_SMTP_HOST", mail.get("smtp_host", "")),
@@ -181,6 +188,10 @@ def load_settings(config_path: str | os.PathLike | None = None) -> Settings:
         device_burst=int(sec.get("device_burst", 60)),
         auth_per_minute=int(sec.get("auth_per_minute", 10)),
         trust_proxy=os.environ.get("BIKE_TRUST_PROXY", str(sec.get("trust_proxy", False))).lower() in ("1", "true"),
+        webhooks_allow_private=os.environ.get(
+            "BIKE_WEBHOOKS_ALLOW_PRIVATE", str(cfg.get("integrations", {}).get("webhooks_allow_private", environment != "production"))
+        ).lower() in ("1", "true"),
+        demo_stalls=bool(app.get("demo_stalls", True)),
         db_path=db_path,
         tls_cert_file=_tls_cert_file(cfg.get("tls", {})),
         data_key=_data_key(environment, db_path),

@@ -34,6 +34,17 @@ Karte an den NFC-Leser halten
   -> API: Karte per HMAC finden -> einchecken / auschecken + Gebühr nach Tarif / ablehnen
   -> Antwort "NFC checked_in" usw. zurück an den Arduino (LED), Display zeigt kurz das Ergebnis
 
+Reservierung / Öffnungszeiten / Guthaben (beim Tap geprüft)
+  -> geschlossen? -> "closed" · für andere Karte reserviert? -> "reserved" · Guthaben-Modus ohne Guthaben? -> "insufficient_balance"
+  -> Auschecken ist immer möglich; im Guthaben-Modus wird die Gebühr abgebucht
+
+Fachliche Ereignisse (Warnung, Problem gemeldet, Sensorfehler, frei/belegt, Check-in/-out, Reservierung, Gateway offline/online)
+  -> Core.emit(...) -> E-Mail-Benachrichtigungen (gedrosselt, je Person einstellbar) und Webhooks (signiert, 3 Versuche)
+
+Plattform nicht erreichbar
+  -> Anzeige am Pi (http://127.0.0.1:8088/local, vom Agent ausgeliefert) zeigt den Sensorzustand mit "OFFLINE"
+  -> veraltet (> 30 s) oder Sensorfehler = STATUS UNBEKANNT
+
 Erschütterungswarnung bei freigegebener Kamera
   -> Antwort auf /measurements/batch enthält capture=true
   -> Pi nimmt ein Einzelbild auf und lädt es hoch (JPEG ≤ 2 MB) -> Löschung nach Frist

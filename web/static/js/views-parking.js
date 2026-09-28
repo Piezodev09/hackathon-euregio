@@ -23,18 +23,20 @@ export function viewCards() {
   const list = el("div", { class: "card" }, t("c.loading"));
   const load = async () => {
     try {
-      const { cards } = await get("/api/v1/cards");
+      const { cards, prepaid } = await get("/api/v1/cards");
       const pending = cards.filter((c) => c.status === "pending");
       clear(list,
         pending.length ? el("div", { class: "alert-box warn" }, t("pk.pending_hint", { n: pending.length })) : null,
+        prepaid ? el("p", { class: "small muted" }, icon("wallet"), " ", t("wl.mode_hint")) : null,
         cards.length ? el("div", { class: "table-wrap" }, el("table", {},
-          th(t("pk.card"), t("c.status"), t("pk.last_seen"), t("pk.parked"), can("admin") ? t("c.actions") : null),
+          th(t("pk.card"), t("c.status"), prepaid ? t("wl.balance") : null, t("pk.last_seen"), t("pk.parked"), can("operator") ? t("c.actions") : null),
           el("tbody", {}, cards.map((c) => el("tr", {},
             el("td", {}, c.label || el("em", { class: "muted" }, t("pk.unnamed"))),
             el("td", {}, el("span", { class: CARD_STATUS[c.status] }, t("pk.s_" + c.status))),
+            prepaid ? el("td", { class: "mono" }, el("span", { class: c.balance_cents <= 0 ? "badge err" : c.balance_cents < 200 ? "badge warn" : null }, fmtCents(c.balance_cents))) : null,
             el("td", { class: "small" }, fmtDateTime(c.last_seen_at), c.last_station_name ? el("div", { class: "muted" }, c.last_station_name) : null),
             el("td", {}, c.parked ? el("span", { class: "badge ok" }, t("pk.yes_parked")) : "–"),
-            can("admin") ? el("td", {}, cardActions(c, load)) : null))))) : el("p", { class: "muted" }, t("pk.no_cards")));
+            can("operator") ? el("td", {}, cardActions(c, load, prepaid)) : null))))) : el("p", { class: "muted" }, t("pk.no_cards")));
     } catch (e) { clear(list, errorCard(e)); }
   };
 
@@ -53,7 +55,52 @@ export function viewCards() {
     el("p", { class: "muted" }, t("pk.cards_intro")), list, can("admin") && !featureOff("nfc") ? form : null);
 }
 
-function cardActions(c, reload) {
+function topupDialog(c, reload) {
+  const amount = el("input", { type: "number", min: "0.5", max: "500", step: "0.5", value: "10", required: true });
+  const note = el("input", { type: "text", maxlength: "200", placeholder: t("wl.note_ph") });
+  const kind = can("admin") ? el("select", {}, el("option", { value: "topup" }, t("wl.k_topup")), el("option", { value: "correction" }, t("wl.k_correction"))) : null;
+  const d = el("dialog", { "aria-modal": "true" },
+    el("form", { method: "dialog" }, el("h2", {}, t("wl.topup_title", { card: c.label || t("pk.unnamed") })),
+      el("p", { class: "small muted" }, t("wl.topup_hint")),
+      kind ? field(t("wl.kind"), kind, t("wl.kind_hint")) : null, field(t("wl.amount"), amount, "EUR"), field(t("wl.note"), note),
+      el("div", { class: "btn-row" }, el("button", { class: "btn primary", value: "ok" }, t("wl.book")),
+        el("button", { class: "btn", value: "cancel", formnovalidate: true }, t("c.cancel")))));
+  d.addEventListener("close", async () => {
+    if (d.returnValue === "ok") {
+      const cents = Math.round(parseFloat(String(amount.value).replace(",", ".")) * 100);
+      try {
+        const r = await post(`/api/v1/cards/${c.id}/topup`, { amount_cents: cents, kind: kind ? kind.value : "topup", note: note.value });
+        toast(t("wl.booked", { b: fmtCents(r.balance_cents) }));
+        reload();
+      } catch (e) { toast(describeError(e), "error"); }
+    }
+    d.remove();
+  });
+  document.body.append(d);
+  d.showModal();
+}
+
+async function txDialog(c) {
+  let list;
+  try { list = (await get(`/api/v1/cards/${c.id}/transactions`)).transactions; } catch (e) { toast(describeError(e), "error"); return; }
+  const d = el("dialog", { "aria-modal": "true", class: "wide" },
+    el("h2", {}, t("wl.tx_title", { card: c.label || t("pk.unnamed") })),
+    list.length ? el("div", { class: "table-wrap" }, el("table", {}, th(t("ev.time"), t("wl.kind"), t("wl.amount"), t("wl.balance"), t("wl.note")),
+      el("tbody", {}, list.map((x) => el("tr", {}, el("td", {}, fmtDateTime(x.at)), el("td", {}, t("wl.k_" + x.kind),
+        x.simulated ? [" ", el("span", { class: "badge sim" }, t("c.simulated"))] : null),
+        el("td", { class: "mono" }, (x.amount_cents > 0 ? "+" : "") + fmtCents(x.amount_cents)), el("td", { class: "mono" }, fmtCents(x.balance_after)),
+        el("td", { class: "small" }, x.note || "", x.actor ? el("div", { class: "muted" }, x.actor) : null)))))) : el("p", { class: "muted" }, t("wl.no_tx")),
+    el("div", { class: "btn-row" }, el("button", { class: "btn", type: "button", onclick: () => d.close() }, t("c.close"))));
+  d.addEventListener("close", () => d.remove());
+  document.body.append(d);
+  d.showModal();
+}
+
+function cardActions(c, reload, prepaid) {
+  const money = prepaid && c.status === "active" ? [
+    el("button", { class: "btn small primary", type: "button", onclick: () => topupDialog(c, reload) }, icon("wallet"), t("wl.topup")),
+    el("button", { class: "btn small", type: "button", onclick: () => txDialog(c) }, t("wl.tx"))] : [];
+  if (!can("admin")) return el("div", { class: "btn-row" }, money);
   const act = async (body) => { try { await patch(`/api/v1/cards/${c.id}`, body); reload(); } catch (e) { toast(describeError(e), "error"); } };
   const learn = async () => {
     const name = el("input", { type: "text", required: true, maxlength: "100", value: c.label || "" });
@@ -65,7 +112,7 @@ function cardActions(c, reload) {
     document.body.append(d);
     d.showModal();
   };
-  return el("div", { class: "btn-row" },
+  return el("div", { class: "btn-row" }, money,
     c.status === "pending" ? el("button", { class: "btn small primary", type: "button", onclick: learn }, t("pk.learn")) : null,
     c.status === "active" ? el("button", { class: "btn small", type: "button", onclick: learn }, t("pk.rename")) : null,
     c.status === "active" ? el("button", { class: "btn small danger", type: "button", onclick: () => act({ status: "blocked" }) }, t("pk.block")) : null,
@@ -159,14 +206,26 @@ export function viewParkingBilling() {
   let month = thisMonth();
   const tariffBox = el("section", { class: "card" }, t("c.loading"));
   const statements = el("section", { class: "card" }, t("c.loading"));
+  const modeBox = el("section", { class: "card" });
   const loadTariff = async () => {
     try {
-      const { tariff, enabled } = await get("/api/v1/billing/tariff");
+      const { tariff, enabled, payment_mode } = await get("/api/v1/billing/tariff");
       clear(tariffBox, el("h2", {}, t("pk.tariff")), el("p", {}, el("strong", {}, tariffText(enabled ? tariff : null))),
         enabled ? el("p", { class: "muted small" }, t("pk.tariff_hint")) : upsell("parking_billing"),
         enabled && can("admin") ? tariffForm(tariff, async (tf) => {
           try { await put("/api/v1/billing/tariff", tf); toast(t("c.saved")); loadTariff(); } catch (e) { toast(describeError(e), "error"); }
         }) : null);
+      if (!enabled) { modeBox.hidden = true; return; }
+      const radios = ["statement", "prepaid"].map((m) => ({ m, r: el("input", { type: "radio", name: "pm", value: m, checked: payment_mode === m, disabled: !can("admin") }) }));
+      const f = el("form", {}, el("div", { class: "grid cols-2 choice" }, radios.map(({ m, r }) => el("label", { class: "choice-card" }, r,
+        el("span", {}, el("strong", {}, icon(m === "prepaid" ? "wallet" : "report"), " ", t("wl.m_" + m)), el("small", { class: "hint" }, t("wl.m_" + m + "_hint")))))),
+        can("admin") ? el("button", { class: "btn primary", type: "submit" }, t("c.save")) : null);
+      f.addEventListener("submit", async (ev) => {
+        ev.preventDefault();
+        const mode = radios.find((x) => x.r.checked)?.m || "statement";
+        try { await put("/api/v1/billing/payment-mode", { mode }); toast(t("c.saved")); loadTariff(); } catch (e) { toast(describeError(e), "error"); }
+      });
+      clear(modeBox, el("h2", {}, t("wl.mode_title")), el("p", { class: "muted" }, t("wl.mode_intro")), f);
     } catch (e) { clear(tariffBox, errorCard(e)); }
   };
   const loadStatements = async () => {
@@ -191,7 +250,7 @@ export function viewParkingBilling() {
   };
   loadTariff();
   loadStatements();
-  return el("div", { class: "page-stack" }, tariffBox, statements);
+  return el("div", { class: "page-stack" }, tariffBox, modeBox, statements);
 }
 
 // ---------------------------------------------------------------------- Lizenz (Kundensicht)

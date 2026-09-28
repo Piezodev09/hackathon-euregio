@@ -7,6 +7,8 @@ import * as A from "./views-auth.js";
 import * as S from "./views-station.js";
 import * as M from "./views-admin.js";
 import * as P from "./views-parking.js";
+import * as X from "./views-more.js";
+import { startTour, tourRunning } from "./tour.js";
 
 const root = document.getElementById("root");
 const PUBLIC = new Set(["login", "register", "check-email", "verify", "forgot", "reset", "invite"]);
@@ -21,10 +23,11 @@ function navItems() {
   const me = state.me;
   const items = [];
   if (me.tenant) {
-    items.push(["section", t("nav.s_monitor")], ["/", t("nav.overview")], ["/events", t("nav.events")], ["/sessions", t("nav.sessions")]);
+    items.push(["section", t("nav.s_monitor")], ["/", t("nav.overview")], ["/events", t("nav.events")], ["/sessions", t("nav.sessions")],
+      ["/reservations", t("nav.reservations")], ["/reports", t("nav.reports")]);
     items.push(["section", t("nav.s_billing")], ["/cards", t("nav.cards")], ["/parking-billing", t("nav.parking_billing")]);
     items.push(["section", t("nav.s_admin")], ["/stations", t("nav.stations")], ["/devices", t("nav.devices")], ["/team", t("nav.team")]);
-    if (can("admin")) items.push(["/org", t("nav.org")], ["/audit", t("nav.audit")]);
+    if (can("admin")) items.push(["/integrations", t("nav.integrations")], ["/org", t("nav.org")], ["/audit", t("nav.audit")]);
     items.push(["/billing", t("nav.billing")]);
   }
   if (me.user.is_platform_admin) items.push(["section", t("nav.s_platform")], ["/platform", t("nav.platform")], ["/platform-billing", t("nav.platform_billing")]);
@@ -41,6 +44,7 @@ function layout(title, content, currentPath, actions) {
       ? el("li", { class: "section" }, label)
       : el("li", {}, el("a", { href: "#" + href, "aria-current": currentPath === href ? "page" : null }, label)))),
     el("div", { class: "foot" },
+      me.tenant ? el("button", { class: "btn small tour-btn", type: "button", onclick: () => startTour() }, icon("help"), t("tour.start")) : null,
       el("p", {}, el("strong", {}, me.user.name), el("br"), el("span", { class: "small muted" }, me.user.email)),
       el("div", { class: "btn-row" }, langSwitcher(() => route()),
         el("button", { class: "btn small", type: "button", onclick: logout }, t("c.logout")))));
@@ -78,7 +82,7 @@ export async function route() {
   if (PUBLIC.has(name)) {
     if (state.me && (name === "login" || name === "register")) return go("/");
     const rerender = () => route();
-    const views = { login: () => A.viewLogin(rerender), register: () => A.viewRegister(rerender), "check-email": () => A.viewCheckEmail(rerender),
+    const views = { login: () => A.viewLogin(rerender), register: () => A.viewRegister(rerender, params), "check-email": () => A.viewCheckEmail(rerender),
       verify: () => A.viewVerify(params, rerender), forgot: () => A.viewForgot(rerender), reset: () => A.viewReset(params, rerender),
       invite: () => A.viewInvite(params, rerender) };
     clear(root, views[name]());
@@ -138,6 +142,9 @@ export async function route() {
   else if (name === "cards") { title = t("nav.cards"); view = P.viewCards(); }
   else if (name === "sessions") { title = t("nav.sessions"); view = P.viewSessions(); }
   else if (name === "parking-billing") { title = t("nav.parking_billing"); view = P.viewParkingBilling(); }
+  else if (name === "reservations") { title = t("nav.reservations"); view = X.viewReservations(); }
+  else if (name === "reports") { title = t("nav.reports"); view = X.viewReports(); }
+  else if (name === "integrations") { title = t("nav.integrations"); view = X.viewIntegrations(); }
   else { title = t("err.not_found"); view = el("p", {}, el("a", { href: "#/" }, t("nav.overview"))); }
 
   const placeholder = el("div");
@@ -147,8 +154,15 @@ export async function route() {
   else if (!view) placeholder.append(S.viewStation(parts[1], setTitle));
   clear(root, node);
   setTitle(title);
-  h1.focus({ preventScroll: true });
+  if (!tourRunning()) h1.focus({ preventScroll: true });
+  // Start-Tour automatisch beim ersten Besuch (nach der Registrierung)
+  if (!autoTourDone && me.tenant && !me.user.tour_done && can("admin") && name === "") {
+    autoTourDone = true;
+    setTimeout(() => startTour(), 600);
+  }
 }
+let autoTourDone = false;
+window.addEventListener("sbb:tour", () => startTour());
 
 setAuthLostHandler((err) => {
   if (err.code === "mfa_setup_required") { if (state.me) state.me.mfa_setup_required = true; return go("/security"); }

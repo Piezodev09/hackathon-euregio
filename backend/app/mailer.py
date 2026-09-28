@@ -6,7 +6,7 @@ import logging
 import smtplib
 import ssl
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from email.message import EmailMessage
 
 from .config import Settings
@@ -19,6 +19,8 @@ class Mail:
     to: str
     subject: str
     body: str
+    # (Dateiname, Inhalt, MIME-Typ), z. B. der Wochenbericht als PDF
+    attachments: list[tuple[str, bytes, str]] = field(default_factory=list)
 
 
 class Mailer:
@@ -27,8 +29,8 @@ class Mailer:
         self.outbox: list[Mail] = []  # nur 'console': für Tests und lokale Entwicklung
         self._lock = threading.Lock()
 
-    def send(self, to: str, subject: str, body: str) -> None:
-        mail = Mail(to, subject, body)
+    def send(self, to: str, subject: str, body: str, attachments: list[tuple[str, bytes, str]] | None = None) -> None:
+        mail = Mail(to, subject, body, list(attachments or []))
         if self.s.mail_backend == "smtp":
             # Versand im Hintergrund, damit Antwortzeiten keine Rückschlüsse erlauben.
             threading.Thread(target=self._smtp, args=(mail,), daemon=True).start()
@@ -36,7 +38,8 @@ class Mailer:
         with self._lock:
             self.outbox.append(mail)
             del self.outbox[:-100]
-        log.info("E-Mail (console) an %s: %s\n%s", to, subject, body)
+        extra = "".join(f"\n[Anhang: {n} ({len(d)} Byte)]" for n, d, _ in mail.attachments)
+        log.info("E-Mail (console) an %s: %s\n%s%s", to, subject, body, extra)
 
     def _smtp(self, mail: Mail) -> None:
         msg = EmailMessage()
@@ -44,6 +47,9 @@ class Mailer:
         msg["To"] = mail.to
         msg["Subject"] = mail.subject
         msg.set_content(mail.body)
+        for name, data, mime in mail.attachments:
+            main, _, sub = mime.partition("/")
+            msg.add_attachment(data, maintype=main, subtype=sub or "octet-stream", filename=name)
         try:
             ctx = ssl.create_default_context()
             if self.s.smtp_port == 465:

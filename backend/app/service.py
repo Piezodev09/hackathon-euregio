@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 
 from .anomaly import DetectorParams, features_at, rule_decision
 from .core import Core
+from .hours import closed_info, load_hours
 from .plans import get_plan
 from .schemas import MeasurementIn
 from .security import new_id
@@ -82,10 +83,19 @@ class Monitoring:
         if cur.rowcount == 0:
             return IngestResult(stored=False, duplicate=True)
         result = IngestResult(stored=True)
+        live = age_s <= self.core.s.window_s
+        if live and m.sensor_state == "ok" and prev is not None and prev["sensor_state"] == "ok" \
+                and prev["occupied"] is not None and bool(prev["occupied"]) != bool(m.occupied):
+            self.core.emit("stall.changed", station["tenant_id"], {
+                "station_id": station["id"], "station_name": station["name"],
+                "state": "occupied" if m.occupied else "free", "simulated": m.source == "simulated"})
+        # Wartungsmodus: keine Warnungen und keine Sensorfehler-Meldungen (Technik arbeitet am Stellplatz).
+        if station["maintenance"]:
+            return result
         if m.sensor_state == "error" and (prev is None or prev["sensor_state"] != "error"):
             self._create_event(station, slot, "sensor_fault", "info", None, t, m.source, None)
         # Alte, nachträglich übertragene Daten dürfen keinen Live-Alarm auslösen.
-        if m.sensor_state == "ok" and m.occupied and m.vibration_score > 0 and age_s <= self.core.s.window_s:
+        if m.sensor_state == "ok" and m.occupied and m.vibration_score > 0 and live:
             result.alert_created = self._evaluate_movement(station, slot, t, m.source)
             if result.alert_created:
                 result.event_id = self.db.scalar(
@@ -125,12 +135,22 @@ class Monitoring:
         )
         return last is not None and t - last < self.core.s.cooldown_s
 
-    def _create_event(self, station, slot, kind, severity, detector, t, source, detail) -> None:
+    def _create_event(self, station, slot, kind, severity, detector, t, source, detail) -> str:
+        eid = new_id("evt")
         self.db.execute(
             "INSERT INTO event (id, tenant_id, station_id, slot_id, kind, severity, detector, detail, occurred_at, source) "
             "VALUES (?,?,?,?,?,?,?,?,?,?)",
-            (new_id("evt"), station["tenant_id"], station["id"], slot["id"], kind, severity, detector, detail, t, source),
+            (eid, station["tenant_id"], station["id"], slot["id"], kind, severity, detector, detail, t, source),
         )
+        if severity != "shadow":
+            name = {"unusual_movement": "alert.created", "user_report": "problem.reported", "sensor_fault": "sensor.fault"}.get(kind)
+            if name:
+                info = json.loads(detail) if detail and kind == "user_report" else {}
+                self.core.emit(name, station["tenant_id"], {
+                    "event_id": eid, "station_id": station["id"], "station_name": station["name"], "kind": kind,
+                    "occurred_at": iso(t), "simulated": source == "simulated",
+                    **({"category": info.get("category"), "text": info.get("text", "")} if info else {})})
+        return eid
 
     def _latest(self, slot_id: str):
         return self.db.one(
@@ -177,11 +197,23 @@ class Monitoring:
             "alert": alert_out,
             # Kennzeichnung für die Oberfläche: die letzte Messung stammt aus dem Simulator.
             "simulated_data": m is not None and m["source"] == "simulated",
+            "presence": state,
+            "reservation": None,
+            "closed": closed_info(self.db, station, now),
+            "hours": load_hours(station["hours"]),
             "maintenance": bool(station["maintenance"]),
             "camera_active": bool(station["camera_enabled"]),
             "session": None,
             "last_tap": None,
         }
+        reservations = getattr(self, "reservations", None)
+        if reservations is not None:
+            res = reservations.active(station["id"])
+            if res is not None:
+                body["reservation"] = reservations.out(res, public=public)
+                # RESERVIERT nur bei sicher freiem Platz – unbekannt/belegt haben Vorrang.
+                if state == "free":
+                    body["state"] = "reserved"
         parking = getattr(self, "parking", None)
         if parking is not None:
             s = parking.open_session(station["id"])
@@ -279,6 +311,28 @@ class Monitoring:
                for b, (o, t) in buckets.items()]
         return {"station_id": station["id"], "hours": hours, "buckets": out, "measurement_count": len(rows),
                 "contains_simulated": simulated, "contains_live": live}
+
+    def occupancy_between(self, station: sqlite3.Row, start: float, end: float) -> dict:
+        """Belegt-/bekannt-Sekunden im Zeitraum. Unbekannte Zeiten (keine/veraltete/fehlerhafte Daten) zählen nicht."""
+        stale = self.core.s.stale_after_s
+        end = min(end, self.core.clock())
+        occ = known = 0.0
+        simulated = False
+        rows = self.db.all(
+            "SELECT server_time, occupied, sensor_state, source FROM measurement "
+            "WHERE slot_id = ? AND server_time >= ? AND server_time < ? ORDER BY server_time",
+            (self.stall(station["id"])["id"], start - stale, end))
+        for i, r in enumerate(rows):
+            if r["sensor_state"] != "ok" or r["occupied"] is None:
+                continue
+            simulated = simulated or r["source"] == "simulated"
+            nxt = rows[i + 1]["server_time"] if i + 1 < len(rows) else end
+            a, b = max(r["server_time"], start), min(nxt, r["server_time"] + stale, end)
+            if b > a:
+                known += b - a
+                if r["occupied"]:
+                    occ += b - a
+        return {"occupied_s": occ, "known_s": known, "period_s": max(0.0, end - start), "simulated": simulated}
 
     # ------------------------------------------------------------------ Aufbewahrung
     def purge(self) -> dict:

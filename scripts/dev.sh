@@ -47,6 +47,7 @@ cat <<INFO
  Login:         $DEMO_EMAIL / $DEMO_PASSWORD
  Kiosk-Anzeige: $DISPLAY_URL
  Stellplatz-Ansicht (QR): ${STALL_URL:-–}
+ Offline-Anzeige (wie am Pi, nur im Agent-Modus): http://127.0.0.1:8088/local
  Demo-Karte: 04A1B2C3D4 (im Simulator: Befehl n)
  Registrierungs-/Reset-Mails erscheinen im Log (mail.backend = console).
 ────────────────────────────────────────────────────────────

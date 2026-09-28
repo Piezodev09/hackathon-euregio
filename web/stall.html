@@ -27,6 +27,7 @@
     <p id="location" class="muted"></p>
     <p id="invalid" class="note err" hidden data-i18n="invalid"></p>
     <p id="maint" class="note maint" hidden data-i18n="maintenance"></p>
+    <p id="closed" class="note maint closed" hidden></p>
     <div id="status" class="sbb-status" data-state="unknown">
       <span id="status-icon" aria-hidden="true"></span>
       <div><p class="sbb-status__word" id="word">STATUS UNBEKANNT</p><p class="sbb-status__sub" id="sub"></p></div>
@@ -49,7 +50,12 @@
     <section aria-labelledby="price-h">
       <h2 id="price-h" data-i18n="prices"></h2>
       <p id="price" class="price"></p>
-      <p class="muted small" data-i18n="price_hint"></p>
+      <p class="muted small" id="price-hint" data-i18n="price_hint"></p>
+    </section>
+
+    <section id="hours-box" aria-labelledby="hours-h" hidden>
+      <h2 id="hours-h" data-i18n="hours"></h2>
+      <dl id="hours" class="hours-list"></dl>
     </section>
 
     <p id="camera" class="note cam" hidden data-i18n="camera"></p>

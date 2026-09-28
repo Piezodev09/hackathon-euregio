@@ -41,7 +41,8 @@ class Api:
 
     def post(self, url, json=None, headers=None, **kw):
         r = self.c.post(url, json=json, headers=self._h(headers), **kw)
-        if r.status_code == 200 and isinstance(r.json(), dict) and "csrf_token" in r.json():
+        if r.status_code in (200, 201) and r.headers.get("content-type", "").startswith("application/json") \
+                and isinstance(r.json(), dict) and "csrf_token" in r.json():
             self.csrf = r.json()["csrf_token"]
         return r
 
@@ -83,18 +84,17 @@ class Env:
     def client(self) -> Api:
         return Api(self.app)
 
-    def register(self, org="Schule A", email=None, password=PASSWORD, verify=True, login=True):
+    def register(self, org="Schule A", email=None, password=PASSWORD, verify=True, login=True, plan="free"):
+        """Registrierung meldet sofort an (ohne E-Mail-Bestätigung). login=False liefert einen frischen Client."""
         self._n += 1
         email = email or f"owner{self._n}@example.org"
-        api = self.client()
-        r = api.post("/api/v1/auth/register", {"org_name": org, "name": "Olga Owner", "email": email,
-                                                "password": password, "accept_terms": True})
-        assert r.status_code == 202, r.text
+        reg = self.client()
+        r = reg.post("/api/v1/auth/register", {"org_name": org, "name": "Olga Owner", "email": email,
+                                                "password": password, "accept_terms": True, "plan": plan})
+        assert r.status_code == 201, r.text
         if verify:
-            assert api.post("/api/v1/auth/verify-email", {"token": self.last_token(email)}).status_code == 200
-        if login:
-            r = api.post("/api/v1/auth/login", {"email": email, "password": password})
-            assert r.status_code == 200, r.text
+            assert reg.post("/api/v1/auth/verify-email", {"token": self.last_token(email)}).status_code == 200
+        api = reg if login else self.client()
         api.email = email
         return api
 
@@ -130,6 +130,9 @@ def env(tmp_path, monkeypatch):
     object.__setattr__(settings, "model_path", tmp_path / "missing.joblib")
     clock = Clock()
     app = create_app(settings, clock=clock)
+    app.state.demo.autorun = False  # Simulation in Tests nur gezielt per step()
+    app.state.integrations.sync = True  # Webhooks sofort zustellen
+    app.state.integrations.transport = lambda url, headers, body: 200
     with TestClient(app):
         yield Env(app, clock)
 

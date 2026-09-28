@@ -12,6 +12,8 @@ allowed_hosts = ["127.0.0.1", "localhost"]
 # Selbstregistrierung neuer Kunden erlauben.
 signup_enabled = true
 product_name = "Smart Bicycle Box"
+# "Beispiel-Stellplatz (Simulation)" in Tour und Portal anbieten – zum Ausprobieren ohne Hardware.
+demo_stalls = true
 
 [auth]
 # Session: Leerlauf-Timeout und absolute Höchstdauer.
@@ -29,6 +31,9 @@ platform_admin_mfa_required = true
 verify_token_hours = 48
 reset_token_hours = 1
 invite_token_hours = 72
+# false (Standard): Nach der Registrierung sofort angemeldet, Bestätigungslink ist optional.
+# true: Anmeldung erst nach Klick auf den Link in der E-Mail.
+require_email_verification = false
 
 [mail]
 # "console" (Entwicklung: Mails im Log) oder "smtp".
@@ -67,3 +72,8 @@ device_burst = 60
 auth_per_minute = 10
 # Nur auf true setzen, wenn ein vertrauenswürdiger Reverse-Proxy X-Forwarded-For setzt.
 trust_proxy = false
+
+[integrations]
+# Webhooks an Ziele im privaten Netz (z. B. Schul-App im LAN) erlauben. Standard: in development ja,
+# in production nein. Loopback (127.x) und Link-Local (169.254.x, Cloud-Metadaten) sind immer gesperrt.
+# webhooks_allow_private = true

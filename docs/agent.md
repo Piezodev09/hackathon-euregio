@@ -53,6 +53,23 @@ Der Ein-Zeilen-Befehl (`curl … | sudo sh -s -- --code …`) ist bequemer, prü
 
 Das Skript ist wiederholbar; eine Neuinstallation mit neuem Code koppelt das Gerät neu.
 
+## Display am Stellplatz (funktioniert auch offline)
+
+Der Agent liefert ab Version 1.3.0 die Kiosk-Anzeige selbst aus: **http://127.0.0.1:8088/local** (nur lokal
+erreichbar). Solange die Plattform antwortet, zeigt sie deren Status (inkl. Reservierung, Öffnungszeiten,
+Ein-/Auschecken). Ist die Plattform länger als 10 s nicht erreichbar, zeigt sie den Zustand **direkt vom Sensor**
+mit dem Hinweis „OFFLINE – lokale Anzeige“. Auch dann gilt: keine gültige Messung seit 30 s oder Sensorfehler
+→ STATUS UNBEKANNT, nie „frei“. Ein Anzeige-Token ist auf dem Pi nicht nötig.
+
+Beispiel für den Vollbildmodus (Raspberry Pi OS Bookworm mit Desktop, Autostart des Benutzers; am Gerät prüfen):
+
+```bash
+chromium-browser --kiosk --noerrdialogs --disable-infobars --incognito http://127.0.0.1:8088/local
+```
+
+Port ändern oder abschalten: `"local_display_port": 0` in `/var/lib/bike-agent/agent.json`, dann `sudo systemctl restart bike-agent`.
+**Getestet:** Offline-Umschaltung, Zustandslogik und Auslieferung mit Tests und Simulator; **nicht getestet:** Chromium-Kiosk auf echtem Pi.
+
 ## Verwaltung im Portal
 
 - **Gateways** (Navigation): alle Geräte der Organisation mit Status, Version, Zustand.

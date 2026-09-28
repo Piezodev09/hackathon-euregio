@@ -12,6 +12,22 @@ from pathlib import Path
 AGENT_DIR = Path(__file__).resolve().parents[2] / "pi-gateway"
 TEMPLATE = Path(__file__).resolve().parent / "templates" / "install-agent.sh"
 FILES = ("VERSION", "agent.py", "gateway.py", "simulator.py", "camera.py", "sim-camera.jpg")
+# Lokale Anzeige am Pi (Offline-Modus): dieselbe Kiosk-Anzeige wie im Portal, flach im Paket abgelegt.
+WEB_DIR = Path(__file__).resolve().parents[2] / "web"
+DISPLAY_FILES = {
+    "display.html": "display.html",
+    "display.js": "static/js/display.js",
+    "display-i18n.js": "static/js/display-i18n.js",
+    "display.css": "static/css/display.css",
+    "tokens.css": "static/css/tokens.css",
+    "components.css": "static/css/components.css",
+    "fonts.css": "static/css/fonts.css",
+    "AtkinsonHyperlegible-400.woff2": "static/fonts/AtkinsonHyperlegible-400.woff2",
+    "AtkinsonHyperlegible-700.woff2": "static/fonts/AtkinsonHyperlegible-700.woff2",
+    "AtkinsonHyperlegibleMono.woff2": "static/fonts/AtkinsonHyperlegibleMono.woff2",
+    "OFL-AtkinsonHyperlegible.txt": "static/fonts/OFL.txt",  # Lizenz der mitgelieferten Schrift
+    "icon.svg": "static/img/icon.svg",
+}
 
 
 def version_tuple(v: str | None) -> tuple[int, ...]:
@@ -35,8 +51,10 @@ class AgentBundle:
         raw = io.BytesIO()
         # Reproduzierbar: feste Reihenfolge, Zeitstempel 0, keine Besitzer -> gleiche Prüfsumme bei gleichem Inhalt.
         with tarfile.open(fileobj=raw, mode="w", format=tarfile.PAX_FORMAT) as tar:
-            for name in FILES:
-                content = (agent_dir / name).read_bytes()
+            sources = [(name, agent_dir / name) for name in FILES]
+            sources += [(name, WEB_DIR / rel) for name, rel in DISPLAY_FILES.items() if (WEB_DIR / rel).is_file()]
+            for name, path in sources:
+                content = path.read_bytes()
                 info = tarfile.TarInfo(name)
                 info.size = len(content)
                 info.mode = 0o755 if name.endswith(".py") else 0o644

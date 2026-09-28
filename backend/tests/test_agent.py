@@ -161,7 +161,11 @@ def test_install_script_and_bundle(env):
     assert hashlib.sha256(tgz.content).hexdigest() == b.sha256 == tgz.headers["x-content-sha256"]
     with tarfile.open(fileobj=io.BytesIO(tgz.content), mode="r:gz") as tar:
         names = sorted(m.name for m in tar.getmembers())
-        assert names == ["VERSION", "agent.py", "camera.py", "gateway.py", "sim-camera.jpg", "simulator.py"]
+        assert names == sorted(["VERSION", "agent.py", "camera.py", "gateway.py", "sim-camera.jpg", "simulator.py",
+                                # lokale Offline-Anzeige, flach abgelegt (ältere Agents entpacken nur flache Pakete)
+                                "display.html", "display.js", "display-i18n.js", "display.css", "tokens.css",
+                                "components.css", "fonts.css", "AtkinsonHyperlegible-400.woff2", "AtkinsonHyperlegible-700.woff2",
+                                "AtkinsonHyperlegibleMono.woff2", "OFL-AtkinsonHyperlegible.txt", "icon.svg"])
         assert all(m.isfile() and m.mtime == 0 for m in tar.getmembers())
     assert b.sha256 in anon.get("/install/agent.sha256").text
     # Reproduzierbar
@@ -187,7 +191,7 @@ def test_migration_from_schema_2(tmp_path):
     db = Database(p)
     cols = {r[1] for r in db.all("PRAGMA table_info(device)")}
     assert {"hostname", "prev_token_hash", "last_heartbeat_at"} <= cols
-    assert db.scalar("PRAGMA user_version") == 5
+    assert db.scalar("PRAGMA user_version") == 6
 
 
 def test_migration_to_single_stall(tmp_path):
@@ -207,7 +211,7 @@ def test_migration_to_single_stall(tmp_path):
     con.close()
     db = Database(p)
     rows = [tuple(r) for r in db.all("SELECT id, key, position FROM slot")]
-    assert rows == [("b", "A", 1)] and db.scalar("PRAGMA user_version") == 5
+    assert rows == [("b", "A", 1)] and db.scalar("PRAGMA user_version") == 6
 
 
 def test_pinned_install_commands_for_self_signed_cert(env, tmp_path):
@@ -260,3 +264,15 @@ def test_whoami_checks_token_without_side_effects(env):
     r = env.client().c.get("/api/v1/agent/whoami", headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 200 and r.json()["station_id"] == sid and r.json()["server_time"] == env.clock()
     assert env.client().c.get("/api/v1/agent/whoami", headers={"Authorization": "Bearer bsd_falsch_falsch"}).status_code == 401
+
+
+def test_agent_status_for_local_display(env):
+    owner, sid = setup_station(env)
+    token = owner.post(f"/api/v1/stations/{sid}/devices", {"name": "Pi"}).json()["token"]
+    c = env.client().c
+    h = {"Authorization": f"Bearer {token}"}
+    assert c.get("/api/v1/agent/status", headers=h).json()["state"] == "unknown"
+    c.post("/api/v1/measurements", json={"station_id": sid, "sequence": 1, "occupied": False, "sensor_state": "ok"}, headers=h)
+    body = c.get("/api/v1/agent/status", headers=h).json()
+    assert body["state"] == "free" and "ai" not in body
+    assert c.get("/api/v1/agent/status").status_code == 401

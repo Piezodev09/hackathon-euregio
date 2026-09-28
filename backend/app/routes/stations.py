@@ -35,12 +35,14 @@ def _station_out(core, st, m: Monitoring | None = None) -> dict:
            "stall_view_configured": st["stall_token_hash"] is not None, "camera_enabled": bool(st["camera_enabled"]),
            "camera_retention_h": st["camera_retention_h"], "camera_approved_by": st["camera_approved_by"],
            "tariff": json.loads(st["tariff"]) if st["tariff"] else None,
+           "hours": json.loads(st["hours"]) if st["hours"] else None, "demo": bool(st["demo_sim"]),
            "created_at": iso(st["created_at"])}
     if m is not None:
         s = m.status(st)
         out["live"] = {"state": s["state"], "unknown_reason": s["unknown_reason"], "age_s": s["age_s"],
                        "alert": s["alert"] is not None, "simulated_data": s["simulated_data"],
-                       "session": s["session"], "maintenance": s["maintenance"]}
+                       "session": s["session"], "maintenance": s["maintenance"], "closed": s["closed"],
+                       "reservation": s["reservation"]}
     return out
 
 
@@ -221,13 +223,13 @@ def _stall_station(request: Request):
 @router.get("/api/v1/public/stall/status", dependencies=[read_limit])
 def public_stall(request: Request):
     """Ansicht für die Person am Stellplatz: Zustand, Preise, Hinweise – ohne Karten- oder Personendaten."""
-    from ..parking import tariff_for
+    from ..parking import prepaid, tariff_for
 
     core = core_of(request)
     st = _stall_station(request)
     plan = get_plan(core.db.scalar("SELECT plan FROM tenant WHERE id = ?", (st["tenant_id"],)))
     body = mon(request).status(st, public=True)
-    body.update(tariff=tariff_for(core, st), nfc=plan.nfc, reports=True)
+    body.update(tariff=tariff_for(core, st), nfc=plan.nfc, reports=True, prepaid=prepaid(core, st["tenant_id"]))
     return body
 
 

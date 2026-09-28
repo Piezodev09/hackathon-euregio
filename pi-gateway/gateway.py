@@ -316,6 +316,8 @@ class Gateway:
         self.write_back: Callable[[str], None] | None = None
         self.uplink.on_status_change = self._net_status
         self.last_tap: dict | None = None
+        # Letzter Sensorzustand für die lokale Offline-Anzeige (agent.py LocalDisplay)
+        self.last_local: dict | None = None
         # Taps werden sofort (nicht gepuffert) gesendet; eigener Thread, damit das Lesen weiterläuft.
         self.run_async: Callable[..., None] = lambda f, *a: threading.Thread(target=f, args=a, daemon=True).start()
 
@@ -328,6 +330,8 @@ class Gateway:
 
     def _emit(self, m: dict) -> None:
         body = {"station_id": self.cfg.station_id, "sequence": self.seq.next(), "source": self.cfg.source, **m}
+        self.last_local = {"occupied": m.get("occupied"), "sensor_state": m.get("sensor_state"), "at": self.clock(),
+                           "wall": time.time()}
         self.uplink.enqueue(body)
 
     def handle_line(self, line: str) -> None:

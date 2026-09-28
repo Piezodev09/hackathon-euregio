@@ -283,6 +283,14 @@ def whoami(request: Request, dev=Depends(require_device)):
     return {"device_id": dev["id"], "station_id": st["id"], "station_name": st["name"], "server_time": core.clock()}
 
 
+@router.get("/api/v1/agent/status")
+def agent_status(request: Request, dev=Depends(require_device)):
+    """Status des eigenen Stellplatzes für die lokale Anzeige am Pi (wie die öffentliche Kiosk-Anzeige)."""
+    core = core_of(request)
+    st = core.db.one("SELECT * FROM station WHERE id = ?", (dev["station_id"],))
+    return request.app.state.monitoring.status(st, public=True)
+
+
 @router.post("/api/v1/agent/heartbeat")
 def heartbeat(body: HeartbeatIn, request: Request, dev=Depends(require_device)):
     core = core_of(request)

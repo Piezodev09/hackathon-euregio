@@ -259,3 +259,53 @@ def test_doctor_explains_tls_errors(tmp_path, monkeypatch):
     lines = []
     assert A.doctor(enrolled_state(tmp_path), out=lines.append) == 1
     assert any("TLS-Fehler" in x for x in lines) and any("IP fehlt im Zertifikat" in x for x in lines)
+
+
+def test_local_display_offline_fallback_and_server_status(tmp_path):
+    agent = A.Agent(enrolled_state(tmp_path))
+    disp = A.LocalDisplay(agent)
+    disp.api.request = lambda *a, **k: (_ for _ in ()).throw(OSError("offline"))
+    s = disp.status()
+    assert s["offline"] is True and s["state"] == "unknown" and s["unknown_reason"] == "no_data"
+    agent.gw.handle_line('{"presence":0,"vibration":0,"seq":1}')
+    disp._fetched_at = 0
+    s = disp.status()
+    assert s["offline"] is True and s["state"] == "free" and s["simulated_data"] is True
+    agent.gw.last_local["at"] -= 31  # älter als 30 s -> unbekannt, nie „frei“
+    disp._fetched_at = 0
+    assert disp.status()["state"] == "unknown" and disp.status()["unknown_reason"] == "stale"
+    agent.gw.handle_line('{"presence":-1,"vibration":0,"seq":2,"state":"error"}')
+    disp._fetched_at = 0
+    assert disp.status()["unknown_reason"] == "sensor_error"
+    # Plattform erreichbar: deren Status (inkl. Reservierung) wird durchgereicht
+    disp.api.request = lambda *a, **k: (200, {"state": "reserved", "display_name": "Schulhof", "reservation": {"until": "x"}})
+    disp._fetched_at = 0
+    s = disp.status()
+    assert s["offline"] is False and s["state"] == "reserved"
+
+
+def test_local_display_http(tmp_path):
+    import threading
+    import urllib.request
+
+    agent = A.Agent(enrolled_state(tmp_path))
+    disp = A.LocalDisplay(agent)
+    disp.api.request = lambda *a, **k: (_ for _ in ()).throw(OSError("offline"))
+    stop = threading.Event()
+    port = 18000 + os.getpid() % 1000
+    threading.Thread(target=disp.serve, args=(stop, port), daemon=True).start()
+    time.sleep(0.3)
+    try:
+        base = f"http://127.0.0.1:{port}"
+        body = json.loads(urllib.request.urlopen(base + "/local/status", timeout=3).read())
+        assert body["offline"] is True and body["state"] == "unknown"
+        page = urllib.request.urlopen(base + "/local", timeout=3).read()
+        assert b"display.js" in page
+        assert urllib.request.urlopen(base + "/static/js/display.js", timeout=3).status == 200
+        try:
+            urllib.request.urlopen(base + "/static/../agent.py", timeout=3)
+            raise AssertionError("darf nicht ausgeliefert werden")
+        except urllib.error.HTTPError as e:
+            assert e.code == 404
+    finally:
+        stop.set()

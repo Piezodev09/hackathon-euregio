@@ -15,6 +15,7 @@ import sqlite3
 
 from . import billing
 from .core import Core
+from .hours import closed_info
 from .plans import get_plan
 from .security import new_id
 from .billing import iso as _iso
@@ -23,7 +24,8 @@ UID_RE = re.compile(r"^[0-9A-F]{8,20}$")
 TAP_MAX_AGE_S = 60  # ältere, nachgesendete Taps werden nicht mehr ausgeführt
 
 RESULTS = ("checked_in", "checked_out", "unknown_card", "blocked", "occupied_by_other", "open_elsewhere", "expired",
-           "duplicate", "feature_disabled", "maintenance")
+           "duplicate", "feature_disabled", "maintenance", "closed", "reserved", "insufficient_balance")
+TOPUP_MAX_CENTS = 50_000
 
 
 def normalize_uid(uid: str) -> str:
@@ -37,6 +39,11 @@ def uid_hmac(core: Core, tenant_id: str, uid: str) -> str:
     return hmac.new(core.s.data_key, f"nfc:{tenant_id}:{normalize_uid(uid)}".encode(), hashlib.sha256).hexdigest()
 
 
+def prepaid(core: Core, tenant_id: str) -> bool:
+    t = core.db.one("SELECT plan, payment_mode FROM tenant WHERE id = ?", (tenant_id,))
+    return bool(t and t["payment_mode"] == "prepaid" and get_plan(t["plan"]).parking_billing)
+
+
 def tariff_for(core: Core, station: sqlite3.Row) -> dict:
     """Tarif des Stellplatzes, sonst der Organisation, sonst Standard. Ohne Abrechnungs-Funktion: kostenlos."""
     tenant = core.db.one("SELECT plan, tariff FROM tenant WHERE id = ?", (station["tenant_id"],))
@@ -46,9 +53,35 @@ def tariff_for(core: Core, station: sqlite3.Row) -> dict:
 
 
 class Parking:
-    def __init__(self, core: Core):
+    def __init__(self, core: Core, reservations=None):
         self.core = core
         self.db = core.db
+        self.reservations = reservations
+
+    # ------------------------------------------------------------------ Guthaben
+    def book(self, c: sqlite3.Connection, card: sqlite3.Row, kind: str, amount: int, *, session_id=None, note="",
+             actor=None, source="live") -> int:
+        """Buchung auf dem Guthaben der Karte (innerhalb einer Transaktion). Gibt den neuen Stand zurück."""
+        bal = c.execute("SELECT balance_cents FROM card WHERE id = ?", (card["id"],)).fetchone()[0] + amount
+        c.execute("UPDATE card SET balance_cents = ? WHERE id = ?", (bal, card["id"]))
+        c.execute("INSERT INTO card_txn (id, tenant_id, card_id, at, kind, amount_cents, balance_after, session_id, note, actor, source) "
+                  "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                  (new_id("tx"), card["tenant_id"], card["id"], self.core.clock(), kind, amount, bal, session_id, note, actor, source))
+        return bal
+
+    def topup(self, card: sqlite3.Row, amount: int, *, note: str, actor: str, kind: str = "topup", source: str = "live") -> int:
+        if kind == "topup" and not 0 < amount <= TOPUP_MAX_CENTS:
+            raise ValueError("invalid_amount")
+        if kind == "correction" and not (amount != 0 and abs(amount) <= TOPUP_MAX_CENTS):
+            raise ValueError("invalid_amount")
+        with self.db.tx() as c:
+            return self.book(c, card, kind, amount, note=note, actor=actor, source=source)
+
+    def transactions(self, card_id: str, limit: int = 100) -> list[dict]:
+        return [{"id": r["id"], "at": _iso(r["at"]), "kind": r["kind"], "amount_cents": r["amount_cents"],
+                 "balance_after": r["balance_after"], "note": r["note"], "actor": r["actor"], "session_id": r["session_id"],
+                 "simulated": r["source"] == "simulated"}
+                for r in self.db.all("SELECT * FROM card_txn WHERE card_id = ? ORDER BY at DESC, rowid DESC LIMIT ?", (card_id, limit))]
 
     # ------------------------------------------------------------------ Karten
     def find_or_create_card(self, tenant_id: str, uid: str, station_id: str | None = None,
@@ -96,14 +129,30 @@ class Parking:
         if card["status"] == "blocked":
             return log("blocked", card["id"])
 
+        # Vor dem Check-in: Öffnungszeiten, Reservierung, Guthaben (Auschecken ist immer möglich).
+        current = self.open_session(station["id"])
+        checking_out = current is not None and current["card_id"] == card["id"]
+        reservation = self.reservations.active(station["id"]) if self.reservations else None
+        tariff = tariff_for(self.core, station)
+        is_prepaid = prepaid(self.core, tenant_id)
+        if not checking_out and current is None:
+            if closed_info(self.db, station, now):
+                return log("closed", card["id"])
+            if reservation is not None and reservation["card_id"] != card["id"]:
+                return log("reserved", card["id"])
+            if is_prepaid and tariff["mode"] != "free" and card["balance_cents"] <= 0:
+                return {**log("insufficient_balance", card["id"]), "balance_cents": card["balance_cents"]}
+
+        balance = None
         with self.db.tx() as c:
             current = c.execute("SELECT * FROM parking_session WHERE station_id = ? AND status = 'open' LIMIT 1", (station["id"],)).fetchone()
             if current is not None and current["card_id"] == card["id"]:
-                tariff = json.loads(current["tariff"])
-                amount = billing.compute_fee(current["started_at"], t, tariff)
+                amount = billing.compute_fee(current["started_at"], t, json.loads(current["tariff"]))
                 c.execute("UPDATE parking_session SET status = 'closed', ended_at = ?, amount_cents = ?, closed_by = 'nfc' WHERE id = ?",
                           (t, amount, current["id"]))
                 result, amt, sid = "checked_out", amount, current["id"]
+                if is_prepaid and amount:
+                    balance = self.book(c, card, "fee", -amount, session_id=sid, note=station["name"], source=source)
             elif current is not None:
                 result, amt, sid = "occupied_by_other", None, None
             elif c.execute("SELECT 1 FROM parking_session WHERE card_id = ? AND status = 'open'", (card["id"],)).fetchone():
@@ -112,11 +161,22 @@ class Parking:
                 sid = new_id("ps")
                 c.execute("INSERT INTO parking_session (id, tenant_id, station_id, card_id, started_at, tariff, status, source) "
                           "VALUES (?,?,?,?,?,?,?,?)",
-                          (sid, tenant_id, station["id"], card["id"], t, json.dumps(tariff_for(self.core, station)), "open", source))
+                          (sid, tenant_id, station["id"], card["id"], t, json.dumps(tariff), "open", source))
                 result, amt = "checked_in", None
+        if result == "checked_in" and reservation is not None:
+            self.reservations.end(reservation, "fulfilled")
+        if is_prepaid and balance is None and result in ("checked_in", "checked_out"):
+            balance = self.db.scalar("SELECT balance_cents FROM card WHERE id = ?", (card["id"],))
         out = log(result, card["id"], amt)
+        if balance is not None:
+            out["balance_cents"] = balance
+            self.db.execute("UPDATE nfc_tap SET balance_cents = ? WHERE device_id = ? AND sequence = ?", (balance, device_id, sequence))
         if sid:
             out["session_id"] = sid
+        if result in ("checked_in", "checked_out"):
+            self.core.emit("parking." + result, tenant_id, {
+                "station_id": station["id"], "station_name": station["name"], "session_id": sid, "card_id": card["id"],
+                "card_label": card["label"], "amount_cents": amt, "simulated": source == "simulated"})
         return out
 
     # ------------------------------------------------------------------ Ausgabe
@@ -135,9 +195,10 @@ class Parking:
         return out
 
     def last_tap(self, station_id: str, within_s: float = 20) -> dict | None:
-        r = self.db.one("SELECT at, result, amount_cents FROM nfc_tap WHERE station_id = ? AND at >= ? ORDER BY at DESC, id DESC LIMIT 1",
-                        (station_id, self.core.clock() - within_s))
-        return None if r is None else {"at": _iso(r["at"]), "result": r["result"], "amount_cents": r["amount_cents"]}
+        r = self.db.one("SELECT at, result, amount_cents, balance_cents FROM nfc_tap WHERE station_id = ? AND at >= ? "
+                        "ORDER BY at DESC, id DESC LIMIT 1", (station_id, self.core.clock() - within_s))
+        return None if r is None else {"at": _iso(r["at"]), "result": r["result"], "amount_cents": r["amount_cents"],
+                                       "balance_cents": r["balance_cents"]}
 
     # ------------------------------------------------------------------ Monatsabrechnung
     def statements(self, tenant_id: str, month: str) -> list[dict]:

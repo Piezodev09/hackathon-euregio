@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 
 from ..core import Core, Ctx, client_ip, core_of, limit, load_ctx, require
 from ..mailer import link
-from ..plans import DEFAULT_PLAN, get_plan
+from ..plans import get_plan
 from ..schemas import (
     CodeIn,
     EmailIn,
@@ -41,6 +41,7 @@ from ..service import iso
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 auth_limit = Depends(limit("auth_limiter", "auth:"))
 mail_limit = Depends(limit("mail_limiter", "mail:"))
+signup_limit = Depends(limit("signup_limiter", "signup:"))
 MFA_TOKEN_S = 300
 
 
@@ -69,6 +70,8 @@ def me_payload(core: Core, ctx: Ctx) -> dict:
             "role": u["role"],
             "locale": u["locale"],
             "mfa_enabled": bool(u["totp_enabled"]),
+            "email_verified": bool(u["email_verified_at"]),
+            "tour_done": bool(u["tour_done_at"]),
             "is_platform_admin": bool(u["is_platform_admin"]),
             "last_login_at": iso(u["last_login_at"]),
         },
@@ -81,10 +84,14 @@ def me_payload(core: Core, ctx: Ctx) -> dict:
             "mfa_required": bool(t["mfa_required"]),
             "plan": plan.to_dict(),
             "usage": core.tenant_usage(t["id"]),
+            "payment_mode": t["payment_mode"],
+            "onboarding_hidden": bool(t["onboarding_hidden"]),
+            "created_at": iso(t["created_at"]),
         },
         "mfa_setup_required": mfa_setup_required,
         "csrf_token": ctx.csrf,
         "product_name": core.s.product_name,
+        "demo_stalls": core.s.demo_stalls,
     }
 
 
@@ -125,13 +132,19 @@ def _register_failure(core: Core, user, ip: str) -> None:
 
 
 # ---------------------------------------------------------------------- Registrierung
-@router.post("/register", status_code=202, dependencies=[mail_limit])
-def register(body: RegisterIn, request: Request):
+@router.post("/register", status_code=202, dependencies=[signup_limit])
+def register(body: RegisterIn, request: Request, response: Response):
+    """Neue Organisation + Inhaber. Standard: sofort angemeldet (Bestätigungslink optional, siehe
+    auth.require_email_verification). Neue Organisationen starten in der kostenlosen Testphase des gewählten Tarifs."""
     core = core_of(request)
     if not core.s.signup_enabled:
         raise HTTPException(403, "signup_disabled")
     check_password(core, body.password, body.email, body.name)
     existing = core.db.one("SELECT id FROM user WHERE email = ?", (body.email,))
+    if existing and not core.s.require_email_verification:
+        # Sofort-Anmeldung verträgt keine verdeckte Antwort – klare Meldung mit Weg zur Anmeldung.
+        dummy_verify(body.password, core.s.scrypt_n)
+        raise HTTPException(409, "email_in_use")
     if existing:
         # Keine Konto-Aufzählung: gleiche Antwort, stattdessen Hinweis-Mail an den Kontoinhaber.
         dummy_verify(body.password, core.s.scrypt_n)
@@ -148,21 +161,40 @@ def register(body: RegisterIn, request: Request):
     pw = hash_password(body.password, core.s.scrypt_n)
     with core.db.tx() as c:
         c.execute("INSERT INTO tenant (id, name, plan, status, created_at) VALUES (?,?,?,?,?)",
-                  (tenant_id, body.org_name, DEFAULT_PLAN, "active", now))
+                  (tenant_id, body.org_name, body.plan, "active", now))
         c.execute(
             "INSERT INTO user (id, tenant_id, email, name, role, password_hash, locale, created_at, password_changed_at) "
             "VALUES (?,?,?,?,?,?,?,?,?)",
             (user_id, tenant_id, body.email, body.name, "owner", pw, body.locale, now, now),
         )
     token = core.issue_token("verify", core.s.verify_token_s, user_id=user_id, email=body.email)
+    core.audit("tenant_registered", tenant_id=tenant_id, user_id=user_id, actor=body.email, ip=client_ip(request),
+               detail={"plan": body.plan})
+    if core.s.require_email_verification:
+        core.mailer.send(
+            body.email,
+            f"{core.s.product_name}: E-Mail-Adresse bestätigen / Confirm your e-mail",
+            f"Willkommen bei {core.s.product_name}!\n\nBitte bestätigen Sie Ihre E-Mail-Adresse:\n"
+            f"{link(core.s, 'verify', token)}\n\nDer Link ist {int(core.s.verify_token_s // 3600)} Stunden gültig.",
+        )
+        return {"status": "check_email"}
+    plan = get_plan(body.plan)
+    trial = f"Ihre kostenlose Testphase ({plan.name}, alle Funktionen) läuft {plan.trial_days} Tage.\n\n" if plan.trial_days else ""
     core.mailer.send(
         body.email,
-        f"{core.s.product_name}: E-Mail-Adresse bestätigen / Confirm your e-mail",
-        f"Willkommen bei {core.s.product_name}!\n\nBitte bestätigen Sie Ihre E-Mail-Adresse:\n"
-        f"{link(core.s, 'verify', token)}\n\nDer Link ist {int(core.s.verify_token_s // 3600)} Stunden gültig.",
+        f"Willkommen bei {core.s.product_name} / Welcome",
+        f"Hallo {body.name},\n\nIhr Zugang für „{body.org_name}“ ist eingerichtet – Sie können sofort loslegen:\n"
+        f"{core.s.base_url}/app\n\n{trial}"
+        "So geht es weiter:\n"
+        "1. Beispiel-Stellplatz ansehen (Simulation, ohne Hardware)\n"
+        "2. Echten Stellplatz anlegen und den Raspberry Pi per Kopplungscode verbinden\n"
+        "3. Anzeige und QR-Aufkleber einrichten, Karten anlernen, Tarif festlegen\n\n"
+        "Die Start-Tour im Portal erklärt alles Schritt für Schritt.\n\n"
+        f"Optional: E-Mail-Adresse bestätigen (hilft beim Zurücksetzen des Passworts):\n{link(core.s, 'verify', token)}\n",
     )
-    core.audit("tenant_registered", tenant_id=tenant_id, user_id=user_id, actor=body.email, ip=client_ip(request))
-    return {"status": "check_email"}
+    user = core.db.one("SELECT * FROM user WHERE id = ?", (user_id,))
+    response.status_code = 201
+    return _finish_login(core, request, response, user)
 
 
 @router.post("/verify-email", dependencies=[auth_limit])
@@ -206,7 +238,7 @@ def login(body: LoginIn, request: Request, response: Response):
         else:
             core.audit("login_blocked_locked", tenant_id=user["tenant_id"], user_id=user["id"], actor=user["email"], ip=ip)
         raise HTTPException(401, "invalid_credentials")  # gleiche Antwort, auch bei Sperre
-    if not user["email_verified_at"]:
+    if not user["email_verified_at"] and core.s.require_email_verification:
         raise HTTPException(403, "email_not_verified")
     if needs_rehash(user["password_hash"], core.s.scrypt_n):
         core.db.execute("UPDATE user SET password_hash = ? WHERE id = ?", (hash_password(body.password, core.s.scrypt_n), user["id"]))
@@ -273,6 +305,8 @@ def update_profile(body: ProfilePatch, request: Request, ctx: Ctx = Depends(requ
         core.db.execute("UPDATE user SET name = ? WHERE id = ?", (body.name, ctx.user["id"]))
     if body.locale is not None:
         core.db.execute("UPDATE user SET locale = ? WHERE id = ?", (body.locale, ctx.user["id"]))
+    if body.tour_done is not None:
+        core.db.execute("UPDATE user SET tour_done_at = ? WHERE id = ?", (core.clock() if body.tour_done else None, ctx.user["id"]))
     return {"status": "ok"}
 
 

@@ -32,7 +32,8 @@ mit NFC-Leser zusätzlich `{"type":"nfc","uid":"04A1B2C3D4"}`. Pi → Arduino: `
 ```
 
 Antwort `{"result": …, "session": {…}, "amount_cents": 50}` mit `result`:
-`checked_in` · `checked_out` (mit Betrag) · `unknown_card` (Karte wird als „wartet auf Freigabe“ angelegt) ·
+`checked_in` · `checked_out` (mit Betrag, im Guthaben-Modus mit `balance_cents`) · `unknown_card` (Karte wird als „wartet auf Freigabe“ angelegt) ·
+`closed` (Öffnungs-/Sperrzeit) · `reserved` (für eine andere Karte reserviert) · `insufficient_balance` ·
 `blocked` · `occupied_by_other` (anderes Fahrrad ist eingecheckt) · `open_elsewhere` (Karte an anderem
 Stellplatz eingecheckt) · `maintenance` · `expired` (Vorgang älter als 60 s, z. B. aus dem Puffer) ·
 `duplicate` · `feature_disabled` (Tarif ohne NFC).
@@ -46,7 +47,8 @@ Die Roh-UID wird **nicht** gespeichert, nur `HMAC-SHA256(Datenschlüssel, "nfc:<
 | `POST /agent/enroll` `{code, hostname, agent_version, os_info, source}` | Kopplung → `{device_id, token, station_id, config_version}` | Einmal-Code |
 | `POST /agent/heartbeat` `{agent_version, serial_connected, buffer_len, cpu_temp_c, …}` | Zustand melden → `{config_version, commands, update}` | Geräte-Token |
 | `POST /agent/rotate-token` | neues Token (altes 15 min gültig) | Geräte-Token |
-| `GET /agent/whoami` | Prüfung ohne Nebenwirkung (für `agent.py doctor`) | Geräte-Token |
+| `GET /agent/whoami` | Prüfung ohne Nebenwirkung (für `agent.py doctor`, inkl. `server_time`) | Geräte-Token |
+| `GET /agent/status` | Status des eigenen Stellplatzes für die lokale Anzeige am Pi | Geräte-Token |
 | `POST /agent/snapshot?reason=manual\|alert&event_id=…` (Body: JPEG ≤ 2 MB) | Kamerabild hochladen; `403` wenn Kamera aus, `415`/`422` bei ungültigem Bild | Geräte-Token |
 | `GET /install/server.crt` | Serverzertifikat zum Anheften (Pin im Portal) | öffentlich |
 | `GET /agent/install-info` | Installationsbefehle inkl. Pin/Fingerabdruck | Admin |
@@ -58,13 +60,13 @@ Die Roh-UID wird **nicht** gespeichert, nur `HMAC-SHA256(Datenschlüssel, "nfc:<
 
 | Methode/Pfad | Zweck |
 |---|---|
-| `POST /auth/register` | Organisation + Inhaber anlegen (immer `202 check_email`) |
+| `POST /auth/register` `{org_name, name, email, password, accept_terms, locale, plan}` | Organisation + Inhaber anlegen. Standard: **sofort angemeldet** (`201` + Profil, Session-Cookie), Start in der Testphase von `plan` (Standard `school`); vorhandene Adresse → `409 email_in_use`. Mit `auth.require_email_verification = true`: `202 check_email` wie früher |
 | `POST /auth/verify-email` `{token}` | E-Mail bestätigen |
 | `POST /auth/resend-verification` `{email}` | erneut senden |
 | `POST /auth/login` `{email,password}` | Session oder `{mfa_required, mfa_token}` |
 | `POST /auth/login/mfa` `{mfa_token, code}` | TOTP- oder Wiederherstellungscode |
 | `POST /auth/logout` | Session beenden |
-| `GET/PATCH /auth/me` | Profil, Mandant, Tarif, Nutzung, CSRF-Token |
+| `GET/PATCH /auth/me` | Profil (inkl. `email_verified`, `tour_done`), Mandant, Tarif, Nutzung, CSRF-Token; `PATCH {tour_done}` |
 | `POST /auth/me/delete` `{password}` | eigenes Konto löschen |
 | `POST /auth/password/forgot` · `/reset` · `/change` | Passwort |
 | `GET /auth/sessions` · `DELETE /auth/sessions/{id}` · `POST /auth/sessions/revoke-others` | Sitzungen |
@@ -116,6 +118,65 @@ Tarif-Modi: `free`, `flat` (je Vorgang), `per_hour` (je angefangene Stunde), `pe
 Kalendertag, Europe/Berlin). Freiminuten gelten für den ganzen Vorgang; `daily_cap_cents` begrenzt je Tag.
 Beträge immer in Cent. Tarifmerkmale werden serverseitig geprüft (`402 plan_feature`).
 
+## Guthaben (Prepaid) je Karte
+
+| Methode/Pfad | Rolle |
+|---|---|
+| `PUT /billing/payment-mode` `{mode: statement\|prepaid}` | Admin |
+| `POST /cards/{id}/topup` `{amount_cents, kind: topup\|correction, note}` (Korrektur nur Admin) | Betreuer |
+| `GET /cards/{id}/transactions` | Lesend |
+
+Im Guthaben-Modus braucht der Check-in ein positives Guthaben (`insufficient_balance`), beim Auschecken wird
+die Gebühr abgebucht; die Tap-Antwort enthält dann `balance_cents`.
+
+## Reservierungen, Öffnungs- und Sperrzeiten
+
+| Methode/Pfad | Rolle |
+|---|---|
+| `GET /reservations?station_id=` | Lesend |
+| `POST /stations/{id}/reservations` `{minutes: 5–240, card_id?, label}` | Betreuer |
+| `DELETE /reservations/{id}` | Betreuer |
+| `PUT /stations/{id}/hours` `{hours: {"mon": [["07:00","18:00"]], …} \| null}` | Admin |
+| `GET /closures` · `POST /closures` `{station_id?, starts_at, ends_at, note}` (Ortszeit `YYYY-MM-DDTHH:MM`) · `DELETE /closures/{id}` | Lesend · Admin |
+
+Reservierung mit Karte: nur diese Karte kann einchecken (erfüllt die Reservierung); ohne Karte: niemand (`reserved`).
+Geschlossen (Öffnungszeiten/Sperrzeit): kein Check-in (`closed`), Auschecken geht immer.
+
+## Berichte und Benachrichtigungen
+
+| Methode/Pfad | Rolle |
+|---|---|
+| `GET /reports?period=day\|week\|month&day=YYYY-MM-DD&format=json\|csv\|pdf` | Lesend (Tarif mit Berichten) |
+| `POST /reports/send?period=&day=` (PDF an die eigene Adresse) | Lesend |
+| `GET/PUT /me/notifications` `{alert, problem, tech, report: off\|daily\|weekly}` · `POST /me/notifications/test` | angemeldet |
+
+## Erste Schritte
+
+`GET /onboarding` (Checkliste), `POST /onboarding/hide` `{hidden}`, `POST /onboarding/demo-station` (Beispiel-Stellplatz,
+Daten vom Server simuliert und als `simulated` gespeichert).
+
+## Integrationen: API-Schlüssel und Webhooks
+
+Verwaltung im Portal (Admin): `GET /integrations`, `POST /integrations/keys` `{name, scopes: [read, reservations]}`
+(Schlüssel `sbk_…` genau einmal in der Antwort), `DELETE /integrations/keys/{id}`, `POST /integrations/webhooks` `{url, events}`
+(Geheimnis `whsec_…` einmalig), `PATCH /integrations/webhooks/{id}` `{active, events}`, `POST …/{id}/secret`, `POST …/{id}/test`,
+`GET …/{id}/deliveries`, `DELETE …/{id}`.
+
+Externe API mit `Authorization: Bearer sbk_…`:
+
+| Methode/Pfad | Recht |
+|---|---|
+| `GET /ext/stations` · `GET /ext/stations/{id}` (Zustand, Reservierung, Öffnung, Wartung) | `read` |
+| `GET /ext/events?limit=` · `GET /ext/cards` · `GET /ext/reports?period=&day=` | `read` |
+| `POST /ext/stations/{id}/reservations` `{minutes, card_id?, label}` · `DELETE /ext/reservations/{id}` | `reservations` |
+
+Webhook-Ereignisse: `alert.created`, `problem.reported`, `sensor.fault`, `stall.changed`, `parking.checked_in`,
+`parking.checked_out`, `reservation.created`, `reservation.ended`, `gateway.offline`, `gateway.online` (und `test`).
+Nachricht: `{"id", "event", "created_at", "tenant_id", "data"}` mit Kopfzeilen `X-SBB-Event`, `X-SBB-Delivery`,
+`X-SBB-Timestamp`, `X-SBB-Signature: sha256=HMAC_SHA256(geheimnis, "<timestamp>.<body>")`. Bis zu 3 Versuche
+(sofort, +10 s, +60 s), keine Weiterleitungen, Loopback/Link-Local immer gesperrt, private Netze nur mit
+`integrations.webhooks_allow_private`.
+
 ## Kamera (opt-in)
 
 | Methode/Pfad | Rolle |
@@ -149,7 +210,10 @@ Lizenzen und Rechnungen (Plattform → Organisation):
  "ai": {"visible_detector": "rule", "plan_allows_ml": true, "model_available": true}}
 ```
 
-`state`: `free` / `occupied` / `unknown` (`unknown_reason`: `no_data`, `stale`, `sensor_error`).
+`state`: `free` / `occupied` / `reserved` / `unknown` (`unknown_reason`: `no_data`, `stale`, `sensor_error`).
+`reserved` nur bei sicher freiem Platz mit aktiver Reservierung; `presence` enthält immer den reinen Sensorzustand.
+Außerdem `reservation` (Restzeit, bei Portal-Abfrage mit Karte/Notiz), `closed` (`reason: hours|closure`, `note`, `opens_at`)
+und `hours` (Wochenplan).
 Zusätzlich: `maintenance` (Anzeige „AUSSER BETRIEB“), `camera_active`, `session` (laufender Parkvorgang:
 Kartenbezeichnung, seit, laufender Betrag) und `last_tap` (letzter NFC-Vorgang für die kurze Rückmeldung).
 Die öffentliche Anzeige erhält dieselbe Antwort ohne `ai` und ohne Ereignis-ID.
@@ -157,11 +221,15 @@ Die öffentliche Anzeige erhält dieselbe Antwort ohne `ai` und ohne Ereignis-ID
 `GET /stations/{id}/occupancy?hours=24` liefert je Stunde `occupancy` (Anteil belegt an der Zeit mit
 gültiger Messung, `null` ohne Daten) und `known_s`.
 
-## Datenmodell (SQLite, Schema-Version 5, Migration von 2, 3 und 4 automatisch)
+## Datenmodell (SQLite, Schema-Version 6, Migration von 2–5 automatisch)
 
 `tenant` → `user`, `station` → `slot` (genau ein Eintrag = der Stellplatz; Migration 3→4 entfernt überzählige Plätze), `device`, `measurement`, `event`; dazu `session`, `auth_token`
 (Einmal-Tokens), `recovery_code`, `enrollment` (Kopplungscodes), `audit_log`.
 Neu in Version 5: `card` (nur UID-HMAC), `parking_session` (mit Tarif-Schnappschuss), `license`, `usage_day`
 (Stellplätze je Tag), `invoice`, `snapshot` (Datei im Datenverzeichnis `snapshots/`, `0600`); an `station`:
 `camera_enabled`, `camera_retention_h`, `camera_approved_by`, `stall_token_hash`, `stall_view_enabled`,
-`maintenance`, `tariff`. Löschen eines Mandanten entfernt alles per Kaskade, Kamerabilder auch von der Platte.
+`maintenance`, `tariff`. Neu in Version 6: `reservation`, `closure`, `card_txn` (Guthabenbuchungen), `notice_sent`
+(Drosselung der E-Mails), `api_key` (nur Hash), `webhook` (Geheimnis AES-GCM-verschlüsselt), `webhook_delivery`;
+Spalten `tenant.payment_mode`, `tenant.onboarding_hidden`, `user.notify`, `user.tour_done_at`, `card.balance_cents`,
+`device.offline_notified_at`, `station.hours`, `station.demo_sim`, `nfc_tap.balance_cents`.
+Löschen eines Mandanten entfernt alles per Kaskade, Kamerabilder auch von der Platte.

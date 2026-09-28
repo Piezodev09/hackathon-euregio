@@ -29,8 +29,22 @@ wiederholen. T08/T14 nur kontrolliert und nach Absprache mit der IT.
 | Gateway: NFC-Zeilen, Versand, Rückmeldung an Arduino | `pi-gateway/tests/test_gateway.py::test_parse_nfc_line`, `test_gateway_sends_nfc_tap_immediately_and_reports_back`, `test_gateway_nfc_rejected_is_not_retried` | bestanden |
 | Agent: Kamera-Erkennung, Upload bei Warnung, `doctor` | `pi-gateway/tests/test_agent.py` (Kamera-, Upload- und Doctor-Tests) | bestanden |
 
-Alles zusammen: `scripts/check.sh` → Backend 86, Gateway 43 Tests bestanden; JS-Syntax, Übersetzungen
-DE/NL/EN vollständig, Shell-Syntax ok.
+| Registrierung ohne E-Mail-Bestätigung, strenger Modus, Tour-Status | `test_auth.py::test_register_logs_in_immediately_verification_optional`, `test_strict_mode_requires_verification` | bestanden |
+| Reservierung: RESERVIERT nur bei sicher freiem Platz, Karte, Ablauf, Rollen, Tarif | `test_features.py::test_reservation_*`, `test_free_plan_has_no_reservations` | bestanden |
+| Öffnungs- und Sperrzeiten: kein Check-in, Auschecken geht, „öffnet um“ | `test_opening_hours_and_closures_block_checkin_not_checkout` | bestanden |
+| Wartungsmodus unterdrückt Warnungen und Sensorfehler-Meldungen | `test_maintenance_suppresses_alerts_and_sensor_faults` | bestanden |
+| Guthaben: Aufladen, Rollen, Abbuchung beim Auschecken (NFC und Portal), kein Check-in ohne Guthaben | `test_prepaid_balance_topup_fee_and_insufficient` | bestanden |
+| E-Mails: Warnung (gedrosselt, Einstellungen je Person), Gateway offline/online, gemeldetes Problem | `test_alert_mail_throttled_and_preferences`, `test_gateway_offline_and_online_mail`, `test_problem_report_mail` | bestanden |
+| Berichte: Tag/Woche, JSON/CSV/PDF, Versand, Wochenbericht montags | `test_report_json_csv_pdf_and_mail`, `test_weekly_report_mail_on_monday` | bestanden |
+| API-Schlüssel (Rechte, Mandantentrennung, Widerruf), externe Reservierung | `test_api_key_scopes_and_external_reservation` | bestanden |
+| Webhooks: Signatur, Ereignisse, Test; Adressprüfung (SSRF) | `test_webhook_signed_delivery_and_ssrf_protection`, `test_webhook_url_checks` | bestanden |
+| Beispiel-Stellplatz (Server-Simulation) und Erste-Schritte-Checkliste | `test_demo_station_simulation_and_checklist` | bestanden |
+| Lokale Offline-Anzeige am Pi: Plattform-Status bzw. Sensorzustand, veraltet = unbekannt, HTTP | `pi-gateway/tests/test_agent.py::test_local_display_*` | bestanden |
+| Doctor: Uhrzeit, TLS-Hinweis | `test_doctor_checks_token_and_clock`, `test_doctor_explains_tls_errors` | bestanden |
+
+Alles zusammen: `scripts/check.sh` → Backend 103, Gateway 45 Tests bestanden; JS-Syntax, Übersetzungen
+DE/NL/EN vollständig, Shell-Syntax ok. Das PDF des Berichts wurde zusätzlich mit einem unabhängigen PDF-Leser
+(pypdf) geprüft: gültig, Text inkl. Umlauten und € lesbar.
 
 Zusätzlich Ende-zu-Ende mit Simulator (Agent mit Simulator → API → Browser): Anzeige FREI/BELEGT,
 „SIMULATION“-Kennzeichnung in Portal und Kiosk-Anzeige, Sprachen DE/NL/EN, schmale Ansicht (390 px)
@@ -53,6 +67,15 @@ meldet 1.0.1 und bestätigt das Update. **Offen:** Test auf echtem Raspberry Pi 
 abgelehnt (`curl: (90) public key does not match pinned public key`) → exakt die Portal-Befehle 1–3
 (Zertifikat per Pin laden, Skript mit `--cacert`, `sha256sum -c` → `OK`) → Schritt 4 als root mit
 `--no-systemd --source simulator` → gekoppelt, `ca_file` gespeichert → Heartbeat und Messungen über TLS angekommen.
+
+### Registrierung, Start-Tour, Beispiel-Stellplatz, neue Funktionen (Ende-zu-Ende, 28.09., Browser)
+
+Neue Organisation über die Registrierungsseite (Tarif „Schule“) → sofort angemeldet → Start-Tour startet
+automatisch und führt durch alle 17 Schritte (inkl. Seitenwechsel, Hervorhebung, Tastatur) → Beispiel-Stellplatz
+angelegt → Server-Simulation erzeugt Messungen und Check-ins (als SIMULATION gekennzeichnet) → Reservierung
+angelegt → Portal, Kiosk-Anzeige und Stellplatz-Ansicht zeigen RESERVIERT mit Restzeit → Sperrzeit eingetragen →
+„Gesperrt: Herbstferien. Öffnet …“ → Guthaben-Modus, Aufladen, Buchungen → Bericht als PDF/CSV → API-Schlüssel
+und Webhook angelegt → Benachrichtigungen gespeichert. 390 px ohne Querscrollen, keine Konsolenfehler.
 
 ### NFC, Parkgebühren, Kamera, Stellplatz-Ansicht (Ende-zu-Ende, 28.09., Simulator)
 
@@ -93,3 +116,6 @@ Dashboard-Wechsels notieren. Ziel ≤ 5 s (2 s Entprellung + Übertragung + 2 s 
   Befehlszeilen geprüft, nicht mit echter Kamera.
 - KI-Modell bisher nur mit simulierten Daten trainiert.
 - NL/EN-Texte noch nicht von sprachkundiger Person geprüft.
+- Webhooks nur mit Test-Empfänger geprüft (keine echte Schul-App); Zustellung an externe Adressen hängt von Netz/Firewall ab.
+- E-Mail-Versand nur im Konsolen-Modus geprüft (kein echter SMTP-Server).
+- Offline-Anzeige im Chromium-Kiosk eines echten Pi noch nicht getestet.
