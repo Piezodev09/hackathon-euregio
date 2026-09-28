@@ -1,24 +1,28 @@
 # Betriebshinweise
 
-## Debian-VM auf Proxmox
+## Debian-VM auf Proxmox (Plattform)
 
-1. VM anlegen (Vorschlag: Debian 12, 1 vCPU, 1 GB RAM, 8 GB Disk) – Netz/VLAN mit IT abstimmen.
-2. Repo nach `/opt/smart-bike-station` kopieren (ohne Tokens!).
-3. `sudo /opt/smart-bike-station/deploy/install-vm.sh` – erzeugt Benutzer, venv, Zufallstokens,
-   Demo-Zertifikat (selbst signiert, 30 Tage) und startet `bike-api` auf Port 8443.
-4. Firewall: `/etc/nftables.conf.bike-example` an echte Netze anpassen, als `/etc/nftables.conf`
-   übernehmen, `systemctl enable --now nftables`.
-5. Prüfen: `curl -k https://localhost:8443/health`
+1. VM anlegen (Vorschlag: Debian 12, 2 vCPU, 2 GB RAM, 16 GB Disk). DNS-Name, Zertifikat und Firewall mit der IT klären.
+2. Repo nach `/opt/smart-bike-station` kopieren.
+3. `sudo /opt/smart-bike-station/deploy/install-vm.sh` – legt Benutzer, venv, **Datenschlüssel** und
+   (falls nötig) ein Demo-Zertifikat an und startet `bike-api` auf Port 8443.
+4. `/etc/bike-station/api.env` anpassen: `BIKE_BASE_URL` (https!), `BIKE_ALLOWED_HOSTS`, SMTP-Zugang.
+   In `production` verweigert die Plattform den Start bei unsicherer Konfiguration.
+5. **Datenschlüssel `BIKE_DATA_KEY` offline sichern** – ohne ihn sind die 2FA-Geheimnisse nach einer
+   Wiederherstellung unbrauchbar (Nutzer müssten 2FA neu einrichten).
+6. Plattform-Admin anlegen (siehe Ausgabe des Skripts), anmelden, 2FA einrichten.
+7. Firewall aktivieren (`/etc/nftables.conf.bike-example` anpassen). Prüfen: `curl https://<host>:8443/health`.
 
-KI-Modell übernehmen: `ml/models/vibration_iforest.joblib` nach
-`/opt/smart-bike-station/ml/models/` kopieren, `systemctl restart bike-api`.
+Kunden registrieren sich danach selbst unter `https://<host>/app#/register`.
 
-## Raspberry Pi
+## Raspberry Pi (je Station, beim Kunden)
 
-1. Repo nach `/opt/smart-bike-station`, dann `sudo deploy/install-pi.sh`.
-2. `/etc/bike-gateway/config.toml`: API-URL, `ca_file` (Zertifikat der VM, `server.crt`), Serieller Port.
-3. `/etc/bike-gateway/gateway.env`: Geräte-Token aus `/etc/bike-station/api.env` der VM.
-4. `sudo systemctl enable --now bike-gateway`
+1. Im Portal: Station → Einstellungen → **Token erzeugen**. Token und Konfigurationsauszug werden einmal angezeigt.
+2. Repo nach `/opt/smart-bike-station`, `sudo deploy/install-pi.sh`.
+3. Auszug in `/etc/bike-gateway/config.toml` übernehmen (API-URL, Station-ID, `slot_map`, ggf. `ca_file`),
+   Token in `/etc/bike-gateway/gateway.env` (`BIKE_DEVICE_TOKEN=…`, Rechte 600).
+4. `sudo systemctl enable --now bike-gateway`. Im Portal erscheint „Zuletzt gesehen“.
+5. Bei Verlust oder Tausch des Pi: Token im Portal sperren und neues erzeugen.
 
 ## Start / Stopp / Neustart
 
@@ -41,8 +45,8 @@ Nach einem Neustart gelten alte Zustände nicht automatisch: Der Arduino meldet 
 
 ## Demodaten löschen
 
-`sudo -u bikestation deploy/delete-demo-data.sh` – löscht Messungen, Ereignisse und Audit-Log.
-Rohmesswerte werden ohnehin nach `retention.measurements_max_age_h` (72 h) automatisch gelöscht.
+Kunden löschen ihre Daten selbst (Portal → Organisation → Löschen). Für die Demo: `sudo -u bikestation deploy/delete-demo-data.sh`.
+Messdaten und Ereignisse werden automatisch nach der Tarif-Frist gelöscht (Free 7, Schule 30, Pro 90 Tage), das Audit-Log nach 365 Tagen.
 
 ## Lokale Entwicklung
 

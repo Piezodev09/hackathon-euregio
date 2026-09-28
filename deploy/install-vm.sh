@@ -15,11 +15,10 @@ python3 -m venv "$APP/venv"
 "$APP/venv/bin/pip" install -r "$APP/backend/requirements.txt"
 
 if [ ! -f /etc/bike-station/api.env ]; then
-  DEV=$(python3 -c "import secrets;print(secrets.token_urlsafe(32))")
-  ADM=$(python3 -c "import secrets;print(secrets.token_urlsafe(32))")
-  (umask 077; sed -e "s/REPLACE_WITH_DEVICE_TOKEN/$DEV/" -e "s/REPLACE_WITH_ADMIN_TOKEN/$ADM/" \
-      "$APP/deploy/api.env.example" > /etc/bike-station/api.env)
-  echo "Tokens erzeugt in /etc/bike-station/api.env – Geräte-Token sicher auf den Pi übertragen."
+  KEY=$(python3 -c "import secrets,base64;print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())")
+  (umask 077; sed -e "s|REPLACE_WITH_DATA_KEY|$KEY|" "$APP/deploy/api.env.example" > /etc/bike-station/api.env)
+  echo "Datenschlüssel erzeugt. JETZT /etc/bike-station/api.env anpassen (BASE_URL, Hosts, SMTP)"
+  echo "und den Datenschlüssel zusätzlich sicher offline sichern (ohne ihn sind 2FA-Geheimnisse verloren)."
 fi
 
 if [ ! -f /etc/bike-station/tls/server.key ]; then
@@ -37,3 +36,5 @@ install -m 644 "$APP/deploy/nftables.conf.example" /etc/nftables.conf.bike-examp
 systemctl daemon-reload
 systemctl enable --now bike-api
 echo "Fertig. Firewall-Beispiel: /etc/nftables.conf.bike-example (anpassen, dann aktivieren)."
+echo "Plattform-Admin anlegen:"
+echo "  cd $APP/backend && sudo -u bikestation env \$(cat /etc/bike-station/api.env | xargs) $APP/venv/bin/python -m app.cli create-platform-admin --email ops@example.org"

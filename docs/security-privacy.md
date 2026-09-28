@@ -1,49 +1,94 @@
 # Sicherheit und Datenschutz
 
-## Bedrohungsmodell und Umsetzung
+Die Plattform ist mandantenfähig (SaaS): Kunden (Organisationen) mieten sich ein und verwalten
+ihre Stationen, Geräte und Teams selbst. Grundlage der Maßnahmen sind OWASP ASVS (Level 2
+als Ziel), OWASP Top 10 und NIST SP 800-63B für Passwörter.
 
-| Risiko | Mögliches Problem | Gegenmaßnahme im Prototyp | Wo |
-|---|---|---|---|
-| Gefälschte Sensordaten | falsche Belegung/Meldungen | Geräte-Token, strikte Schema-Validierung (unbekannte Felder verboten, Wertebereiche), nur konfigurierte Plätze, Audit-Log | `schemas.py`, `main.py` |
-| Zugriff auf Admin-Funktionen | Meldungen unberechtigt quittiert | getrennte Admin-Tokens, Quittieren protokolliert, Leseansicht ohne Schreibrechte | `require_admin` |
-| Offene Netzwerkdienste | Angriff auf VM/Pi | nftables-Beispiel: nur 8443 aus Demo-Netz, SSH nur Admin-Netz; systemd-Härtung; keine OpenAPI-/Docs-Seiten | `deploy/` |
-| Sensorausfall | falsches „frei“ | „unbekannt“ bei Fehler, Timeout, fehlenden Daten; Browser-Timeout | Arduino, Gateway, API, UI |
-| Überlastung der API | keine aktuellen Anzeigen | Token-Bucket je Client für Lesen/Schreiben, Body ≤ 64 KB, Batch ≤ 200 | `ratelimit.py` |
-| Geheimnis im Repository | Token-Missbrauch | Tokens nur aus Umgebung/Datei (Rechte 600/640), `.gitignore`, Beispiele nur mit Platzhaltern, Tokens < 16 Zeichen werden abgelehnt | `config.py` |
-| Zu lange Speicherung | unnötige Nachvollziehbarkeit | Rohdaten automatisch nach 72 h gelöscht, Löschskript nach Demo | `retention`, `delete-demo-data.sh` |
-| Alarm-Fehlinterpretation | unberechtigter Verdacht gegen Menschen | sachlicher Text „ungewöhnliche Erschütterung … bitte prüfen“, keine Personenzuordnung, Hinweis im Dashboard | `i18n.js` |
-| XSS im Dashboard | Code-Einschleusung | keine `innerHTML`-Nutzung, strikte CSP (`script-src 'self'`), `X-Frame-Options: DENY` | `app.js`, `main.py` |
-| Timing-Angriff auf Token | Token erraten | Vergleich mit `hmac.compare_digest` | `main.py` |
+## Umgesetzte Sicherheitsmaßnahmen
 
-## OWASP-orientierte Mindestprüfung
+### Identität und Anmeldung
+| Maßnahme | Umsetzung | Code |
+|---|---|---|
+| Passwort-Hashing | scrypt (N=2¹⁵, r=8, p=1, 16-Byte-Salt), automatisches Rehash bei höherem Kostenfaktor | `security.py` |
+| Passwortrichtlinie | ≥ 12 Zeichen, ≤ 128, Liste häufiger Passwörter, nicht Teil von E-Mail/Name, keine Zwangs-Sonderzeichen (NIST) | `password_problems` |
+| Keine Konto-Aufzählung | gleiche Antwort bei unbekannter E-Mail, falschem Passwort und gesperrtem Konto; Dummy-Hash gleicht Laufzeit an; Registrierung/Reset immer „E-Mail prüfen“ | `routes/auth.py` |
+| Brute-Force-Schutz | Kontosperre nach 5 Fehlversuchen mit wachsender Dauer (5, 10, 20 … min, max. 24 h), Hinweis-Mail; IP-Ratenbegrenzung 10/min für Auth, 5/h für Mail-auslösende Endpunkte | `_register_failure`, `Core` |
+| E-Mail-Bestätigung | Pflicht vor erster Anmeldung; Einmal-Token, 48 h gültig | `verify-email` |
+| Zwei-Faktor (TOTP) | RFC 6238, ±1 Zeitschritt, **Replay-Schutz** (letzter Schritt gespeichert), 10 Wiederherstellungscodes (nur gehasht), Pflicht per Organisation einstellbar, Pflicht für Plattform-Admins | `totp_verify`, `mfa/*` |
+| 2FA-Geheimnis im Ruhezustand | AES-256-GCM mit Associated Data (Nutzer-ID) – Datenbankdiebstahl allein reicht nicht | `SecretBox` |
+| Passwort-Reset | Einmal-Token, 1 h gültig, beendet alle Sitzungen, Benachrichtigung | `password/reset` |
+| Sicherheitsbenachrichtigungen | Mails bei Sperre, Passwortänderung, 2FA an/aus, Nutzung eines Wiederherstellungscodes | |
 
-- [x] Eingabevalidierung für jeden Endpunkt
-- [x] Berechtigungsprüfung für jeden schreibenden Endpunkt
-- [x] Keine Debug-Ausgaben/Stacktraces nach außen, Validierungsfehler spiegeln keine Eingaben
-- [x] Keine Standardpasswörter (Mindestlänge, Installationsskript erzeugt Zufallstokens)
-- [x] Admin-Zugriffe und abgewiesene Schreibversuche protokolliert (`audit_log`)
-- [x] Test unberechtigter Schreibversuch (T09) automatisiert
-- [ ] TLS mit vertrauenswürdigem Zertifikat – mit IT klären (Demo: selbst signiert + `ca_file` im Gateway)
-- [ ] Firewallregeln auf echte Netze angepasst und getestet
-- [ ] Updates von VM und Pi eingespielt
+### Sitzungen
+| Maßnahme | Umsetzung |
+|---|---|
+| Serverseitige Sessions | 256-Bit-Zufallstoken, in der DB nur SHA-256-Hash, sofort widerrufbar |
+| Cookie | `__Host-`-Präfix (bei HTTPS), `HttpOnly`, `Secure`, `SameSite=Strict`, `Path=/` |
+| Laufzeit | 60 min Leerlauf, 12 h absolut |
+| Session-Fixation | bei jeder Anmeldung neue Session, alte wird verworfen |
+| Widerruf | Liste aktiver Sitzungen, einzeln/alle anderen abmelden; Passwort-/Rollenänderung und 2FA-Aktivierung beenden andere Sitzungen; Sperre eines Mandanten beendet alle |
+| CSRF | Synchronizer-Token (`X-CSRF-Token`) für jede zustandsändernde Anfrage **plus** Origin-/`Sec-Fetch-Site`-Prüfung **plus** SameSite=Strict |
 
-## Token-Handhabung
+### Autorisierung und Mandantentrennung
+- Jede Abfrage ist über `tenant_id` gefiltert; fremde Ressourcen liefern **404** (keine Existenz-Auskunft).
+- Nicht erratbare IDs (`st_…`, `usr_…`, 96 Bit) statt fortlaufender Nummern.
+- Rollen: Inhaber > Administrator > Betreuer > Lesend. Niemand vergibt höhere Rechte als die eigenen;
+  der letzte Inhaber kann weder entfernt noch herabgestuft werden.
+- Geräte-Tokens gelten nur für **eine** Station (`station_mismatch` bei Abweichung), sind widerrufbar,
+  nur gehasht gespeichert und werden genau einmal angezeigt.
+- Öffentliche Anzeige-Links: nur lesend, eingeschränkte Daten (keine KI-/Ereignisdetails), rotierbar,
+  deaktivierbar; Token im URL-Fragment und im Header – nie in Server-Logs.
+- Tarif-Limits (Stationen, Plätze, Nutzer, Funktionen) werden serverseitig erzwungen.
+- Plattform-Admins sind von Mandanten getrennt und benötigen 2FA.
 
-- Erzeugen: `python3 -c "import secrets;print(secrets.token_urlsafe(32))"`
-- VM: `/etc/bike-station/api.env` (`BIKE_DEVICE_TOKENS`, `BIKE_ADMIN_TOKENS`, kommagetrennt → Tokenwechsel ohne Ausfall möglich)
-- Pi: `/etc/bike-gateway/gateway.env` (`BIKE_DEVICE_TOKEN`)
-- Browser: Admin-Token nur in `sessionStorage` der aktuellen Sitzung, nie in Folien/Screenshots.
-- Wechsel: neues Token ergänzen, Pi umstellen, altes entfernen, Dienste neu starten.
+### Transport, Header, Eingaben
+| Maßnahme | Umsetzung |
+|---|---|
+| TLS | HTTPS Pflicht in `production` (Start verweigert sonst); HSTS 2 Jahre inkl. Subdomains |
+| Content-Security-Policy | `default-src 'none'; script-src 'self'; style-src 'self'; frame-ancestors 'none'; base-uri 'none'; object-src 'none'` – kein Inline-JS/CSS |
+| Weitere Header | `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Permissions-Policy` (Kamera, Mikrofon, Standort … aus), COOP/CORP `same-origin`, `Cache-Control: no-store` für API und Seiten, `X-Request-ID` |
+| Host-Header | `TrustedHostMiddleware` mit Allowlist |
+| Eingaben | strikte Pydantic-Schemata (`extra=forbid`), Längen, Muster, Steuerzeichen verboten; E-Mail-Header-Injection damit ausgeschlossen |
+| Anfragegröße | 64 KB, auch bei chunked Transfer |
+| Fehlerausgaben | keine Stacktraces, keine gespiegelten Eingaben, keine OpenAPI/Docs-Seiten |
+| XSS im Frontend | kein `innerHTML`; alle Inhalte als Textknoten |
+| SQL-Injection | ausschließlich parametrisierte Abfragen |
+| `security.txt` | `/.well-known/security.txt` für Meldungen von Schwachstellen |
 
-## Datenschutzentscheidungen
+### Betrieb
+- Unsichere Konfigurationen werden in `production` abgelehnt (HTTP, `*`-Hosts, Console-Mail, schwacher scrypt-Faktor, fehlender Datenschlüssel).
+- Datenbankdatei `0600`, `secure_delete`, systemd-Härtung (`NoNewPrivileges`, `ProtectSystem=strict`, …), nftables-Beispiel.
+- Audit-Log je Mandant (Anmeldungen, Fehlversuche, Rollen, Tokens, Tarif, Export, Quittierungen …) und plattformweit.
+- Automatische Löschung: Messdaten/Ereignisse nach Tarif-Frist (7/30/90 Tage), Audit-Log nach 365 Tagen, abgelaufene Sessions/Tokens.
 
-- Für die Kernfunktion **keine** Kameras, RFID-Tags, Namen oder Standortprofile.
-- Gespeichert: Station/Platz, technischer Zustand, Vibrationswert, Zeitpunkt, Ereignistyp, Quelle (live/simuliert).
-  IP-Adressen nur im Audit-Log bei Admin-Aktionen und abgewiesenen Zugriffen.
-- Auch diese Daten können im Schulkontext sensibel sein, wenn sie mit konkreten Situationen verknüpft werden.
-- **Nicht zulässig:** „Person X hat ein Fahrrad gestohlen.“
-  **Zulässig:** „An Platz A wurde eine ungewöhnliche Erschütterung gemessen; bitte Situation prüfen.“
+## Bedrohungsmodell (Auszug)
 
-Vor realem Betrieb klären: verantwortliche Stelle, Zweck, Zugang, Speicherdauer, Information
-der Betroffenen, Freigabe durch IT/Datenschutzverantwortliche. Die 72-h-Frist ist ein Demo-Vorschlag,
-keine rechtliche Freigabe.
+| Bedrohung | Gegenmaßnahme |
+|---|---|
+| Credential Stuffing / Brute Force | Kontosperre, IP-Limit, 2FA, keine Aufzählung |
+| Session-Diebstahl | HttpOnly-Cookie, kurze Laufzeiten, Widerruf, CSP gegen XSS |
+| CSRF | Token + Origin + SameSite=Strict |
+| Mandant A liest Daten von B (IDOR) | Tenant-Filter in jeder Abfrage, 404, nicht erratbare IDs, Tests `test_tenancy.py` |
+| Gefälschte Sensordaten | Geräte-Token je Station, Validierung, Audit |
+| Gestohlenes Geräte-Token | nur eine Station betroffen, widerrufbar, „zuletzt gesehen“ + IP sichtbar |
+| DB-Leak | Passwörter scrypt, Tokens gehasht, 2FA-Geheimnisse AES-GCM |
+| Missbrauch von Anzeige-Links | nur Lesen, begrenzte Daten, rotierbar, Rate-Limit |
+| Fehlinterpretation eines Alarms | sachlicher Text, kein Personenbezug |
+
+## Datenschutz
+
+- Keine Kameras, kein RFID, keine Personenerkennung. Messdaten: Platz, Zustand, Vibrationswert, Zeit, Quelle.
+- Kontodaten: Name, E-Mail, Rolle, Sprache; Sitzungen: IP und Browserkennung (Sicherheitszweck, max. 12 h).
+- Betroffenenrechte: Datenexport (JSON, Art. 20), Konto löschen, Organisation vollständig löschen (Kaskade).
+- Keine Tracking-/Werbe-Cookies; nur ein technisch notwendiges Session-Cookie.
+- **Vor produktivem Einsatz durch den Betreiber zu klären:** Datenschutzerklärung und Impressum
+  (Platzhalter auf der Landingpage), Auftragsverarbeitungsvertrag mit Kunden, Hosting-Standort,
+  Verzeichnis der Verarbeitungstätigkeiten, ggf. DSFA im Schulkontext.
+
+## Bekannte Grenzen / offene Punkte
+
+- Keine Zahlungsanbindung – Tarifwechsel werden protokolliert, Abrechnung manuell.
+- Ratenbegrenzung im Speicher je Prozess (bei mehreren Instanzen: Redis o. ä. nötig).
+- SQLite für kleinen Betrieb; für viele Kunden auf PostgreSQL mit Row-Level-Security umstellen.
+- Kein QR-Code für die 2FA-Einrichtung (Schlüssel + `otpauth://`-Link); WebAuthn/Passkeys als Erweiterung.
+- Kein externer Penetrationstest durchgeführt.

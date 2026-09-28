@@ -1,63 +1,69 @@
-# Konfiguration der Smarten Radstation (Backend).
-# Alle Zeitwerte sind Planungsannahmen aus dem Projektplan (Abschnitt 5.3)
-# und werden im Test an die echte Hardware angepasst.
-# KEINE Geheimnisse in diese Datei! Tokens kommen aus Umgebungsvariablen
-# (siehe deploy/api.env.example).
+# Konfiguration der Plattform "Smarte Radstation" (nicht geheime Werte).
+# Geheimnisse (Datenschlüssel, SMTP-Passwort) kommen AUSSCHLIESSLICH aus Umgebungsvariablen,
+# siehe deploy/api.env.example.
 
-[station]
-id = "demo-01"
-display_name = "Smarte Radstation – Demo"
+[app]
+# "development" oder "production". In production werden unsichere Einstellungen abgelehnt.
+environment = "development"
+# Öffentliche Basis-URL (für Links in E-Mails, Origin-Prüfung, Cookie-Sicherheit).
+base_url = "http://127.0.0.1:8000"
+# Erlaubte Host-Header (Schutz vor Host-Header-Angriffen). "*" nur in der Entwicklung.
+allowed_hosts = ["127.0.0.1", "localhost"]
+# Selbstregistrierung neuer Kunden erlauben.
+signup_enabled = true
+product_name = "Smarte Radstation"
 
-# Reihenfolge = Position vom Eingang aus. Die Empfehlung nimmt den
-# ersten freien Platz in dieser Reihenfolge (transparente Regel, keine KI).
-[[station.slots]]
-id = "A"
-label = "Platz A"
-position = 1
+[auth]
+# Session: Leerlauf-Timeout und absolute Höchstdauer.
+session_idle_minutes = 60
+session_absolute_hours = 12
+# Kontosperre nach so vielen Fehlversuchen (mit wachsender Sperrdauer).
+lockout_threshold = 5
+lockout_base_minutes = 5
+password_min_length = 12
+# scrypt-Kostenfaktor (2^15 empfohlen). Nur für Tests kleiner setzen (BIKE_SCRYPT_N).
+scrypt_n = 32768
+# Plattform-Admins müssen 2FA nutzen (in production immer erzwungen).
+platform_admin_mfa_required = true
+# Gültigkeit von E-Mail-Links (Stunden).
+verify_token_hours = 48
+reset_token_hours = 1
+invite_token_hours = 72
 
-[[station.slots]]
-id = "B"
-label = "Platz B"
-position = 2
-
-[[station.slots]]
-id = "C"
-label = "Platz C"
-position = 3
+[mail]
+# "console" (Entwicklung: Mails im Log) oder "smtp".
+backend = "console"
+from = "Smarte Radstation <no-reply@example.org>"
+smtp_host = ""
+smtp_port = 587
+smtp_user = ""
+smtp_starttls = true
 
 [timing]
 # Ohne verlässliche Meldung seit so vielen Sekunden gilt ein Platz als "unbekannt".
 stale_after_s = 30
-# Empfohlenes Abfrageintervall der Oberfläche.
 ui_poll_interval_s = 2
 
 [anomaly]
-# Welche Methode erzeugt die SICHTBARE Warnung: "rule" oder "ml".
-# Go/No-Go (Plan 8.2): Wenn die KI mehr Probleme macht als die Regel, bleibt "rule".
-alert_source = "rule"
-# Zeitfenster für Merkmale (Sekunden).
 window_s = 10
-# Ab diesem vibration_score zählt eine Meldung als deutlicher Ausschlag.
 peak_threshold = 300
-# Mindestanzahl deutlicher Ausschläge im Fenster für die Regel.
 min_peaks = 3
-# Schonzeit nach Belegungswechsel (Einstellen/Ausparken), in Sekunden.
 grace_period_s = 15
-# Nach einer Warnung für diesen Platz so lange keine neue Warnung.
 cooldown_s = 30
-# Pfad zum trainierten Modell (relativ zu diesem Verzeichnis). Fehlt es,
-# ist die KI "nicht verfügbar" – Belegung funktioniert trotzdem.
+# Plattformweites, mit ml/train.py trainiertes Modell. Fehlt es, ist die KI "nicht verfügbar".
 model_path = "../ml/models/vibration_iforest.joblib"
 
 [retention]
-# Rohmesswerte älter als so viele Stunden werden beim Start und stündlich gelöscht.
-# Für die Demo kurz halten (Datensparsamkeit, Plan 7.3).
-measurements_max_age_h = 72
+# Audit-Log-Aufbewahrung (Tage). Messdaten-Aufbewahrung richtet sich nach dem Tarif.
+audit_days = 365
 
 [security]
-# Ratenbegrenzung für schreibende Endpunkte (Anfragen pro Sekunde, Burst).
-write_rate_per_s = 20
-write_burst = 60
-# Ratenbegrenzung für lesende Endpunkte pro Client-IP.
-read_rate_per_s = 10
-read_burst = 40
+# Ratenbegrenzung (Anfragen pro Sekunde, Burst) je Client-IP bzw. Gerät.
+read_rate_per_s = 20
+read_burst = 60
+device_rate_per_s = 20
+device_burst = 60
+# Anmelde-/Registrierungs-Endpunkte je IP: so viele Versuche pro Minute.
+auth_per_minute = 10
+# Nur auf true setzen, wenn ein vertrauenswürdiger Reverse-Proxy X-Forwarded-For setzt.
+trust_proxy = false

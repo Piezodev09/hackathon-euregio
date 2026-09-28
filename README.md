@@ -14,48 +14,59 @@ Sensoren ─► Arduino ──USB-Seriell──► Raspberry Pi ──HTTPS─�
             LEDs                     Sequenznummern          + Dashboard                  DE/NL/EN
 ```
 
-## Stand der Umsetzung
+## Die Plattform (SaaS)
 
-| Priorität | Bestandteil | Stand |
-|---|---|---|
-| P0 | Arduino-Firmware (Präsenz, Vibration, LEDs, JSON-Zeilen) | Sketch fertig, **Pins/Sensoren vor Ort prüfen**, nicht auf Hardware getestet |
-| P0 | Pi-Gateway (Seriell, Validierung, Puffer, Watchdog, systemd) | fertig, getestet mit Simulator |
-| P0 | API + SQLite (Status, Ereignisse, Quittieren, Health) | fertig, automatisierte Tests |
-| P0 | Zustände frei / belegt / **unbekannt**, Zeitstempel, Timeout | fertig |
-| P0 | Warnung: Baseline-Regel + KI (Isolation Forest) im Vergleich | fertig; Modell bisher nur mit **simulierten** Daten trainiert |
-| P0 | Basisschutz: Geräte-/Admin-Token, Validierung, Rate Limit, Audit-Log, Security-Header | fertig |
-| P1 | Auslastung je Stunde (Heatmap + Textzusammenfassung) | fertig |
-| P1 | DE/NL/EN, Bedienung ohne Farbe und per Tastatur | fertig; Übersetzungen noch prüfen lassen |
-| P1 | Empfehlung freier Platz (transparente Regel, keine KI) | fertig |
-| P2 | Prognose, Solar, RFID, QR | bewusst nicht umgesetzt |
+Kunden (Schulen, Unternehmen, Kommunen) registrieren sich selbst, legen eine Organisation an und
+verwalten darin Stationen, Stellplätze, Gateways und ihr Team. Der Betreiber sieht alle Kunden
+in der Plattform-Ansicht.
 
-## Schnellstart ohne Hardware (Simulator)
+| Bereich | Inhalt |
+|---|---|
+| **Landingpage** `/` | Funktionen, Ablauf, Sicherheit, Tarife (Free · Schule · Pro), Registrierung |
+| **Kundenportal** `/app` | Übersicht mit Kennzahlen, Live-Ansicht je Station (Belegung, Empfehlung, Warnungen, Heatmap, KI-Status), Stationsverwaltung (Plätze, Geräte-Tokens, Anzeige-Link, Gateway-Konfiguration), Meldungen mit Quittieren, Team mit Rollen und Einladungen, Konto & Sicherheit (2FA, Sitzungen, Passwort), Organisation (2FA-Pflicht, Export, Löschung), Tarif & Nutzung, Audit-Log |
+| **Kiosk-Anzeige** `/display#<token>` | öffentliche Nur-Lese-Anzeige für Bildschirme an der Station (DE/NL/EN) |
+| **Plattform** `/app#/platform` | Betreiber: Kunden, Tarife, Sperren, MRR, Kennzahlen |
+
+Rollen: **Inhaber** (alles inkl. Tarif/Export/Löschung) · **Administrator** (Stationen, Geräte, Team) ·
+**Betreuer** (Live-Daten, Meldungen quittieren) · **Lesend**.
+
+Sicherheit (Details: [docs/security-privacy.md](docs/security-privacy.md)): scrypt-Passwörter mit
+Richtlinie, E-Mail-Bestätigung, TOTP-2FA mit Wiederherstellungscodes (verschlüsselt gespeichert,
+per Organisation erzwingbar), Kontosperre und Ratenbegrenzung, serverseitige Sessions mit
+`__Host-`/HttpOnly/Secure/SameSite=Strict-Cookie, CSRF-Token + Origin-Prüfung, strikte
+Mandantentrennung, gehashte Geräte-Tokens je Station, strenge CSP und Sicherheits-Header,
+Trusted Hosts, Größenlimits, Audit-Log, Datenexport und Löschung, Secure-by-default-Prüfung
+für `production`.
+
+Noch **nicht** enthalten: Zahlungsanbindung (Abrechnung manuell), echte Datenschutzerklärung/Impressum
+(Platzhalter), externer Penetrationstest.
+
+## Schnellstart ohne Hardware
 
 Voraussetzung: Python ≥ 3.11.
 
 ```bash
 pip install -r backend/requirements-dev.txt pyserial
-scripts/dev.sh              # startet API + Simulator + Gateway
+scripts/dev.sh
 ```
 
-Dann <http://127.0.0.1:8000> öffnen. Im Terminal steuert man den Simulator:
-`p A` (Platz A belegen/freigeben), `b A` (leicht anstoßen), `s A` (kräftig rütteln),
-`e A` (Sensorfehler ein/aus), `q` (beenden). Alle Simulatordaten sind im Dashboard
-deutlich als **simuliert** gekennzeichnet. Admin-Token für die Verwaltung:
-`dev-admin-token-change-me` (nur lokal!).
+Das Skript legt beim ersten Start einen Demo-Kunden mit Station und Geräte-Token an, startet die
+Plattform und verbindet Simulator → Gateway. Dann:
 
-KI-Modell für die Pipeline-Probe trainieren (simulierte Daten):
+- Portal: <http://127.0.0.1:8000/app> – Login `demo@example.org` / `Fahrradplatz-Euregio-2026!`
+- Kiosk-Link: steht in der Konsole (`Kiosk-Anzeige: …`)
+- Eigene Registrierung: <http://127.0.0.1:8000/app#/register> – der Bestätigungslink erscheint im Log
+- Simulator-Befehle im Terminal: `p A` (belegen/freigeben), `b A` (anstoßen), `s A` (rütteln), `e A` (Sensorfehler), `q`
 
-```bash
-python3 ml/generate_synthetic.py
-python3 ml/train.py ml/data/synthetic.csv    # schreibt ml/models/… und ml/report.md
-```
+Plattform-Admin anlegen: `cd backend && python3 -m app.cli create-platform-admin --email ops@example.org`
+
+KI-Modell für die Pipeline-Probe (simulierte Daten): `python3 ml/generate_synthetic.py && python3 ml/train.py ml/data/synthetic.csv`
 
 ## Tests
 
 ```bash
-cd backend && python3 -m pytest -q          # API, Zustände, Sicherheit (T01–T13 soweit ohne Hardware)
-cd pi-gateway && python3 -m pytest -q tests # Parser, Puffer, Watchdog, Sequenzen
+cd backend && python3 -m pytest -q          # 43 Tests: Abnahmetests, Auth, 2FA, CSRF, Mandantentrennung, Rollen, Tarife, Header
+cd pi-gateway && python3 -m pytest -q tests # 20 Tests: Parser, Puffer, Watchdog, Sequenzen
 ```
 
 ## Verzeichnisse
@@ -64,8 +75,8 @@ cd pi-gateway && python3 -m pytest -q tests # Parser, Puffer, Watchdog, Sequenze
 |---|---|
 | `arduino/` | Arduino-Sketch |
 | `pi-gateway/` | Gateway, Simulator, Beispielkonfiguration |
-| `backend/` | FastAPI-App, Konfiguration (`config.toml`), Tests |
-| `dashboard/` | Weboberfläche (HTML/CSS/JS ohne Framework) |
+| `backend/` | FastAPI-Plattform (Auth, Mandanten, Stationen, Telemetrie, Plattform-Admin), CLI, Tests |
+| `web/` | Landingpage, Kundenportal, Kiosk-Anzeige (HTML/CSS/JS-Module ohne Framework) |
 | `ml/` | Datenexport, Training, Vergleich Regel vs. KI |
 | `deploy/` | systemd-Units, Installationsskripte, Firewall-Beispiel, Backup, Löschen |
 | `docs/` | Architektur, API, Hardware, Sicherheit/Datenschutz, KI-Steckbrief, Tests, Betrieb, Demo |
@@ -88,4 +99,4 @@ cd pi-gateway && python3 -m pytest -q tests # Parser, Puffer, Watchdog, Sequenze
 - **Keine KI-Behauptung ohne Test.** `ml/train.py` vergleicht Modell und Regel auf denselben
   Testläufen; die sichtbare Warnung kommt aus dem besseren Verfahren (`alert_source`).
 - **Keine personenbezogene Diebstahlbehauptung.** Keine Kameras, keine Namen, kein RFID.
-- **Keine Geheimnisse im Repository.** Tokens nur über Umgebungsvariablen/Dateien außerhalb Git.
+- **Keine Geheimnisse im Repository.** Datenschlüssel und SMTP-Passwort nur über Umgebungsvariablen; Geräte-Tokens entstehen im Portal und werden nur gehasht gespeichert.

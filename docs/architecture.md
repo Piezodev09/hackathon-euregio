@@ -8,8 +8,8 @@ Konkreter Vorschlag nach Projektplan Kapitel 3 – an die tatsächlich vorhanden
 |---|---|---|
 | Arduino | Sensoren lesen, Belegung 2 s entprellen, LEDs setzen, JSON-Zeilen über USB-Seriell senden (bei Änderung, bei Vibration max. alle 0,5 s, Heartbeat alle 10 s) | `arduino/smart_bike_station/` |
 | Raspberry Pi | Zeilen prüfen, Platz zuordnen, Sequenznummer vergeben, bis zu 500 Nachrichten puffern, per HTTPS senden; schweigt der Arduino > 15 s, alle Plätze als Sensorfehler melden; Netzstatus an Arduino zurück | `pi-gateway/gateway.py` |
-| Debian-VM auf Proxmox | FastAPI: Messungen annehmen, Zustände ableiten, Regel + KI auswerten, SQLite, Dashboard ausliefern | `backend/`, `dashboard/` |
-| Browser | Live-Belegung, Empfehlung, Warnungen, Zeitstempel, Verlauf; Verwaltung getrennt und nur mit Admin-Token | `dashboard/` |
+| Debian-VM auf Proxmox | FastAPI: Messungen annehmen, Zustände ableiten, Regel + KI auswerten, SQLite, Dashboard ausliefern | `backend/`, `web/` |
+| Browser | Live-Belegung, Empfehlung, Warnungen, Zeitstempel, Verlauf; Kundenportal mit Rollen, Kiosk-Anzeige per Anzeige-Link | `web/` |
 
 ## Datenfluss
 

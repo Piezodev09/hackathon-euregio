@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta name="description" content="Smarte Radstation: Echtzeit-Belegung von Fahrradstellplätzen, Platzempfehlung und Bewegungsmeldungen als Cloud-Dienst für Schulen, Unternehmen und Kommunen.">
+  <title>Smarte Radstation – freie Fahrradplätze auf einen Blick</title>
+  <link rel="icon" href="/static/img/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/css/app.css">
+  <script type="module" src="/static/js/landing.js"></script>
+</head>
+<body>
+  <a class="skip" href="#main">Zum Inhalt</a>
+  <header class="site-header">
+    <div class="inner">
+      <a class="brand" href="/"><span class="logo" aria-hidden="true">R</span>Smarte Radstation</a>
+      <nav class="site-nav" aria-label="Hauptnavigation">
+        <a class="link" href="#features" data-i18n="l.features">Funktionen</a>
+        <a class="link" href="#how" data-i18n="l.how">So funktioniert’s</a>
+        <a class="link" href="#security" data-i18n="l.security">Sicherheit</a>
+        <a class="link" href="#pricing" data-i18n="l.pricing">Preise</a>
+        <span id="lang"></span>
+        <a class="btn small" href="/app#/login" data-i18n="l.login">Anmelden</a>
+        <a class="btn small primary" href="/app#/register" data-i18n="l.start">Kostenlos starten</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero">
+      <div class="section-inner hero-grid">
+        <div>
+          <h1 data-i18n="l.hero_title">Freie Fahrradplätze auf einen Blick.</h1>
+          <p class="lead" data-i18n="l.hero_lead"></p>
+          <div class="btn-row">
+            <a class="btn primary" href="/app#/register" data-i18n="l.cta">Jetzt kostenlos starten</a>
+            <a class="btn" href="#pricing" data-i18n="l.cta2">Preise ansehen</a>
+          </div>
+        </div>
+        <div class="card preview" aria-labelledby="preview-h">
+          <h2 id="preview-h" class="small muted" data-i18n="l.preview">Live-Vorschau (Beispiel)</h2>
+          <p class="big" id="preview-free"></p>
+          <ul class="slots" id="preview-slots"></ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="section alt" id="features" aria-labelledby="features-h">
+      <div class="section-inner">
+        <h2 id="features-h" data-i18n="l.features">Funktionen</h2>
+        <div class="grid cols-3">
+          <div class="card feature"><h3><span class="icon" aria-hidden="true">✓</span><span data-i18n="l.f1_t"></span></h3><p data-i18n="l.f1"></p></div>
+          <div class="card feature"><h3><span class="icon" aria-hidden="true">→</span><span data-i18n="l.f2_t"></span></h3><p data-i18n="l.f2"></p></div>
+          <div class="card feature"><h3><span class="icon" aria-hidden="true">⚠</span><span data-i18n="l.f3_t"></span></h3><p data-i18n="l.f3"></p></div>
+          <div class="card feature"><h3><span class="icon" aria-hidden="true">▦</span><span data-i18n="l.f4_t"></span></h3><p data-i18n="l.f4"></p></div>
+          <div class="card feature"><h3><span class="icon" aria-hidden="true">Aa</span><span data-i18n="l.f5_t"></span></h3><p data-i18n="l.f5"></p></div>
+          <div class="card feature"><h3><span class="icon" aria-hidden="true">☺</span><span data-i18n="l.f6_t"></span></h3><p data-i18n="l.f6"></p></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="how" aria-labelledby="how-h">
+      <div class="section-inner">
+        <h2 id="how-h" data-i18n="l.how">So funktioniert’s</h2>
+        <p class="muted" data-i18n="l.how_lead"></p>
+        <ol class="flow" aria-label="Datenfluss">
+          <li class="step"><span data-i18n="l.s1"></span><small data-i18n="l.s1s"></small></li>
+          <li class="arrow" aria-hidden="true">→</li>
+          <li class="step"><span data-i18n="l.s2"></span><small data-i18n="l.s2s"></small></li>
+          <li class="arrow" aria-hidden="true">→</li>
+          <li class="step"><span data-i18n="l.s3"></span><small data-i18n="l.s3s"></small></li>
+          <li class="arrow" aria-hidden="true">→</li>
+          <li class="step"><span data-i18n="l.s4"></span><small data-i18n="l.s4s"></small></li>
+          <li class="arrow" aria-hidden="true">→</li>
+          <li class="step"><span data-i18n="l.s5"></span><small data-i18n="l.s5s"></small></li>
+        </ol>
+      </div>
+    </section>
+
+    <section class="section alt" id="security" aria-labelledby="security-h">
+      <div class="section-inner">
+        <h2 id="security-h" data-i18n="l.sec_title">Sicherheit und Datenschutz ab Werk</h2>
+        <div class="grid cols-2">
+          <div class="card"><p data-i18n="l.sec1"></p></div>
+          <div class="card"><p data-i18n="l.sec2"></p></div>
+          <div class="card"><p data-i18n="l.sec3"></p></div>
+          <div class="card"><p data-i18n="l.sec4"></p></div>
+          <div class="card"><p data-i18n="l.sec5"></p></div>
+          <div class="card"><p data-i18n="l.sec6"></p></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="pricing" aria-labelledby="pricing-h">
+      <div class="section-inner">
+        <h2 id="pricing-h" data-i18n="l.pricing">Preise</h2>
+        <p class="muted" data-i18n="l.pricing_lead"></p>
+        <div class="grid cols-3" id="plans"></div>
+      </div>
+    </section>
+
+    <section class="section alt" id="privacy" aria-labelledby="privacy-h">
+      <div class="section-inner">
+        <h2 id="privacy-h" data-i18n="l.privacy">Datenschutz</h2>
+        <p>Platzhalter für die Datenschutzerklärung des Betreibers. Verarbeitet werden: Konto­daten der Nutzer (Name, E-Mail, Rolle),
+          Sitzungsdaten (IP-Adresse, Browserkennung) zur Absicherung, technische Messdaten der Stellplätze (Belegung, Vibrationswert,
+          Zeitpunkt) sowie ein Audit-Log sicherheitsrelevanter Aktionen. Keine Kameras, keine Personenerkennung, keine Tracking- oder
+          Werbe-Cookies. Vor dem produktiven Einsatz durch den Betreiber zu vervollständigen (Verantwortlicher, Rechtsgrundlagen,
+          Aufbewahrungsfristen, Auftragsverarbeitung, Betroffenenrechte).</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="section-inner">
+      <span>© Smarte Radstation · <span data-i18n="l.footer"></span></span>
+      <span><a href="#privacy" data-i18n="l.privacy">Datenschutz</a> · <a href="#imprint" id="imprint" data-i18n="l.imprint">Impressum</a> ·
+        <a href="/.well-known/security.txt">security.txt</a></span>
+    </div>
+  </footer>
+</body>
+</html>

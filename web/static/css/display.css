@@ -130,3 +130,6 @@ th, td { border: 1px solid var(--border); padding: 6px 10px; text-align: center;
 .events tr.shadow { color: var(--muted); font-style: italic; }
 
 footer { margin-top: 32px; }
+
+.alert { background: var(--warn-bg); color: var(--warn-fg); border: 3px solid var(--warn-fg); border-radius: 8px; padding: 10px 14px; font-weight: 700; }
+.small { font-size: 0.95rem; color: var(--muted); }

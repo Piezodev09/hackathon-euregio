@@ -1,210 +1,181 @@
-"""HTTP-API der Smarten Radstation (Plan 7.2) und Auslieferung des Dashboards."""
+"""App-Fabrik der SaaS-Plattform: Middlewares (Sicherheit), Router, Weboberfläche."""
 
 from __future__ import annotations
 
 import asyncio
-import hmac
 import logging
+import secrets
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Callable
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.trustedhost import TrustedHostMiddleware
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from .config import Settings, load_settings
-from .db import Database
-from .ratelimit import RateLimiter
-from .schemas import MeasurementBatchIn, MeasurementIn
-from .service import StationService, UnknownSlotError
+from .core import Core
+from .routes import auth, org, platform, stations
+from .service import Monitoring
 
 log = logging.getLogger("bike_station")
-DASHBOARD_DIR = Path(__file__).resolve().parents[2] / "dashboard"
+WEB_DIR = Path(__file__).resolve().parents[2] / "web"
 MAX_BODY_BYTES = 64 * 1024
+DEVICE_PATHS = ("/api/v1/measurements",)
+UNSAFE = {"POST", "PUT", "PATCH", "DELETE"}
+
+CSP = (
+    "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; "
+    "connect-src 'self'; manifest-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; "
+    "object-src 'none'; upgrade-insecure-requests"
+)
+PERMISSIONS_POLICY = (
+    "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), "
+    "payment=(), usb=(), interest-cohort=(), browsing-topics=()"
+)
 
 
-def _client(request: Request, settings: Settings) -> str:
-    if settings.trust_proxy:
-        fwd = request.headers.get("x-forwarded-for")
-        if fwd:
-            return fwd.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
+class BodyLimitMiddleware:
+    """Begrenzt die Anfragegröße – auch bei chunked Transfer ohne Content-Length."""
 
+    def __init__(self, app: ASGIApp, max_bytes: int):
+        self.app = app
+        self.max_bytes = max_bytes
 
-def _bearer(request: Request) -> str | None:
-    auth = request.headers.get("authorization", "")
-    if auth.lower().startswith("bearer "):
-        return auth[7:].strip()
-    return None
+    async def __call__(self, scope: Scope, receive: Receive, send: Send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        for k, v in scope.get("headers", []):
+            if k == b"content-length" and v.isdigit() and int(v) > self.max_bytes:
+                return await JSONResponse({"detail": "payload_too_large"}, 413)(scope, receive, send)
+        received = 0
 
+        async def limited() -> Message:
+            nonlocal received
+            msg = await receive()
+            if msg["type"] == "http.request":
+                received += len(msg.get("body", b""))
+                if received > self.max_bytes:
+                    raise HTTPException(413, "payload_too_large")
+            return msg
 
-def _token_ok(token: str | None, allowed: frozenset[str]) -> bool:
-    if not token:
-        return False
-    # Vergleich in konstanter Zeit; über alle Tokens iterieren.
-    ok = False
-    for t in allowed:
-        ok |= hmac.compare_digest(token.encode(), t.encode())
-    return ok
+        await self.app(scope, limited, send)
 
 
 def create_app(settings: Settings | None = None, clock: Callable[[], float] = time.time) -> FastAPI:
     settings = settings or load_settings()
-    db = Database(settings.db_path)
-    db.seed(settings)
-    service = StationService(settings, db, clock=clock)
-    write_limiter = RateLimiter(settings.write_rate_per_s, settings.write_burst)
-    read_limiter = RateLimiter(settings.read_rate_per_s, settings.read_burst)
+    core = Core(settings, clock=clock)
+    monitoring = Monitoring(core)
 
-    if not settings.device_tokens:
-        log.warning("BIKE_DEVICE_TOKENS ist leer – es können keine Messungen angenommen werden.")
-    if not settings.admin_tokens:
-        log.warning("BIKE_ADMIN_TOKENS ist leer – Admin-Funktionen sind deaktiviert.")
-
-    async def purge_loop():
+    async def maintenance_loop():
         while True:
             try:
-                n = db.purge_old(clock() - settings.measurements_max_age_h * 3600)
-                if n:
-                    log.info("%d alte Messwerte gelöscht", n)
+                d = monitoring.purge()
+                if any(d.values()):
+                    log.info("Aufbewahrung: %s gelöscht", d)
             except Exception:
-                log.exception("Löschlauf fehlgeschlagen")
+                log.exception("Wartungslauf fehlgeschlagen")
             await asyncio.sleep(3600)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        task = asyncio.create_task(purge_loop())
+        task = asyncio.create_task(maintenance_loop())
         yield
         task.cancel()
-        db.close()
+        core.db.close()
 
-    app = FastAPI(
-        title="Smarte Radstation API",
-        version="0.1.0",
-        lifespan=lifespan,
-        # Keine interaktive Doku nach außen (Plan 10.1: keine Debug-Ausgaben nach außen).
-        docs_url=None,
-        redoc_url=None,
-        openapi_url=None,
-    )
-    app.state.settings = settings
-    app.state.service = service
-    app.state.db = db
+    app = FastAPI(title=f"{settings.product_name} API", version="1.0.0", lifespan=lifespan,
+                  docs_url=None, redoc_url=None, openapi_url=None)  # keine öffentliche API-Doku/Debug-Ausgabe
+    app.state.core = core
+    app.state.monitoring = monitoring
 
+    # ------------------------------------------------------------------ Middlewares
     @app.middleware("http")
     async def security_middleware(request: Request, call_next):
-        cl = request.headers.get("content-length")
-        if cl and cl.isdigit() and int(cl) > MAX_BODY_BYTES:
-            return JSONResponse({"detail": "Anfrage zu groß"}, status_code=413)
-        response = await call_next(request)
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "DENY"
-        response.headers["Referrer-Policy"] = "no-referrer"
-        response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
-            "connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
-        )
-        if request.url.path.startswith("/api/"):
-            response.headers["Cache-Control"] = "no-store"
+        request_id = secrets.token_hex(8)
+        path = request.url.path
+        # Origin-Prüfung für zustandsändernde Browser-Anfragen (CSRF-Schutz zusätzlich zum Token).
+        if request.method in UNSAFE and path.startswith("/api/") and not path.startswith(DEVICE_PATHS):
+            origin = request.headers.get("origin")
+            site = request.headers.get("sec-fetch-site")
+            if (origin and origin != settings.origin) or site == "cross-site":
+                return JSONResponse({"detail": "origin_rejected"}, 403)
+        try:
+            response = await call_next(request)
+        except HTTPException as exc:  # z. B. Body-Limit
+            response = JSONResponse({"detail": exc.detail}, exc.status_code)
+        h = response.headers
+        h["X-Request-ID"] = request_id
+        h["X-Content-Type-Options"] = "nosniff"
+        h["X-Frame-Options"] = "DENY"
+        h["Referrer-Policy"] = "no-referrer"
+        h["Permissions-Policy"] = PERMISSIONS_POLICY
+        h["Cross-Origin-Opener-Policy"] = "same-origin"
+        h["Cross-Origin-Resource-Policy"] = "same-origin"
+        h["X-Permitted-Cross-Domain-Policies"] = "none"
+        h["Content-Security-Policy"] = CSP if settings.secure_cookies else CSP.replace("; upgrade-insecure-requests", "")
+        if settings.secure_cookies:
+            h["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
+        if path.startswith("/api/") or path in ("/", "/app", "/display") or path.endswith(".html"):
+            h["Cache-Control"] = "no-store"
+        if "server" in h:
+            del h["server"]
         return response
+
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=list(settings.allowed_hosts))
+    app.add_middleware(BodyLimitMiddleware, max_bytes=MAX_BODY_BYTES)
 
     @app.exception_handler(RequestValidationError)
     async def validation_handler(request: Request, exc: RequestValidationError):
-        # Nur Feld und Fehlertyp zurückgeben, keine Eingabewerte spiegeln.
-        errors = [{"loc": list(e.get("loc", ())), "type": e.get("type")} for e in exc.errors()]
-        return JSONResponse({"detail": "ungültige Eingabe", "errors": errors}, status_code=422)
+        # Nur Feld und Fehlertyp, keine Eingabewerte spiegeln (keine Passwörter in Antworten/Logs).
+        errors = [{"loc": [str(x) for x in e.get("loc", ())], "type": e.get("type")} for e in exc.errors()]
+        return JSONResponse({"detail": "invalid_input", "errors": errors}, 422)
 
-    # ---------------------------------------------------------- Abhängigkeiten
-    def read_limit(request: Request):
-        if not read_limiter.allow(_client(request, settings)):
-            raise HTTPException(429, "zu viele Anfragen")
+    @app.exception_handler(Exception)
+    async def unhandled(request: Request, exc: Exception):
+        log.exception("Unbehandelter Fehler bei %s %s", request.method, request.url.path)
+        return JSONResponse({"detail": "internal_error"}, 500)
 
-    def require_device(request: Request):
-        client = _client(request, settings)
-        if not write_limiter.allow(f"w:{client}"):
-            raise HTTPException(429, "zu viele Anfragen")
-        if not _token_ok(_bearer(request), settings.device_tokens):
-            db.audit(clock(), "rejected_write", client, request.url.path)
-            log.warning("Abgewiesener Schreibversuch ohne gültiges Geräte-Token von %s", client)
-            raise HTTPException(401, "nicht autorisiert", headers={"WWW-Authenticate": "Bearer"})
-        return client
+    # ------------------------------------------------------------------ Router
+    for r in (auth.router, org.router, stations.router, platform.router):
+        app.include_router(r)
 
-    def require_admin(request: Request):
-        client = _client(request, settings)
-        if not write_limiter.allow(f"a:{client}"):
-            raise HTTPException(429, "zu viele Anfragen")
-        token = _bearer(request)
-        if not _token_ok(token, settings.admin_tokens):
-            db.audit(clock(), "rejected_admin", client, request.url.path)
-            log.warning("Abgewiesener Admin-Zugriff von %s", client)
-            if token is None:
-                raise HTTPException(401, "nicht autorisiert", headers={"WWW-Authenticate": "Bearer"})
-            raise HTTPException(403, "keine Berechtigung")
-        return client
-
-    # ---------------------------------------------------------- Endpunkte
-    @app.post("/api/v1/measurements", status_code=202)
-    def post_measurement(m: MeasurementIn, client: str = Depends(require_device)):
-        try:
-            r = service.ingest(m)
-        except UnknownSlotError as exc:
-            raise HTTPException(422, str(exc))
-        return {"stored": r.stored, "duplicate": r.duplicate, "alert_created": r.alert_created}
-
-    @app.post("/api/v1/measurements/batch", status_code=202)
-    def post_batch(batch: MeasurementBatchIn, client: str = Depends(require_device)):
-        stored = duplicate = rejected = 0
-        for m in batch.measurements:
-            try:
-                r = service.ingest(m)
-            except UnknownSlotError:
-                rejected += 1
-                continue
-            stored += r.stored
-            duplicate += r.duplicate
-        return {"stored": stored, "duplicate": duplicate, "rejected": rejected}
-
-    @app.get("/api/v1/stations/{station_id}/status", dependencies=[Depends(read_limit)])
-    def get_status(station_id: str):
-        if station_id != settings.station_id:
-            raise HTTPException(404, "Station nicht gefunden")
-        return service.status()
-
-    @app.get("/api/v1/occupancy/summary", dependencies=[Depends(read_limit)])
-    def get_summary(hours: int = Query(24, ge=1, le=168)):
-        return service.occupancy_summary(hours)
-
-    @app.get("/api/v1/events")
-    def get_events(
-        limit: int = Query(100, ge=1, le=500),
-        include_shadow: bool = False,
-        client: str = Depends(require_admin),
-    ):
-        return {"events": service.events(limit, include_shadow)}
-
-    @app.post("/api/v1/events/{event_id}/ack")
-    def ack_event(event_id: int, client: str = Depends(require_admin)):
-        r = service.acknowledge(event_id, client)
-        if r is None:
-            raise HTTPException(404, "Ereignis nicht gefunden")
-        return {"acknowledged": True, "already_acknowledged": not r}
-
-    @app.get("/health")
+    @app.get("/health", include_in_schema=False)
     def health():
-        db_ok = db.ping()
-        body = {"status": "ok" if db_ok else "degraded", "database": db_ok, "ai_model_available": service.ml.available}
-        return JSONResponse(body, status_code=200 if db_ok else 503)
+        ok = core.db.ping()
+        return JSONResponse({"status": "ok" if ok else "degraded"}, 200 if ok else 503)
 
-    # ---------------------------------------------------------- Dashboard
-    if DASHBOARD_DIR.exists():
-        @app.get("/", include_in_schema=False)
-        def index():
-            return FileResponse(DASHBOARD_DIR / "index.html")
+    @app.get("/api/v1/meta")
+    def meta():
+        from .plans import PLANS
 
-        app.mount("/static", StaticFiles(directory=DASHBOARD_DIR), name="static")
+        return {"product_name": settings.product_name, "signup_enabled": settings.signup_enabled,
+                "plans": [p.to_dict() for p in PLANS.values()], "password_min_length": settings.password_min_length}
+
+    # ------------------------------------------------------------------ Weboberfläche
+    if WEB_DIR.exists():
+        pages = {"/": "index.html", "/app": "app.html", "/display": "display.html"}
+        for route, file in pages.items():
+            def page(file=file):
+                return FileResponse(WEB_DIR / file)
+            app.add_api_route(route, page, methods=["GET"], include_in_schema=False)
+
+        @app.get("/robots.txt", include_in_schema=False)
+        def robots():
+            return PlainTextResponse("User-agent: *\nAllow: /$\nDisallow: /app\nDisallow: /display\nDisallow: /api/\n")
+
+        @app.get("/.well-known/security.txt", include_in_schema=False)
+        def security_txt():
+            return PlainTextResponse(
+                f"Contact: mailto:security@example.org\nPreferred-Languages: de, nl, en\n"
+                f"Canonical: {settings.base_url}/.well-known/security.txt\n"
+                "Expires: 2027-12-31T23:59:59Z\n")
+
+        app.mount("/static", StaticFiles(directory=WEB_DIR / "static"), name="static")
 
     return app
 

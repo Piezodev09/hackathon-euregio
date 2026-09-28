@@ -4,6 +4,7 @@ window.I18N = {
   de: {
     skip: "Zu den Stellplätzen springen",
     title: "Smarte Radstation",
+    invalidLink: "Dieser Anzeige-Link ist ungültig oder deaktiviert.",
     slotName: (id) => `Platz ${id}`,
     summaryHeading: "Übersicht",
     freeCount: (f, t) => `Freie Plätze: ${f} von ${t}`,
@@ -64,6 +65,7 @@ window.I18N = {
   nl: {
     skip: "Naar de fietsplekken",
     title: "Slim fietsstation",
+    invalidLink: "Deze weergavelink is ongeldig of uitgeschakeld.",
     slotName: (id) => `Plek ${id}`,
     summaryHeading: "Overzicht",
     freeCount: (f, t) => `Vrije plekken: ${f} van ${t}`,
@@ -124,6 +126,7 @@ window.I18N = {
   en: {
     skip: "Skip to bike spaces",
     title: "Smart Bike Station",
+    invalidLink: "This display link is invalid or disabled.",
     slotName: (id) => `Space ${id}`,
     summaryHeading: "Overview",
     freeCount: (f, t) => `Available spaces: ${f} of ${t}`,

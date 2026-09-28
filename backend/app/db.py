@@ -1,4 +1,4 @@
-"""SQLite-Datenhaltung (Plan 7.1). Bewusst einfach: eine Datei, keine ORM-Abhängigkeit."""
+"""SQLite-Datenhaltung, mandantenfähig. Jede fachliche Tabelle trägt tenant_id bzw. hängt an einer Station."""
 
 from __future__ import annotations
 
@@ -6,69 +6,164 @@ import sqlite3
 import threading
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator
+from typing import Any, Iterator
 
-from .config import Settings
+SCHEMA_VERSION = 2
 
 SCHEMA = """
-CREATE TABLE IF NOT EXISTS station (
-    id            TEXT PRIMARY KEY,
-    display_name  TEXT NOT NULL
+CREATE TABLE IF NOT EXISTS tenant (
+    id              TEXT PRIMARY KEY,
+    name            TEXT NOT NULL,
+    plan            TEXT NOT NULL DEFAULT 'free',
+    status          TEXT NOT NULL DEFAULT 'active',      -- active | suspended
+    mfa_required    INTEGER NOT NULL DEFAULT 0,
+    created_at      REAL NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS user (
+    id                  TEXT PRIMARY KEY,
+    tenant_id           TEXT REFERENCES tenant(id) ON DELETE CASCADE,   -- NULL = Plattform-Admin
+    email               TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    name                TEXT NOT NULL,
+    role                TEXT NOT NULL,          -- owner | admin | operator | viewer | platform
+    password_hash       TEXT NOT NULL,
+    email_verified_at   REAL,
+    is_platform_admin   INTEGER NOT NULL DEFAULT 0,
+    failed_logins       INTEGER NOT NULL DEFAULT 0,
+    locked_until        REAL,
+    totp_secret_enc     BLOB,
+    totp_pending_enc    BLOB,
+    totp_enabled        INTEGER NOT NULL DEFAULT 0,
+    totp_last_step      INTEGER,
+    locale              TEXT NOT NULL DEFAULT 'de',
+    created_at          REAL NOT NULL,
+    password_changed_at REAL NOT NULL,
+    last_login_at       REAL
+);
+CREATE INDEX IF NOT EXISTS idx_user_tenant ON user (tenant_id);
+
+CREATE TABLE IF NOT EXISTS session (
+    token_hash    TEXT PRIMARY KEY,
+    public_id     TEXT NOT NULL UNIQUE,
+    user_id       TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE,
+    csrf_token    TEXT NOT NULL,
+    created_at    REAL NOT NULL,
+    last_seen_at  REAL NOT NULL,
+    expires_at    REAL NOT NULL,
+    ip            TEXT,
+    user_agent    TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_session_user ON session (user_id);
+
+-- Einmal-Tokens für E-Mail-Bestätigung, Passwort-Reset, Einladung, 2FA-Zwischenschritt.
+CREATE TABLE IF NOT EXISTS auth_token (
+    token_hash  TEXT PRIMARY KEY,
+    public_id   TEXT NOT NULL UNIQUE,
+    purpose     TEXT NOT NULL,          -- verify | reset | invite | mfa
+    user_id     TEXT REFERENCES user(id) ON DELETE CASCADE,
+    tenant_id   TEXT REFERENCES tenant(id) ON DELETE CASCADE,
+    email       TEXT,
+    role        TEXT,
+    created_by  TEXT,
+    created_at  REAL NOT NULL,
+    expires_at  REAL NOT NULL,
+    used_at     REAL
+);
+
+CREATE TABLE IF NOT EXISTS recovery_code (
+    user_id    TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE,
+    code_hash  TEXT NOT NULL,
+    used_at    REAL,
+    PRIMARY KEY (user_id, code_hash)
+);
+
+CREATE TABLE IF NOT EXISTS station (
+    id                  TEXT PRIMARY KEY,
+    tenant_id           TEXT NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+    name                TEXT NOT NULL,
+    location            TEXT NOT NULL DEFAULT '',
+    alert_source        TEXT NOT NULL DEFAULT 'rule',   -- rule | ml
+    display_token_hash  TEXT UNIQUE,
+    display_enabled     INTEGER NOT NULL DEFAULT 0,
+    created_at          REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_station_tenant ON station (tenant_id);
+
 CREATE TABLE IF NOT EXISTS slot (
-    id          TEXT NOT NULL,
-    station_id  TEXT NOT NULL REFERENCES station(id),
+    id          TEXT PRIMARY KEY,
+    station_id  TEXT NOT NULL REFERENCES station(id) ON DELETE CASCADE,
+    key         TEXT NOT NULL,          -- Kennung am Arduino/Gateway, z. B. "A"
     label       TEXT NOT NULL,
     position    INTEGER NOT NULL,
-    PRIMARY KEY (station_id, id)
+    UNIQUE (station_id, key)
+);
+
+CREATE TABLE IF NOT EXISTS device (
+    id            TEXT PRIMARY KEY,
+    tenant_id     TEXT NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+    station_id    TEXT NOT NULL REFERENCES station(id) ON DELETE CASCADE,
+    name          TEXT NOT NULL,
+    token_prefix  TEXT NOT NULL,
+    token_hash    TEXT NOT NULL UNIQUE,
+    created_at    REAL NOT NULL,
+    created_by    TEXT,
+    last_seen_at  REAL,
+    last_ip       TEXT,
+    revoked_at    REAL
 );
 
 CREATE TABLE IF NOT EXISTS measurement (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
-    station_id       TEXT NOT NULL,
-    slot_id          TEXT NOT NULL,
+    station_id       TEXT NOT NULL REFERENCES station(id) ON DELETE CASCADE,
+    slot_id          TEXT NOT NULL REFERENCES slot(id) ON DELETE CASCADE,
     sequence         INTEGER NOT NULL,
-    server_time      REAL NOT NULL,          -- Unix-Zeit (UTC), vom Server gesetzt
-    occupied         INTEGER,                -- 1/0, NULL = unbekannt
+    server_time      REAL NOT NULL,
+    occupied         INTEGER,
     vibration_score  INTEGER NOT NULL DEFAULT 0,
-    sensor_state     TEXT NOT NULL,          -- ok | error
-    source           TEXT NOT NULL DEFAULT 'live',  -- live | simulated
-    UNIQUE (station_id, slot_id, sequence),
-    FOREIGN KEY (station_id, slot_id) REFERENCES slot(station_id, id)
+    sensor_state     TEXT NOT NULL,
+    source           TEXT NOT NULL DEFAULT 'live',
+    UNIQUE (slot_id, sequence)
 );
-CREATE INDEX IF NOT EXISTS idx_measurement_slot_time
-    ON measurement (station_id, slot_id, server_time);
+CREATE INDEX IF NOT EXISTS idx_measurement_slot_time ON measurement (slot_id, server_time);
+CREATE INDEX IF NOT EXISTS idx_measurement_station_time ON measurement (station_id, server_time);
 
 CREATE TABLE IF NOT EXISTS event (
-    id               INTEGER PRIMARY KEY AUTOINCREMENT,
-    station_id       TEXT NOT NULL,
-    slot_id          TEXT NOT NULL,
+    id               TEXT PRIMARY KEY,
+    tenant_id        TEXT NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+    station_id       TEXT NOT NULL REFERENCES station(id) ON DELETE CASCADE,
+    slot_id          TEXT NOT NULL REFERENCES slot(id) ON DELETE CASCADE,
     kind             TEXT NOT NULL,          -- unusual_movement | sensor_fault
-    severity         TEXT NOT NULL,          -- warning | info
-    detector         TEXT,                   -- rule | ml (nur bei unusual_movement)
+    severity         TEXT NOT NULL,          -- warning | info | shadow
+    detector         TEXT,
     detail           TEXT,
     occurred_at      REAL NOT NULL,
     acknowledged_at  REAL,
+    acknowledged_by  TEXT,
     source           TEXT NOT NULL DEFAULT 'live'
 );
-CREATE INDEX IF NOT EXISTS idx_event_time ON event (occurred_at);
+CREATE INDEX IF NOT EXISTS idx_event_tenant_time ON event (tenant_id, occurred_at);
+CREATE INDEX IF NOT EXISTS idx_event_slot ON event (slot_id, kind, severity, occurred_at);
 
--- Protokoll für Admin-Aktionen und abgewiesene Schreibversuche (ohne Geheimnisse).
 CREATE TABLE IF NOT EXISTS audit_log (
-    id        INTEGER PRIMARY KEY AUTOINCREMENT,
-    at        REAL NOT NULL,
-    action    TEXT NOT NULL,
-    client    TEXT,
-    detail    TEXT
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id  TEXT,
+    user_id    TEXT,
+    actor      TEXT,
+    action     TEXT NOT NULL,
+    target     TEXT,
+    ip         TEXT,
+    at         REAL NOT NULL,
+    detail     TEXT
 );
+CREATE INDEX IF NOT EXISTS idx_audit_tenant_time ON audit_log (tenant_id, at);
 """
 
 
 class Database:
     def __init__(self, path: Path | str):
         self.path = str(path)
-        # Eine Verbindung, durch Lock geschützt – ausreichend für wenige Demo-Plätze.
+        if self.path != ":memory:":
+            Path(self.path).parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(self.path, check_same_thread=False, isolation_level=None)
         self._conn.row_factory = sqlite3.Row
         self._lock = threading.RLock()
@@ -76,12 +171,25 @@ class Database:
             if self.path != ":memory:":
                 self._conn.execute("PRAGMA journal_mode=WAL")
             self._conn.execute("PRAGMA foreign_keys=ON")
+            self._conn.execute("PRAGMA secure_delete=ON")  # gelöschte Daten überschreiben
+            version = self._conn.execute("PRAGMA user_version").fetchone()[0]
+            if version not in (0, SCHEMA_VERSION):
+                raise RuntimeError(
+                    f"Datenbank hat Schema-Version {version}, erwartet {SCHEMA_VERSION}. "
+                    "Alte Demo-Datenbank bitte sichern und entfernen."
+                )
             self._conn.executescript(SCHEMA)
+            self._conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+        if self.path != ":memory:":
+            try:
+                Path(self.path).chmod(0o600)
+            except OSError:
+                pass
 
     @contextmanager
     def tx(self) -> Iterator[sqlite3.Connection]:
         with self._lock:
-            self._conn.execute("BEGIN")
+            self._conn.execute("BEGIN IMMEDIATE")
             try:
                 yield self._conn
             except BaseException:
@@ -90,17 +198,28 @@ class Database:
             else:
                 self._conn.execute("COMMIT")
 
-    def query(self, sql: str, params: tuple | dict = ()) -> list[sqlite3.Row]:
+    def all(self, sql: str, params: tuple | dict = ()) -> list[sqlite3.Row]:
         with self._lock:
             return self._conn.execute(sql, params).fetchall()
+
+    def one(self, sql: str, params: tuple | dict = ()) -> sqlite3.Row | None:
+        with self._lock:
+            return self._conn.execute(sql, params).fetchone()
+
+    def scalar(self, sql: str, params: tuple | dict = ()) -> Any:
+        row = self.one(sql, params)
+        return None if row is None else row[0]
 
     def execute(self, sql: str, params: tuple | dict = ()) -> sqlite3.Cursor:
         with self._lock:
             return self._conn.execute(sql, params)
 
+    # Rückwärtskompatibler Alias
+    query = all
+
     def ping(self) -> bool:
         try:
-            self.query("SELECT 1")
+            self.one("SELECT 1")
             return True
         except sqlite3.Error:
             return False
@@ -108,29 +227,3 @@ class Database:
     def close(self) -> None:
         with self._lock:
             self._conn.close()
-
-    def seed(self, settings: Settings) -> None:
-        """Station und Plätze aus der Konfiguration anlegen/aktualisieren."""
-        with self.tx() as c:
-            c.execute(
-                "INSERT INTO station (id, display_name) VALUES (?, ?) "
-                "ON CONFLICT(id) DO UPDATE SET display_name = excluded.display_name",
-                (settings.station_id, settings.station_name),
-            )
-            for s in settings.slots:
-                c.execute(
-                    "INSERT INTO slot (id, station_id, label, position) VALUES (?, ?, ?, ?) "
-                    "ON CONFLICT(station_id, id) DO UPDATE SET label = excluded.label, position = excluded.position",
-                    (s.id, settings.station_id, s.label, s.position),
-                )
-
-    def audit(self, at: float, action: str, client: str | None, detail: str | None = None) -> None:
-        self.execute(
-            "INSERT INTO audit_log (at, action, client, detail) VALUES (?, ?, ?, ?)",
-            (at, action, client, detail),
-        )
-
-    def purge_old(self, older_than: float) -> int:
-        """Löscht Rohmesswerte vor older_than (Datensparsamkeit)."""
-        cur = self.execute("DELETE FROM measurement WHERE server_time < ?", (older_than,))
-        return cur.rowcount

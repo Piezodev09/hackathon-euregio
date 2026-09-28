@@ -1,20 +1,50 @@
 #!/usr/bin/env bash
-# Startet die komplette Kette lokal OHNE Hardware:
-#   Simulator -> Gateway -> API/Dashboard (http://127.0.0.1:8000)
-# Alle Daten sind als "simuliert" gekennzeichnet.
+# Startet die komplette Plattform lokal OHNE Hardware:
+#   API + Portal (http://127.0.0.1:8000) und Simulator -> Gateway für einen Demo-Kunden.
+# Alle Simulatordaten sind als "simuliert" gekennzeichnet. NUR für die Entwicklung!
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-export BIKE_DEVICE_TOKENS="${BIKE_DEVICE_TOKENS:-dev-device-token-change-me}"
-export BIKE_ADMIN_TOKENS="${BIKE_ADMIN_TOKENS:-dev-admin-token-change-me}"
-export BIKE_DEVICE_TOKEN="${BIKE_DEVICE_TOKENS%%,*}"
 export BIKE_DB_PATH="${BIKE_DB_PATH:-$PWD/backend/dev.db}"
+DEMO_EMAIL="${DEMO_EMAIL:-demo@example.org}"
+DEMO_PASSWORD="${DEMO_PASSWORD:-Fahrradplatz-Euregio-2026!}"
+DEMO_ENV="$PWD/backend/.dev-demo.env"
+GW_CFG="$PWD/pi-gateway/state/config.dev.toml"
 
-(cd backend && exec python3 -m uvicorn app.main:_app_factory --factory --host 127.0.0.1 --port 8000) &
+if [ ! -f "$DEMO_ENV" ] || [ ! -f "$BIKE_DB_PATH" ]; then
+  rm -f "$DEMO_ENV"
+  (cd backend && BIKE_CLI_PASSWORD="$DEMO_PASSWORD" python3 -m app.cli create-demo --email "$DEMO_EMAIL") > "$DEMO_ENV"
+  chmod 600 "$DEMO_ENV"
+fi
+# shellcheck disable=SC1090
+source "$DEMO_ENV"
+
+mkdir -p "$(dirname "$GW_CFG")"
+cat > "$GW_CFG" <<CFG
+state_dir = "state"
+[api]
+url = "http://127.0.0.1:8000"
+timeout_s = 3
+[station]
+id = "$STATION_ID"
+[station.slot_map]
+A = "A"
+B = "B"
+C = "C"
+CFG
+
+(cd backend && exec python3 -m uvicorn app.main:_app_factory --factory --host 127.0.0.1 --port 8000 --no-server-header) &
 API_PID=$!
 trap 'kill $API_PID 2>/dev/null || true' EXIT
 sleep 2
 
-echo "Dashboard: http://127.0.0.1:8000   Admin-Token: $BIKE_ADMIN_TOKENS"
+cat <<INFO
+────────────────────────────────────────────────────────────
+ Portal:        http://127.0.0.1:8000/app
+ Login:         $DEMO_EMAIL / $DEMO_PASSWORD
+ Kiosk-Anzeige: $DISPLAY_URL
+ Registrierungs-/Reset-Mails erscheinen im Log (mail.backend = console).
+────────────────────────────────────────────────────────────
+INFO
 cd pi-gateway
-python3 simulator.py "$@" | python3 gateway.py --config config.dev.toml --stdin --simulated
+BIKE_DEVICE_TOKEN="$DEVICE_TOKEN" python3 simulator.py "$@" | BIKE_DEVICE_TOKEN="$DEVICE_TOKEN" python3 gateway.py --config "$GW_CFG" --stdin --simulated

@@ -15,3 +15,7 @@ venv/
 pi-gateway/state/
 ml/data/*.csv
 !ml/data/.gitkeep
+
+# Entwicklung
+backend/.dev-demo.env
+*.datakey
