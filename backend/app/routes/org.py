@@ -200,7 +200,8 @@ def export(request: Request, ctx: Ctx = Depends(require("owner"))):
 
     data = {
         "exported_at": iso(core.clock()),
-        "organization": {k: ctx.tenant[k] for k in ("id", "name", "plan", "status", "mfa_required", "payment_mode", "tariff", "created_at")},
+        "organization": {k: ctx.tenant[k] for k in ("id", "name", "plan", "status", "mfa_required", "payment_mode", "tariff", "created_at",
+                                                    "cyclist_reserve", "status_enabled")},
         "users": rows("SELECT id, email, name, role, locale, created_at, last_login_at, totp_enabled FROM user WHERE tenant_id = ?"),
         "stations": rows("SELECT id, name, location, alert_source, display_enabled, hours, maintenance, demo_sim, created_at "
                          "FROM station WHERE tenant_id = ?"),
@@ -215,6 +216,13 @@ def export(request: Request, ctx: Ctx = Depends(require("owner"))):
         "reservations": rows("SELECT id, station_id, card_id, label, created_at, expires_at, ended_at, status, created_by, via "
                              "FROM reservation WHERE tenant_id = ?"),
         "closures": rows("SELECT id, station_id, starts_at, ends_at, note FROM closure WHERE tenant_id = ?"),
+        "sites": rows("SELECT id, name, location, display_enabled, waitlist_enabled, hold_minutes, created_at FROM site WHERE tenant_id = ?"),
+        "station_sites": rows("SELECT id AS station_id, site_id FROM station WHERE tenant_id = ? AND site_id IS NOT NULL"),
+        "waitlist": rows("SELECT id, site_id, card_id, created_at, status, station_id, reservation_id, offered_at, ended_at "
+                         "FROM waitlist WHERE tenant_id = ?"),
+        # Push-Abos nur als Anzahl je Karte (Endpunkte/Schlüssel sind Geheimnisse der Browser)
+        "push_subscriptions": rows("SELECT card_id, COUNT(*) AS devices FROM push_sub WHERE tenant_id = ? GROUP BY card_id"),
+        "incidents": rows("SELECT id, station_id, device_id, kind, started_at, ended_at, note, source FROM incident WHERE tenant_id = ?"),
         # Integrationen ohne Schlüssel-Hashes und Webhook-Geheimnisse
         "api_keys": rows("SELECT id, name, prefix, scopes, created_at, created_by, last_used_at, revoked_at FROM api_key WHERE tenant_id = ?"),
         "webhooks": rows("SELECT id, url, events, active, created_at, created_by FROM webhook WHERE tenant_id = ?"),

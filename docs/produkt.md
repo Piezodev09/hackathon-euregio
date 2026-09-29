@@ -47,6 +47,9 @@ Eine Warnung ist ein Hinweis auf ungewöhnliche Bewegung, kein Diebstahlnachweis
 | Tages-/Wochen-/Monatsberichte (PDF/CSV, per E-Mail) | – | ✔ | ✔ |
 | Statistiken (Auslastung, Heatmap, Parkdauer, Kartenleser) | 7 Tage | 30 Tage | 90 Tage |
 | Mehrere Stellplätze an einem Raspberry Pi, USB-/PC-SC-Kartenleser, Karten anlernen | ✔ | ✔ | ✔ |
+| Anlagen mit Großanzeige „3 von 10 frei“, öffentliche Status-Seite | ✔ | ✔ | ✔ |
+| Karten-App für Radfahrende (freie Plätze, Guthaben, Verlauf; Link je Karte) | ✔ | ✔ | ✔ |
+| Selbst-Reservierung in der App, Warteliste mit Push-Nachricht | – | ✔ | ✔ |
 | API-Schlüssel und Webhooks | – | ✔ | ✔ |
 | Kamera (optional, nach Freigabe), KI-Vergleich, Audit-Log | – | ✔ | ✔ |
 
@@ -108,6 +111,8 @@ jeden Montag einen Bericht. Ausprobieren dauert zwei Minuten, auch ohne Hardware
 |---|---|
 | Plattform, Portal, Start-Tour, Gebühren, Guthaben, Reservierungen, Öffnungszeiten, Berichte, E-Mails, API/Webhooks | umgesetzt und automatisch getestet |
 | Statistiken, Hilfe-Menü/Tour, Karten anlernen | umgesetzt und automatisch getestet |
+| Anlagen-Großanzeige, Karten-App (PWA), Warteliste, Status-Seite | umgesetzt, automatisch und im Browser getestet |
+| Push-Zustellung über echte Push-Dienste (Google/Mozilla/Apple) | nach Standard umgesetzt, live nicht getestet |
 | Raspberry-Pi-Agent inkl. Offline-Anzeige, NFC, Kamera, mehrere Stellplätze je Pi, Hardware-Erkennung | mit Simulator bzw. gefälschten Gerätedaten getestet |
 | USB-/PC-SC-Kartenleser, mehrere echte Arduinos an einem Pi, Kiosk-Autostart | Hardwaretest steht aus |
 | Arduino mit echten Sensoren und NFC-Leser, echte Kamera | Hardwaretest steht aus |
@@ -118,4 +123,5 @@ jeden Montag einen Bericht. Ausprobieren dauert zwei Minuten, auch ohne Hardware
 - Pilot an einer Schule mit 2–5 Stellplätzen und echten Karten
 - Schul-App-Anbindung als Referenzprojekt, veröffentlicht als Beispiel
 - Online-Zahlung (SEPA/Karte) optional für Gemeinden
-- Anlagen-Übersicht „noch 3 von 10 frei“ auch im Portal und als öffentliche Anzeige (am Pi bereits vorhanden)
+- Wegweiser zur nächsten Anlage mit freien Plätzen (Karte, ohne Standort des Handys)
+- Ladeplätze für E-Bikes (Steckdose schalten, Ladegebühr)

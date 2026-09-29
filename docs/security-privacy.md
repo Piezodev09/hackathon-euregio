@@ -102,6 +102,18 @@ als Ziel), OWASP Top 10 und NIST SP 800-63B für Passwörter.
   keine Videos, keine Speicherung auf dem Pi, Löschung nach 1–72 h (Standard 24 h), Ausschalten löscht sofort alle Bilder.
   Display und Stellplatz-Ansicht zeigen „Kamera aktiv“. Vor dem Einsatz sind Hinweisschild, Rechtsgrundlage und ggf.
   eine DSFA mit Schulleitung und Datenschutzbeauftragten zu klären – die Technik ersetzt diese Freigabe nicht.
+- **Karten-App (/k):** Zugang nur über den persönlichen Karten-Link, den die Betreuung erzeugt. Gespeichert wird nur der
+  SHA-256-Hash des Links; neu erzeugen oder sperren macht den alten sofort ungültig (und löscht Push-Abos). Die App zeigt
+  nur Daten dieser Karte (Bezeichnung, Guthaben, eigene Parkvorgänge/Buchungen, eigene Reservierung/Warteliste) und
+  Frei-Zähler der Stellplätze – nie UIDs, andere Karten oder Personen. Auf dem Handy liegt der Link im `localStorage`
+  („Auf diesem Gerät abmelden“ entfernt ihn). Kein Standort (Permissions-Policy `geolocation=()` bleibt), keine Namen, keine E-Mail.
+- **Web-Push:** gespeichert werden Endpunkt und Schlüssel des Browsers je Karte (max. 5 Geräte). Nachrichten sind
+  Ende-zu-Ende verschlüsselt (RFC 8291); der Push-Dienst (Google/Mozilla/Apple) sieht nur Zeitpunkt und Größe.
+  Endpunkte werden wie Webhook-Ziele geprüft (HTTPS, keine internen Adressen), abgelaufene Abos (404/410) gelöscht.
+  Der VAPID-Schlüssel der Plattform liegt AES-GCM-verschlüsselt in der Datenbank.
+- **Warteliste:** Eintrag mit Karte, Anlage und Zeitpunkten; beim Angebot eine kartengebundene Reservierung.
+- **Öffentliche Seiten** (Großanzeige `/a`, Status-Seite `/status`) zeigen nur Stellplatz-Zustände bzw. Störungen –
+  keine Karten, Parkvorgänge oder Kameradaten. Links per Token im #-Fragment (landet nicht in Server-Logs), jederzeit erneuerbar.
 - Kontodaten: Name, E-Mail, Rolle, Sprache; Sitzungen: IP und Browserkennung (Sicherheitszweck, max. 12 h).
 - Betroffenenrechte: Datenexport (JSON, Art. 20), Konto löschen, Organisation vollständig löschen (Kaskade).
 - Keine Tracking-/Werbe-Cookies; nur ein technisch notwendiges Session-Cookie.
@@ -117,3 +129,6 @@ als Ziel), OWASP Top 10 und NIST SP 800-63B für Passwörter.
 - Kein QR-Code für die 2FA-Einrichtung (Schlüssel + `otpauth://`-Link); WebAuthn/Passkeys als Erweiterung.
 - Agent-Releases sind per Prüfsumme, aber noch nicht kryptografisch signiert.
 - Kein externer Penetrationstest durchgeführt.
+- Web-Push ist nach Standard umgesetzt und mit Test-Entschlüsselung geprüft, die Zustellung über echte Push-Dienste
+  aber nicht live getestet. iPhone: nur als installierte App ab iOS 16.4.
+- Wer einen Karten-Link kennt, sieht die Daten dieser Karte (wie ein Schlüssel). Links sind 256 Bit zufällig, je IP ratenbegrenzt.

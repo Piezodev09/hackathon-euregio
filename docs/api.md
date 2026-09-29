@@ -191,6 +191,27 @@ Nachricht: `{"id", "event", "created_at", "tenant_id", "data"}` mit Kopfzeilen `
 | `POST /stations/{id}/camera/snapshot` (Testbild anfordern) | Admin |
 | `GET /stations/{id}/snapshots` · `GET /snapshots/{id}` (JPEG, jeder Abruf im Audit-Log) · `DELETE /snapshots/{id}` | Admin |
 
+## Anlagen, Karten-App, Warteliste, Status-Seite
+
+| Methode/Pfad | Zweck | Auth |
+|---|---|---|
+| `GET /sites` · `POST /sites` `{name, location, station_ids}` · `PATCH /sites/{id}` `{name, location, station_ids, waitlist_enabled, hold_minutes 5–30}` · `DELETE /sites/{id}` | Anlagen; ein Stellplatz gehört zu höchstens einer Anlage | Lesend · Admin |
+| `POST /sites/{id}/display-link` · `DELETE …` | Großanzeige `/a#bsa_…` | Admin (`public_display`) |
+| `GET /public/site/status` (Header `X-Site-Token`) | `{total, free, counts{available,occupied,reserved,closed,unknown}, stalls[], waitlist_enabled, waiting, simulated}` – unbekannt zählt nie als frei | Token |
+| `POST /cards/{id}/link` · `DELETE /cards/{id}/link` | persönlicher App-Link `/k#bck_…` (nur Hash gespeichert) | Betreuer |
+| `GET /public/card` (Header `X-Card-Token`) | Karte, Guthaben (Prepaid), laufender Parkvorgang, eigene Reservierung/Warteliste, Anlagen mit Frei-Zählern, Verlauf | Karten-Link |
+| `POST /public/card/reservations` `{station_id, minutes 5–30}` · `DELETE …/{id}` | Selbst-Reservierung, nur wenn `org.cyclist_reserve` und Tarif `reservations`; nur sicher freie Plätze; eine je Karte | Karten-Link |
+| `POST /public/card/waitlist` `{site_id}` · `DELETE /public/card/waitlist` | Warteliste; nur wenn die Anlage voll ist (`409 stall_available`) | Karten-Link |
+| `GET /public/push-key` · `POST /public/card/push` (Browser-`PushSubscription`) · `POST /public/card/push/off` · `POST /public/card/push/test` | Web-Push (VAPID) | Karten-Link |
+| `PATCH /org` `{cyclist_reserve}` | Selbst-Reservierung erlauben | Admin |
+| `POST /org/status-page` · `DELETE /org/status-page` | Status-Seite `/status#bst_…` | Admin |
+| `GET /incidents` · `PATCH /incidents/{id}` `{note}` | Störungen (Gateway offline, Sensorfehler, Wartung) mit öffentlicher Notiz | Lesend · Betreuer |
+| `GET /public/status` (Header `X-Status-Token`) | Zustand je Stellplatz (ok/fault/maintenance/no_data), offene Störungen, Verlauf 30 Tage, Verfügbarkeit | Token |
+
+Warteliste: Wird in einer Anlage ein Platz sicher frei, bekommt der erste Eintrag eine an seine Karte gebundene
+Reservierung (Haltezeit der Anlage) und eine Push-Nachricht; andere Karten erhalten dort `reserved`. Check-in erfüllt
+den Eintrag, Ablauf gibt den Platz an den Nächsten. Seiten: `/a`, `/k` (PWA mit `/manifest.webmanifest`, `/sw.js`), `/status`.
+
 ## Plattform-Betreiber (`/platform`, Plattform-Admin mit 2FA)
 
 `GET /platform/tenants`, `PATCH /platform/tenants/{id}` `{status, plan}`, `GET /platform/stats`, `GET /platform/audit`.
@@ -227,7 +248,7 @@ Die öffentliche Anzeige erhält dieselbe Antwort ohne `ai` und ohne Ereignis-ID
 `GET /stations/{id}/occupancy?hours=24` liefert je Stunde `occupancy` (Anteil belegt an der Zeit mit
 gültiger Messung, `null` ohne Daten) und `known_s`.
 
-## Datenmodell (SQLite, Schema-Version 7, Migration von 2–6 automatisch)
+## Datenmodell (SQLite, Schema-Version 8, Migration von 2–7 automatisch)
 
 `tenant` → `user`, `station` → `slot` (genau ein Eintrag = der Stellplatz; Migration 3→4 entfernt überzählige Plätze), `device`, `measurement`, `event`; dazu `session`, `auth_token`
 (Einmal-Tokens), `recovery_code`, `enrollment` (Kopplungscodes), `audit_log`.
@@ -239,5 +260,7 @@ Neu in Version 5: `card` (nur UID-HMAC), `parking_session` (mit Tarif-Schnappsch
 Spalten `tenant.payment_mode`, `tenant.onboarding_hidden`, `user.notify`, `user.tour_done_at`, `card.balance_cents`,
 `device.offline_notified_at`, `station.hours`, `station.demo_sim`, `nfc_tap.balance_cents`. Neu in Version 7: `card_learn`
 (Anlern-Modus je Organisation); Spalten `tenant.trial_started_at`, `enrollment.station_ids`, `device.gateway_id`, `device.hw`,
-`device.port`, `device.reader`, `nfc_tap.reader`.
+`device.port`, `device.reader`, `nfc_tap.reader`. Neu in Version 8: `site`, `waitlist`, `push_sub`, `incident`, `kv`
+(VAPID-Schlüssel, verschlüsselt); Spalten `station.site_id`, `card.link_token_hash`, `card.link_created_at`,
+`tenant.cyclist_reserve`, `tenant.status_token_hash`, `tenant.status_enabled`.
 Löschen eines Mandanten entfernt alles per Kaskade, Kamerabilder auch von der Platte.
