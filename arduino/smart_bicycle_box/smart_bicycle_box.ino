@@ -13,7 +13,7 @@
  *   {"type":"nfc","uid":"04A1B2C3D4"}          (nur mit NFC_ENABLED, gleiche Karte max. alle 3 s)
  *
  * Eingabe vom Pi:  "NET 1" / "NET 0"  -> Netzstatus-LED
- *                  "NFC checked_in|checked_out|…" -> kurze Rückmeldung per LED (grün = ok, rot = Fehler)
+ *                  "NFC checked_in|checked_out|…" -> LED-Rückmeldung (grün kurz = ok, rot 5 s blinkend = nicht erkannt/Fehler)
  *                  "IDENT"  -> beide LEDs blinken 10 s (Stellplatz vor Ort finden, Befehl aus dem Portal)
  * Erste Zeile:     {"type":"hello","name":"bike-stall","fw":"0.4.0","nfc":true|false} – daran erkennt der Pi den Arduino
  *
@@ -222,7 +222,8 @@ void readCommands() {
       else if (rxLine == "NET 0") { netOk = false; netKnown = true; }
       else if (rxLine.startsWith("NFC ")) {
         feedbackOk = rxLine == "NFC checked_in" || rxLine == "NFC checked_out";
-        feedbackUntil = millis() + 1500;
+        // Erfolg: kurz grün. Karte nicht erkannt/abgelehnt: 5 s rot blinken.
+        feedbackUntil = millis() + (feedbackOk ? 1500UL : 5000UL);
       }
       else if (rxLine == "IDENT") identUntil = millis() + 10000;
       rxLine = "";
