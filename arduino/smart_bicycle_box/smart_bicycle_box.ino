@@ -221,9 +221,10 @@ void readCommands() {
       if (rxLine == "NET 1") { netOk = true; netKnown = true; }
       else if (rxLine == "NET 0") { netOk = false; netKnown = true; }
       else if (rxLine.startsWith("NFC ")) {
-        feedbackOk = rxLine == "NFC checked_in" || rxLine == "NFC checked_out";
-        // 5 s Rückmeldung: erkannt/registriert -> grün blinken, nicht erkannt/abgelehnt -> rot blinken.
-        feedbackUntil = millis() + 5000UL;
+        // erkannt/erfolgreich -> grün; alles andere (unknown_card, blocked, expired, …) -> rot.
+        feedbackOk = rxLine == "NFC checked_in" || rxLine == "NFC checked_out"
+                  || rxLine == "NFC reserved"   || rxLine == "NFC learned";
+        feedbackUntil = millis() + 5000UL;  // 5 s Rückmeldung (grün = erkannt, rot = nicht erkannt)
       }
       else if (rxLine == "IDENT") identUntil = millis() + 10000;
       rxLine = "";
