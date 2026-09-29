@@ -3,7 +3,7 @@
  *
  * Aufgaben: Präsenz- und Erschütterungssensor lesen, Belegung entprellen, lokale LEDs setzen
  * und Messungen als JSON-Zeilen über USB-Seriell an den Raspberry Pi senden.
- * Keine Nutzerdaten, keine KI auf dem Arduino. Optional: NFC-Leser PN532 (I2C) zum Ein-/Auschecken.
+ * Keine Nutzerdaten, keine KI auf dem Arduino. Optional: NFC-Leser RC522/MFRC522 (SPI) zum Ein-/Auschecken.
  *
  * Ausgabe je Zeile (115200 Baud):
  *   {"presence":1,"vibration":12,"seq":1042,"state":"ok"}
@@ -40,16 +40,18 @@
 #define VIB_ANALOG  2
 #define VIB_TYPE VIB_DIGITAL
 
-// NFC-Leser PN532 über I2C (SDA/SCL, Modul-Schalter auf I2C). Benötigt die Bibliothek
-// "Adafruit PN532" (Bibliotheksverwalter). Ohne Leser auskommentiert lassen.
-// #define NFC_ENABLED
+// NFC-Leser RC522 (MFRC522) über SPI. Benötigt die Bibliothek "MFRC522"
+// (Bibliotheksverwalter / `arduino-cli lib install MFRC522`). Ohne Leser auskommentiert lassen.
+// SPI-Pins fest: SCK=D13, MISO=D12, MOSI=D11; zusätzlich SS=D10, RST=D9 (siehe unten).
+#define NFC_ENABLED
 
-// PLATZHALTER – vor Ort anpassen!
-const uint8_t PRESENCE_PIN    = 2;   // Echo-Pin (Ultraschall) oder Signal-Pin (digital)
-const uint8_t TRIGGER_PIN     = 3;   // nur Ultraschall
-const uint8_t VIB_PIN         = 4;   // digital: D-Pin, analog: A-Pin
-const uint8_t LED_FREE_PIN    = 5;   // grüne LED
-const uint8_t LED_OCCUPIED_PIN = 6;  // rote LED
+// Pinbelegung (Standard = Aufbau station1: RC522 an SPI, zwei LEDs, kein Ultraschall/Vibration verdrahtet).
+// D9–D13 sind für den RC522 reserviert und dürfen hier nicht doppelt belegt werden.
+const uint8_t LED_OCCUPIED_PIN = 2;  // rote LED   (belegt)
+const uint8_t LED_FREE_PIN    = 3;   // grüne LED  (frei)
+const uint8_t VIB_PIN         = 4;   // Erschütterung: digital D-Pin, analog A-Pin (optional)
+const uint8_t PRESENCE_PIN    = 5;   // Echo-Pin (Ultraschall) oder Signal-Pin (digital) (optional)
+const uint8_t TRIGGER_PIN     = 6;   // nur Ultraschall (optional)
 const int8_t  NET_LED_PIN     = -1;  // -1 = keine Netzstatus-LED
 
 // Schwellwerte / Zeiten (im Test mit echten Fahrrädern kalibrieren)
@@ -65,11 +67,11 @@ const uint16_t VIB_ANALOG_NOISE    = 20;     // analog: darunter = 0
 const uint8_t  LED_BRIGHTNESS      = 255;    // nur bei PWM-Pins wirksam
 
 #ifdef NFC_ENABLED
-#include <Wire.h>
-#include <Adafruit_PN532.h>
-const uint8_t PN532_IRQ_PIN = 7;    // PLATZHALTER
-const uint8_t PN532_RESET_PIN = 8;  // PLATZHALTER
-Adafruit_PN532 nfc(PN532_IRQ_PIN, PN532_RESET_PIN);
+#include <SPI.h>
+#include <MFRC522.h>
+const uint8_t RC522_SS_PIN  = 10;   // SDA/SS  (SPI: SCK=D13, MISO=D12, MOSI=D11)
+const uint8_t RC522_RST_PIN = 9;    // RST
+MFRC522 nfc(RC522_SS_PIN, RC522_RST_PIN);
 bool nfcReady = false;
 uint8_t lastUid[10];
 uint8_t lastUidLen = 0;
@@ -222,22 +224,23 @@ void readCommands() {
 void pollNfc(unsigned long now) {
   if (!nfcReady || now - lastNfcPoll < 150) return;
   lastNfcPoll = now;
-  uint8_t uid[10];
-  uint8_t len = 0;
-  // Kurzes Timeout (30 ms), damit Sensoren weiter gelesen werden.
-  if (!nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &len, 30)) return;
-  if (len < 4 || len > 10) return;
-  bool same = len == lastUidLen && memcmp(uid, lastUid, len) == 0;
-  if (same && now - lastUidAt < NFC_REPEAT_MS) return;
-  memcpy(lastUid, uid, len);
+  // Nicht blockierend: nur reagieren, wenn eine neue Karte aufliegt.
+  if (!nfc.PICC_IsNewCardPresent() || !nfc.PICC_ReadCardSerial()) return;
+  uint8_t len = nfc.uid.size;
+  if (len < 4 || len > 10) { nfc.PICC_HaltA(); nfc.PCD_StopCrypto1(); return; }
+  bool same = len == lastUidLen && memcmp(nfc.uid.uidByte, lastUid, len) == 0;
+  if (same && now - lastUidAt < NFC_REPEAT_MS) { nfc.PICC_HaltA(); nfc.PCD_StopCrypto1(); return; }
+  memcpy(lastUid, nfc.uid.uidByte, len);
   lastUidLen = len;
   lastUidAt = now;
   Serial.print(F("{\"type\":\"nfc\",\"uid\":\""));
   for (uint8_t i = 0; i < len; i++) {
-    if (uid[i] < 0x10) Serial.print('0');
-    Serial.print(uid[i], HEX);
+    if (nfc.uid.uidByte[i] < 0x10) Serial.print('0');
+    Serial.print(nfc.uid.uidByte[i], HEX);
   }
   Serial.println(F("\"}"));
+  nfc.PICC_HaltA();
+  nfc.PCD_StopCrypto1();
 }
 #endif
 
@@ -255,9 +258,10 @@ void setup() {
   pinMode(LED_OCCUPIED_PIN, OUTPUT);
   if (NET_LED_PIN >= 0) pinMode(NET_LED_PIN, OUTPUT);
 #ifdef NFC_ENABLED
-  nfc.begin();
-  nfcReady = nfc.getFirmwareVersion() != 0;
-  if (nfcReady) nfc.SAMConfig();
+  SPI.begin();
+  nfc.PCD_Init();
+  delay(50);
+  { byte vraw = nfc.PCD_ReadRegister(MFRC522::VersionReg); nfcReady = (vraw != 0x00 && vraw != 0xFF); }
   Serial.println(nfcReady ? F("{\"type\":\"info\",\"nfc\":\"ok\"}") : F("{\"type\":\"info\",\"nfc\":\"missing\"}"));
 #endif
 #ifdef NFC_ENABLED
