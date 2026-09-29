@@ -3,7 +3,7 @@
  *
  * Aufgaben: Präsenz- und Erschütterungssensor lesen, Belegung entprellen, lokale LEDs setzen
  * und Messungen als JSON-Zeilen über USB-Seriell an den Raspberry Pi senden.
- * Keine Nutzerdaten, keine KI auf dem Arduino. Optional: NFC-Leser PN532 (I2C) zum Ein-/Auschecken.
+ * Keine Nutzerdaten, keine KI auf dem Arduino. Optional: NFC-Leser RC522/MFRC522 (SPI) zum Ein-/Auschecken.
  *
  * Ausgabe je Zeile (115200 Baud):
  *   {"presence":1,"vibration":12,"seq":1042,"state":"ok"}
@@ -13,7 +13,7 @@
  *   {"type":"nfc","uid":"04A1B2C3D4"}          (nur mit NFC_ENABLED, gleiche Karte max. alle 3 s)
  *
  * Eingabe vom Pi:  "NET 1" / "NET 0"  -> Netzstatus-LED
- *                  "NFC checked_in|checked_out|…" -> kurze Rückmeldung per LED (grün = ok, rot = Fehler)
+ *                  "NFC checked_in|checked_out|…" -> LED-Rückmeldung (grün kurz = ok, rot 5 s blinkend = nicht erkannt/Fehler)
  *                  "IDENT"  -> beide LEDs blinken 10 s (Stellplatz vor Ort finden, Befehl aus dem Portal)
  * Erste Zeile:     {"type":"hello","name":"bike-stall","fw":"0.4.0","nfc":true|false} – daran erkennt der Pi den Arduino
  *
@@ -25,13 +25,15 @@
 
 // ---------------------------------------------------------------- Konfiguration
 // Präsenzsensor (innen an der linken Wand, ca. 40 cm hoch, misst quer über den Stellplatz):
-//   PRESENCE_ULTRASONIC: HC-SR04 o. ä. (Trigger + Echo), belegt wenn Abstand < Schwelle
+//   PRESENCE_ULTRASONIC: HC-SR04 o. ä. (getrennter Trigger + Echo), belegt wenn Abstand < Schwelle
+//   PRESENCE_GROVE:      Grove Ultrasonic Ranger (EIN Signalpin SIG für Trigger und Echo)
 //   PRESENCE_DIGITAL:    IR-Lichtschranke/Kontakt, digitaler Pegel
 // Ein ToF-Laser-Distanzsensor (z. B. VL53L1X, I2C) ist die empfohlene Alternative, braucht aber
 // eine Bibliothek und ist hier noch nicht umgesetzt.
 #define PRESENCE_ULTRASONIC 1
 #define PRESENCE_DIGITAL    2
-#define PRESENCE_TYPE PRESENCE_ULTRASONIC
+#define PRESENCE_GROVE      3
+#define PRESENCE_TYPE PRESENCE_GROVE
 
 // Erschütterungssensor (an der Radhalteschiene):
 //   VIB_DIGITAL: z. B. SW-420 (liefert nur Ein/Aus-Impulse) -> Impulse zählen
@@ -40,16 +42,18 @@
 #define VIB_ANALOG  2
 #define VIB_TYPE VIB_DIGITAL
 
-// NFC-Leser PN532 über I2C (SDA/SCL, Modul-Schalter auf I2C). Benötigt die Bibliothek
-// "Adafruit PN532" (Bibliotheksverwalter). Ohne Leser auskommentiert lassen.
-// #define NFC_ENABLED
+// NFC-Leser RC522 (MFRC522) über SPI. Benötigt die Bibliothek "MFRC522"
+// (Bibliotheksverwalter / `arduino-cli lib install MFRC522`). Ohne Leser auskommentiert lassen.
+// SPI-Pins fest: SCK=D13, MISO=D12, MOSI=D11; zusätzlich SS=D10, RST=D9 (siehe unten).
+#define NFC_ENABLED
 
-// PLATZHALTER – vor Ort anpassen!
-const uint8_t PRESENCE_PIN    = 2;   // Echo-Pin (Ultraschall) oder Signal-Pin (digital)
-const uint8_t TRIGGER_PIN     = 3;   // nur Ultraschall
-const uint8_t VIB_PIN         = 4;   // digital: D-Pin, analog: A-Pin
-const uint8_t LED_FREE_PIN    = 5;   // grüne LED
-const uint8_t LED_OCCUPIED_PIN = 6;  // rote LED
+// Pinbelegung (Standard = Aufbau station1: RC522 an SPI, zwei LEDs, kein Ultraschall/Vibration verdrahtet).
+// D9–D13 sind für den RC522 reserviert und dürfen hier nicht doppelt belegt werden.
+const uint8_t LED_OCCUPIED_PIN = 2;  // rote LED   (belegt)
+const uint8_t LED_FREE_PIN    = 3;   // grüne LED  (frei)
+const uint8_t PRESENCE_PIN    = 4;   // Grove Ultrasonic: SIG (Trig+Echo, ein Pin) | HC-SR04: Echo | Digital: Signal
+const uint8_t VIB_PIN         = 5;   // Erschütterung: digital D-Pin, analog A-Pin (optional)
+const uint8_t TRIGGER_PIN     = 6;   // nur HC-SR04 (getrennter Trigger); bei Grove/Digital ungenutzt
 const int8_t  NET_LED_PIN     = -1;  // -1 = keine Netzstatus-LED
 
 // Schwellwerte / Zeiten (im Test mit echten Fahrrädern kalibrieren)
@@ -65,11 +69,11 @@ const uint16_t VIB_ANALOG_NOISE    = 20;     // analog: darunter = 0
 const uint8_t  LED_BRIGHTNESS      = 255;    // nur bei PWM-Pins wirksam
 
 #ifdef NFC_ENABLED
-#include <Wire.h>
-#include <Adafruit_PN532.h>
-const uint8_t PN532_IRQ_PIN = 7;    // PLATZHALTER
-const uint8_t PN532_RESET_PIN = 8;  // PLATZHALTER
-Adafruit_PN532 nfc(PN532_IRQ_PIN, PN532_RESET_PIN);
+#include <SPI.h>
+#include <MFRC522.h>
+const uint8_t RC522_SS_PIN  = 10;   // SDA/SS  (SPI: SCK=D13, MISO=D12, MOSI=D11)
+const uint8_t RC522_RST_PIN = 9;    // RST
+MFRC522 nfc(RC522_SS_PIN, RC522_RST_PIN);
 bool nfcReady = false;
 uint8_t lastUid[10];
 uint8_t lastUidLen = 0;
@@ -99,7 +103,22 @@ String rxLine;
 // ---------------------------------------------------------------- Sensoren
 // Liefert 1 (belegt), 0 (frei) oder -1 (ungültig)
 int8_t readPresence() {
-#if PRESENCE_TYPE == PRESENCE_ULTRASONIC
+#if PRESENCE_TYPE == PRESENCE_GROVE
+  // Grove Ultrasonic Ranger: ein Pin (SIG) für Trigger UND Echo.
+  pinMode(PRESENCE_PIN, OUTPUT);
+  digitalWrite(PRESENCE_PIN, LOW);
+  delayMicroseconds(2);
+  digitalWrite(PRESENCE_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(PRESENCE_PIN, LOW);
+  pinMode(PRESENCE_PIN, INPUT);
+  // Grove liefert bei "kein Objekt" ein langes Echo (~30 ms) statt gar keins -> großzügiger Timeout.
+  unsigned long us = pulseIn(PRESENCE_PIN, HIGH, 40000UL);
+  if (us == 0) return -1;                    // gar kein Echo -> Sensor nicht angeschlossen
+  unsigned long cm = us / 58UL;
+  if (cm == 0) return -1;
+  return cm < OCCUPIED_BELOW_CM ? 1 : 0;     // nah = belegt, weit (auch Maximalwert) = frei
+#elif PRESENCE_TYPE == PRESENCE_ULTRASONIC
   digitalWrite(TRIGGER_PIN, LOW);
   delayMicroseconds(2);
   digitalWrite(TRIGGER_PIN, HIGH);
@@ -203,7 +222,8 @@ void readCommands() {
       else if (rxLine == "NET 0") { netOk = false; netKnown = true; }
       else if (rxLine.startsWith("NFC ")) {
         feedbackOk = rxLine == "NFC checked_in" || rxLine == "NFC checked_out";
-        feedbackUntil = millis() + 1500;
+        // Erfolg: kurz grün. Karte nicht erkannt/abgelehnt: 5 s rot blinken.
+        feedbackUntil = millis() + (feedbackOk ? 1500UL : 5000UL);
       }
       else if (rxLine == "IDENT") identUntil = millis() + 10000;
       rxLine = "";
@@ -222,22 +242,23 @@ void readCommands() {
 void pollNfc(unsigned long now) {
   if (!nfcReady || now - lastNfcPoll < 150) return;
   lastNfcPoll = now;
-  uint8_t uid[10];
-  uint8_t len = 0;
-  // Kurzes Timeout (30 ms), damit Sensoren weiter gelesen werden.
-  if (!nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &len, 30)) return;
-  if (len < 4 || len > 10) return;
-  bool same = len == lastUidLen && memcmp(uid, lastUid, len) == 0;
-  if (same && now - lastUidAt < NFC_REPEAT_MS) return;
-  memcpy(lastUid, uid, len);
+  // Nicht blockierend: nur reagieren, wenn eine neue Karte aufliegt.
+  if (!nfc.PICC_IsNewCardPresent() || !nfc.PICC_ReadCardSerial()) return;
+  uint8_t len = nfc.uid.size;
+  if (len < 4 || len > 10) { nfc.PICC_HaltA(); nfc.PCD_StopCrypto1(); return; }
+  bool same = len == lastUidLen && memcmp(nfc.uid.uidByte, lastUid, len) == 0;
+  if (same && now - lastUidAt < NFC_REPEAT_MS) { nfc.PICC_HaltA(); nfc.PCD_StopCrypto1(); return; }
+  memcpy(lastUid, nfc.uid.uidByte, len);
   lastUidLen = len;
   lastUidAt = now;
   Serial.print(F("{\"type\":\"nfc\",\"uid\":\""));
   for (uint8_t i = 0; i < len; i++) {
-    if (uid[i] < 0x10) Serial.print('0');
-    Serial.print(uid[i], HEX);
+    if (nfc.uid.uidByte[i] < 0x10) Serial.print('0');
+    Serial.print(nfc.uid.uidByte[i], HEX);
   }
   Serial.println(F("\"}"));
+  nfc.PICC_HaltA();
+  nfc.PCD_StopCrypto1();
 }
 #endif
 
@@ -247,6 +268,8 @@ void setup() {
 #if PRESENCE_TYPE == PRESENCE_ULTRASONIC
   pinMode(TRIGGER_PIN, OUTPUT);
   pinMode(PRESENCE_PIN, INPUT);
+#elif PRESENCE_TYPE == PRESENCE_GROVE
+  // Grove Ultrasonic: Pinrichtung wird je Messung in readPresence() umgeschaltet.
 #else
   pinMode(PRESENCE_PIN, INPUT_PULLUP);
 #endif
@@ -255,9 +278,10 @@ void setup() {
   pinMode(LED_OCCUPIED_PIN, OUTPUT);
   if (NET_LED_PIN >= 0) pinMode(NET_LED_PIN, OUTPUT);
 #ifdef NFC_ENABLED
-  nfc.begin();
-  nfcReady = nfc.getFirmwareVersion() != 0;
-  if (nfcReady) nfc.SAMConfig();
+  SPI.begin();
+  nfc.PCD_Init();
+  delay(50);
+  { byte vraw = nfc.PCD_ReadRegister(MFRC522::VersionReg); nfcReady = (vraw != 0x00 && vraw != 0xFF); }
   Serial.println(nfcReady ? F("{\"type\":\"info\",\"nfc\":\"ok\"}") : F("{\"type\":\"info\",\"nfc\":\"missing\"}"));
 #endif
 #ifdef NFC_ENABLED

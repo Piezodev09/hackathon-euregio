@@ -12,7 +12,7 @@
 | Raspberry Pi (+ Netzteil, SD) | | | | | |
 | Präsenzsensor (Vorschlag: ToF-Distanzsensor, Budget: Ultraschall) | | | I2C / Ultraschall / digital | | |
 | Erschütterungssensor | | | digital (Ein/Aus) / analog | | |
-| NFC-Leser (Vorschlag: PN532-Modul, 13,56 MHz) | | 3,3–5 V | I2C | | |
+| NFC-Leser (RC522/MFRC522, 13,56 MHz) | RC522 | 3,3 V | SPI (D9–D13) | | |
 | Kamera (optional, nur nach Freigabe): Pi-Kameramodul (CSI) oder USB-Webcam | | | CSI / USB am Pi | | |
 | Display für den Kopfträger (Vorschlag 13–15,6″) | | | HDMI am Pi | | |
 | LEDs (+ Vorwiderstände) | | | | | |
@@ -35,27 +35,44 @@ In `arduino/smart_bicycle_box/smart_bicycle_box.ino`:
 
 ## Pinbelegung (geprüft eintragen)
 
-| Präsenz (Echo/Signal) | Trigger | Erschütterung | LED grün | LED rot | Netz-LED |
+| Präsenz (SIG/Echo) | Trigger | Erschütterung | LED grün | LED rot | Netz-LED |
 |---|---|---|---|---|---|
-| | | | | | |
+| **D4** | – | D5 | **D3** | **D2** | – |
 
-Beim Arduino Uno sind D0/D1 durch USB-Seriell belegt – nicht verwenden.
+Standard-Pinbelegung im Sketch (Aufbau station1). Präsenz ist ein **Grove Ultrasonic Ranger** an **D4** –
+ein einziger Signalpin (SIG) für Trigger und Echo (`PRESENCE_TYPE = PRESENCE_GROVE`). Ein HC-SR04 mit
+getrenntem Trigger nutzt stattdessen `PRESENCE_ULTRASONIC` (Trigger auf D6). **D9–D13 sind für den RC522 (SPI)
+reserviert** und dürfen nicht doppelt belegt werden. Beim Arduino Uno sind D0/D1 durch USB-Seriell belegt.
+Erschütterung (D5) ist optional; ohne Präsenzsensor meldet die Station „Status unbekannt“.
 
-## NFC-Leser PN532 (Ein-/Auschecken)
+## NFC-Leser RC522 (Ein-/Auschecken)
 
-> Software (Sketch, Gateway, Plattform) ist fertig und mit dem Simulator getestet.
-> **Mit echtem PN532 noch nicht getestet, Sketch noch nicht kompiliert.**
+> Getestet an station1 mit Arduino Nano 33 IoT und echtem RC522 (VersionReg 0x92): Lesen, Tap und
+> „wartet auf Freigabe“ im Portal funktionieren. Der Sketch nutzt die Bibliothek **MFRC522** (SPI).
 
-1. Bibliothek installieren: Arduino IDE → Bibliotheksverwalter → „Adafruit PN532“ (inkl. „Adafruit BusIO“).
-2. Am Modul die DIP-Schalter auf **I2C** stellen (meist SEL0 = ON, SEL1 = OFF – Aufdruck prüfen).
-3. Verdrahtung (Arduino Uno): VCC → 5 V (bzw. 3,3 V je nach Modul), GND → GND, SDA → A4, SCL → A5,
-   IRQ → D7, RSTO → D8 (Platzhalter `PN532_IRQ_PIN`/`PN532_RESET_PIN` im Sketch; nicht mit Präsenz-/LED-Pins doppelt belegen).
-4. Im Sketch `#define NFC_ENABLED` einkommentieren und hochladen. Beim Start meldet der Arduino
-   `{"type":"info","nfc":"ok"}` oder `"missing"` (im Log des Gateways sichtbar).
-5. Test: Karte an den Leser halten → Arduino sendet `{"type":"nfc","uid":"…"}` → Portal → **Karten**:
+Der RC522 (MFRC522) hängt am **SPI** (nicht I²C):
+
+| RC522 | Nano 33 IoT | Sketch |
+|---|---|---|
+| SDA/SS | D10 | `RC522_SS_PIN` |
+| SCK | D13 | (SPI fest) |
+| MOSI | D11 | (SPI fest) |
+| MISO | D12 | (SPI fest) |
+| RST | D9 | `RC522_RST_PIN` |
+| 3.3V | 3V3 | – |
+| GND | GND | – |
+
+1. **Firmware flashen – installiert Toolchain (arduino-cli), Board-Core und die MFRC522-Bibliothek automatisch:**
+   ```sh
+   bash arduino/flash.sh                       # Standard-Board Arduino Nano 33 IoT
+   FQBN=arduino:avr:uno bash arduino/flash.sh   # anderes Board
+   ```
+2. Beim Start meldet der Arduino `{"type":"info","nfc":"ok"}` bzw. `"missing"` (im Gateway-Log sichtbar).
+3. Test: Karte an den Leser halten → Arduino sendet `{"type":"nfc","uid":"…"}` → Portal → **Karten**:
    Karte erscheint als „wartet auf Freigabe“ → benennen und freigeben → erneut halten = eingecheckt.
 
-Die LEDs zeigen kurz die Antwort (grün = ein-/ausgecheckt, rot = abgelehnt). Ohne Leser bleibt der Sketch wie bisher.
+Die LEDs zeigen kurz die Antwort (**grün D3** = ein-/ausgecheckt, **rot D2** = abgelehnt). Ohne Leser bleibt der Sketch
+lauffähig (`nfc:"missing"`). Ein 5-V-RC522 funktioniert am 3,3-V-Nano nur, wenn das Modul 3,3 V verträgt (die meisten tun das).
 Einfacher als „wartet auf Freigabe“: Portal → **Lesegeräte** → **Karte anlernen** (Bezeichnung eingeben, Karte innerhalb 60 s an einen Leser halten).
 
 ### Andere Kartenleser (ohne Löten, am Pi)
@@ -69,7 +86,7 @@ Einfacher als „wartet auf Freigabe“: Portal → **Lesegeräte** → **Karte 
 ### Sketch 0.4.0
 
 Erste Zeile nach dem Verbinden: `{"type":"hello","name":"bike-stall","fw":"0.4.0","nfc":true|false}` – daran erkennt der Pi
-den Arduino und ob er einen PN532 hat. Befehl `IDENT` vom Pi lässt beide LEDs 10 s abwechselnd blinken
+den Arduino und ob er einen NFC-Leser hat. Befehl `IDENT` vom Pi lässt beide LEDs 10 s abwechselnd blinken
 (Portal → Gateways → **Identifizieren**). **Sketch nicht kompiliert und nicht auf Hardware getestet.**
 Zum Testen ohne Hardware: `scripts/dev.sh --interactive`, dann `n` (Demo-Karte) oder `n 04AABBCCDD`.
 
@@ -95,7 +112,7 @@ Skizzen: `design/smart-bicycle-box-prototyp.html`, Abschnitt „Stellplatz-Konze
 | – | Rahmen | zwei Seitenwände + Rückwand, vorne offen; ca. 80 × 200 × 150 cm (B × T × H), lichte Höhe ca. 125 cm |
 | 1 | Display | im Kopfträger oben vorne, mittig; über HDMI am Pi (Kiosk-Anzeige) |
 | 2 | Präsenzsensor | innen an der linken Wand, ca. 40 cm hoch, misst quer zur gegenüberliegenden Wand |
-| 3 | NFC-Leser (PN532, Software fertig, Hardware ungetestet) | außen rechts vorne, ca. 100 cm hoch, hinter max. 3 mm Kunststoff, nicht hinter Metall |
+| 3 | NFC-Leser (RC522/SPI, getestet an station1) | außen rechts vorne, ca. 100 cm hoch, hinter max. 3 mm Kunststoff, nicht hinter Metall |
 | 4 | Erschütterungssensor | an der Radhalteschiene |
 | 5 | Elektronikgehäuse IP54 | außen rechts hinten oben: Arduino, Pi, geprüftes Netzteil |
 | 6 | Kabelkanal | Oberkante rechte Wand → Kopfträger → Innenkante linke Wand; Bodenkabel unter der Schiene |
