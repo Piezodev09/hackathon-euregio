@@ -43,6 +43,16 @@ Optionen des Skripts: `--source simulator` (ohne Arduino testen), `--serial-port
 
 Der Ein-Zeilen-Befehl (`curl … | sudo sh -s -- --code …`) ist bequemer, prüft das Skript aber nicht vorher.
 
+## Ausgabe des Skripts
+
+Das Skript zeigt einen Kopf mit Marke, nummerierte Schritte (`✓ [5/9] Agent 1.4.0 herunterladen und prüfen  SHA-256 … · 0,4 s`,
+übersprungene mit `–`, Fehler mit `✗`) und am Ende eine Karte mit Stellplätzen, erkannter Hardware, Dienst-Status, lokaler
+Anzeige und nächsten Schritten – Farben und Symbole wie im Portal, Zustände nie nur über Farbe.
+
+- Ausgaben von apt, Download und Kopplung stehen im **Protokoll** `/var/log/bike-agent-install.log` (ohne systemd: im
+  Temp-Verzeichnis). Bei einem Fehler zeigt ein roter Kasten Ursache, Hinweis und die letzten Protokollzeilen.
+- Ohne Farben: `--no-color` oder `NO_COLOR=1`; ohne Terminal (z. B. in einer Pipe) und ohne UTF-8 schlicht in ASCII.
+
 ## Was das Skript tut
 
 | Schritt | Details |
