@@ -25,13 +25,15 @@
 
 // ---------------------------------------------------------------- Konfiguration
 // Präsenzsensor (innen an der linken Wand, ca. 40 cm hoch, misst quer über den Stellplatz):
-//   PRESENCE_ULTRASONIC: HC-SR04 o. ä. (Trigger + Echo), belegt wenn Abstand < Schwelle
+//   PRESENCE_ULTRASONIC: HC-SR04 o. ä. (getrennter Trigger + Echo), belegt wenn Abstand < Schwelle
+//   PRESENCE_GROVE:      Grove Ultrasonic Ranger (EIN Signalpin SIG für Trigger und Echo)
 //   PRESENCE_DIGITAL:    IR-Lichtschranke/Kontakt, digitaler Pegel
 // Ein ToF-Laser-Distanzsensor (z. B. VL53L1X, I2C) ist die empfohlene Alternative, braucht aber
 // eine Bibliothek und ist hier noch nicht umgesetzt.
 #define PRESENCE_ULTRASONIC 1
 #define PRESENCE_DIGITAL    2
-#define PRESENCE_TYPE PRESENCE_ULTRASONIC
+#define PRESENCE_GROVE      3
+#define PRESENCE_TYPE PRESENCE_GROVE
 
 // Erschütterungssensor (an der Radhalteschiene):
 //   VIB_DIGITAL: z. B. SW-420 (liefert nur Ein/Aus-Impulse) -> Impulse zählen
@@ -49,9 +51,9 @@
 // D9–D13 sind für den RC522 reserviert und dürfen hier nicht doppelt belegt werden.
 const uint8_t LED_OCCUPIED_PIN = 2;  // rote LED   (belegt)
 const uint8_t LED_FREE_PIN    = 3;   // grüne LED  (frei)
-const uint8_t VIB_PIN         = 4;   // Erschütterung: digital D-Pin, analog A-Pin (optional)
-const uint8_t PRESENCE_PIN    = 5;   // Echo-Pin (Ultraschall) oder Signal-Pin (digital) (optional)
-const uint8_t TRIGGER_PIN     = 6;   // nur Ultraschall (optional)
+const uint8_t PRESENCE_PIN    = 4;   // Grove Ultrasonic: SIG (Trig+Echo, ein Pin) | HC-SR04: Echo | Digital: Signal
+const uint8_t VIB_PIN         = 5;   // Erschütterung: digital D-Pin, analog A-Pin (optional)
+const uint8_t TRIGGER_PIN     = 6;   // nur HC-SR04 (getrennter Trigger); bei Grove/Digital ungenutzt
 const int8_t  NET_LED_PIN     = -1;  // -1 = keine Netzstatus-LED
 
 // Schwellwerte / Zeiten (im Test mit echten Fahrrädern kalibrieren)
@@ -101,7 +103,21 @@ String rxLine;
 // ---------------------------------------------------------------- Sensoren
 // Liefert 1 (belegt), 0 (frei) oder -1 (ungültig)
 int8_t readPresence() {
-#if PRESENCE_TYPE == PRESENCE_ULTRASONIC
+#if PRESENCE_TYPE == PRESENCE_GROVE
+  // Grove Ultrasonic Ranger: ein Pin (SIG) für Trigger UND Echo.
+  pinMode(PRESENCE_PIN, OUTPUT);
+  digitalWrite(PRESENCE_PIN, LOW);
+  delayMicroseconds(2);
+  digitalWrite(PRESENCE_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(PRESENCE_PIN, LOW);
+  pinMode(PRESENCE_PIN, INPUT);
+  unsigned long us = pulseIn(PRESENCE_PIN, HIGH, 25000UL);  // ~4 m Timeout
+  if (us == 0) return -1;
+  unsigned long cm = us / 58UL;
+  if (cm == 0 || cm > MAX_VALID_CM) return -1;
+  return cm < OCCUPIED_BELOW_CM ? 1 : 0;
+#elif PRESENCE_TYPE == PRESENCE_ULTRASONIC
   digitalWrite(TRIGGER_PIN, LOW);
   delayMicroseconds(2);
   digitalWrite(TRIGGER_PIN, HIGH);
@@ -250,6 +266,8 @@ void setup() {
 #if PRESENCE_TYPE == PRESENCE_ULTRASONIC
   pinMode(TRIGGER_PIN, OUTPUT);
   pinMode(PRESENCE_PIN, INPUT);
+#elif PRESENCE_TYPE == PRESENCE_GROVE
+  // Grove Ultrasonic: Pinrichtung wird je Messung in readPresence() umgeschaltet.
 #else
   pinMode(PRESENCE_PIN, INPUT_PULLUP);
 #endif

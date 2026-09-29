@@ -35,13 +35,15 @@ In `arduino/smart_bicycle_box/smart_bicycle_box.ino`:
 
 ## Pinbelegung (geprüft eintragen)
 
-| Präsenz (Echo/Signal) | Trigger | Erschütterung | LED grün | LED rot | Netz-LED |
+| Präsenz (SIG/Echo) | Trigger | Erschütterung | LED grün | LED rot | Netz-LED |
 |---|---|---|---|---|---|
-| D5 | D6 | D4 | **D3** | **D2** | – |
+| **D4** | – | D5 | **D3** | **D2** | – |
 
-Standard-Pinbelegung im Sketch (Aufbau station1). **D9–D13 sind für den RC522 (SPI) reserviert** und dürfen nicht
-doppelt belegt werden. Beim Arduino Uno sind D0/D1 durch USB-Seriell belegt – nicht verwenden. Präsenz/Trigger/
-Erschütterung sind optional (ohne Sensor meldet die Station „Status unbekannt“).
+Standard-Pinbelegung im Sketch (Aufbau station1). Präsenz ist ein **Grove Ultrasonic Ranger** an **D4** –
+ein einziger Signalpin (SIG) für Trigger und Echo (`PRESENCE_TYPE = PRESENCE_GROVE`). Ein HC-SR04 mit
+getrenntem Trigger nutzt stattdessen `PRESENCE_ULTRASONIC` (Trigger auf D6). **D9–D13 sind für den RC522 (SPI)
+reserviert** und dürfen nicht doppelt belegt werden. Beim Arduino Uno sind D0/D1 durch USB-Seriell belegt.
+Erschütterung (D5) ist optional; ohne Präsenzsensor meldet die Station „Status unbekannt“.
 
 ## NFC-Leser RC522 (Ein-/Auschecken)
 
