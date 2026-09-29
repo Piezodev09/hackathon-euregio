@@ -66,7 +66,8 @@ def _card_out(core, c) -> dict:
     st = core.db.scalar("SELECT name FROM station WHERE id = ?", (c["last_station_id"],)) if c["last_station_id"] else None
     return {"id": c["id"], "label": c["label"], "status": c["status"], "created_at": billing.iso(c["created_at"]),
             "last_seen_at": billing.iso(c["last_seen_at"]), "last_station_name": st, "parked": open_s is not None,
-            "balance_cents": c["balance_cents"]}
+            "balance_cents": c["balance_cents"], "app_link": c["link_token_hash"] is not None,
+            "app_link_created_at": billing.iso(c["link_created_at"])}
 
 
 @router.get("/api/v1/cards")

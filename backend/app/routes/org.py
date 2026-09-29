@@ -21,7 +21,8 @@ def get_org(request: Request, ctx: Ctx = Depends(require("viewer"))):
     core = core_of(request)
     t = ctx.tenant
     return {"id": t["id"], "name": t["name"], "status": t["status"], "mfa_required": bool(t["mfa_required"]),
-            "created_at": iso(t["created_at"]), "plan": get_plan(t["plan"]).to_dict(), "usage": core.tenant_usage(t["id"])}
+            "created_at": iso(t["created_at"]), "plan": get_plan(t["plan"]).to_dict(), "usage": core.tenant_usage(t["id"]),
+            "cyclist_reserve": bool(t["cyclist_reserve"])}
 
 
 @router.patch("")
@@ -39,6 +40,9 @@ def patch_org(body: OrgPatch, request: Request, ctx: Ctx = Depends(require("admi
             raise HTTPException(409, "enable_own_mfa_first")
         core.db.execute("UPDATE tenant SET mfa_required = ? WHERE id = ?", (int(body.mfa_required), ctx.tenant_id))
         changes["mfa_required"] = body.mfa_required
+    if body.cyclist_reserve is not None:
+        core.db.execute("UPDATE tenant SET cyclist_reserve = ? WHERE id = ?", (int(body.cyclist_reserve), ctx.tenant_id))
+        changes["cyclist_reserve"] = body.cyclist_reserve
     core.audit("org_updated", tenant_id=ctx.tenant_id, user_id=ctx.user["id"], actor=ctx.actor, ip=ctx.ip, detail=changes)
     return {"status": "ok"}
 

@@ -94,6 +94,12 @@ def patch_station(station_id: str, body: StationPatch, request: Request, ctx: Ct
         raise HTTPException(409, "create_stall_link_first")
     for k, v in changes.items():
         core.db.execute(f"UPDATE station SET {k} = ? WHERE id = ?", (int(v) if isinstance(v, bool) else v, st["id"]))
+    if "maintenance" in changes and bool(changes["maintenance"]) != bool(st["maintenance"]):
+        inc = request.app.state.incidents  # öffentliche Status-Seite: Wartung als Störung mit Zeitraum
+        if changes["maintenance"]:
+            inc.open(st["tenant_id"], st["id"], "maintenance")
+        else:
+            inc.close(st["id"], "maintenance")
     core.audit("station_updated", tenant_id=ctx.tenant_id, user_id=ctx.user["id"], actor=ctx.actor, ip=ctx.ip, target=st["id"],
                detail=changes)
     return {"status": "ok"}

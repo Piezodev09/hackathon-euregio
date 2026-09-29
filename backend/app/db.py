@@ -12,7 +12,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS tenant (
@@ -294,6 +294,68 @@ CREATE TABLE IF NOT EXISTS card_learn (
     outcome     TEXT            -- learned | known
 );
 
+-- Anlage: mehrere Stellplätze nebeneinander, mit gemeinsamer Großanzeige und Warteliste.
+CREATE TABLE IF NOT EXISTS site (
+    id                  TEXT PRIMARY KEY,
+    tenant_id           TEXT NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+    name                TEXT NOT NULL,
+    location            TEXT NOT NULL DEFAULT '',
+    display_token_hash  TEXT UNIQUE,
+    display_enabled     INTEGER NOT NULL DEFAULT 0,
+    waitlist_enabled    INTEGER NOT NULL DEFAULT 0,
+    hold_minutes        INTEGER NOT NULL DEFAULT 10,
+    created_at          REAL NOT NULL
+);
+
+-- Warteliste je Anlage: höchstens ein aktiver Eintrag je Karte und Anlage.
+CREATE TABLE IF NOT EXISTS waitlist (
+    id              TEXT PRIMARY KEY,
+    tenant_id       TEXT NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+    site_id         TEXT NOT NULL REFERENCES site(id) ON DELETE CASCADE,
+    card_id         TEXT NOT NULL REFERENCES card(id) ON DELETE CASCADE,
+    created_at      REAL NOT NULL,
+    status          TEXT NOT NULL DEFAULT 'waiting',   -- waiting | offered | done | cancelled | expired
+    station_id      TEXT,
+    reservation_id  TEXT,
+    offered_at      REAL,
+    ended_at        REAL
+);
+CREATE INDEX IF NOT EXISTS idx_waitlist_site ON waitlist (site_id, status, created_at);
+
+-- Web-Push-Abos der Karten-App (kein Personenbezug außer dem Endpunkt des Browsers).
+CREATE TABLE IF NOT EXISTS push_sub (
+    id          TEXT PRIMARY KEY,
+    tenant_id   TEXT NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+    card_id     TEXT NOT NULL REFERENCES card(id) ON DELETE CASCADE,
+    endpoint    TEXT NOT NULL,
+    p256dh      TEXT NOT NULL,
+    auth        TEXT NOT NULL,
+    created_at  REAL NOT NULL,
+    last_ok_at  REAL,
+    failures    INTEGER NOT NULL DEFAULT 0,
+    UNIQUE (card_id, endpoint)
+);
+
+-- Störungen für die öffentliche Status-Seite (Gateway offline, Sensorfehler, Wartung).
+CREATE TABLE IF NOT EXISTS incident (
+    id          TEXT PRIMARY KEY,
+    tenant_id   TEXT NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+    station_id  TEXT NOT NULL REFERENCES station(id) ON DELETE CASCADE,
+    device_id   TEXT,
+    kind        TEXT NOT NULL,          -- gateway_offline | sensor_fault | maintenance
+    started_at  REAL NOT NULL,
+    ended_at    REAL,
+    note        TEXT NOT NULL DEFAULT '',
+    source      TEXT NOT NULL DEFAULT 'live'
+);
+CREATE INDEX IF NOT EXISTS idx_incident_tenant ON incident (tenant_id, started_at);
+
+-- Kleine Schlüssel/Wert-Ablage der Plattform (z. B. VAPID-Schlüssel, verschlüsselt).
+CREATE TABLE IF NOT EXISTS kv (
+    key    TEXT PRIMARY KEY,
+    value  BLOB NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS reservation (
     id          TEXT PRIMARY KEY,
     tenant_id   TEXT NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
@@ -417,7 +479,7 @@ class Database:
             single_stall = version == 3
             if single_stall:
                 version = 4
-            if version in (4, 5, 6):
+            if version in (4, 5, 6, 7):
                 version = SCHEMA_VERSION  # nur neue Tabellen/Spalten (werden unten angelegt)
             if version not in (0, SCHEMA_VERSION):
                 raise RuntimeError(
@@ -453,15 +515,17 @@ class Database:
     # Spalten, die nach Schema 4 dazukamen (idempotent, auch für neue Datenbanken).
     EXTRA_COLUMNS = {
         "tenant": ["tariff TEXT", "payment_mode TEXT NOT NULL DEFAULT 'statement'", "onboarding_hidden INTEGER NOT NULL DEFAULT 0",
-                   "trial_started_at REAL"],
+                   "trial_started_at REAL", "cyclist_reserve INTEGER NOT NULL DEFAULT 0", "status_token_hash TEXT",
+                   "status_enabled INTEGER NOT NULL DEFAULT 0"],
         "user": ["notify TEXT", "tour_done_at REAL"],
-        "card": ["balance_cents INTEGER NOT NULL DEFAULT 0"],
+        "card": ["balance_cents INTEGER NOT NULL DEFAULT 0", "link_token_hash TEXT", "link_created_at REAL"],
         "device": ["offline_notified_at REAL", "gateway_id TEXT", "hw TEXT", "port TEXT", "reader TEXT"],
         "enrollment": ["station_ids TEXT"],
         "nfc_tap": ["balance_cents INTEGER", "reader TEXT"],
         "station": ["tariff TEXT", "camera_enabled INTEGER NOT NULL DEFAULT 0", "camera_retention_h INTEGER NOT NULL DEFAULT 24",
                     "camera_approved_by TEXT", "stall_token_hash TEXT", "stall_view_enabled INTEGER NOT NULL DEFAULT 0",
-                    "maintenance INTEGER NOT NULL DEFAULT 0", "hours TEXT", "demo_sim INTEGER NOT NULL DEFAULT 0"],
+                    "maintenance INTEGER NOT NULL DEFAULT 0", "hours TEXT", "demo_sim INTEGER NOT NULL DEFAULT 0",
+                    "site_id TEXT"],
     }
 
     def _ensure_columns(self) -> None:
@@ -471,6 +535,8 @@ class Database:
                 if d.split()[0] not in existing:
                     self._conn.execute(f"ALTER TABLE {table} ADD COLUMN {d}")
         self._conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_station_stall_token ON station (stall_token_hash)")
+        self._conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_card_link_token ON card (link_token_hash)")
+        self._conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_tenant_status_token ON tenant (status_token_hash)")
 
     def _migrate_3_to_4(self) -> None:
         """Eine Station = ein Stellplatz: überzählige Plätze (samt Messungen/Ereignissen) entfernen."""

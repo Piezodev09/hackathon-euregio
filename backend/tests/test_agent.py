@@ -192,7 +192,7 @@ def test_migration_from_schema_2(tmp_path):
     db = Database(p)
     cols = {r[1] for r in db.all("PRAGMA table_info(device)")}
     assert {"hostname", "prev_token_hash", "last_heartbeat_at"} <= cols
-    assert db.scalar("PRAGMA user_version") == 7
+    assert db.scalar("PRAGMA user_version") == 8
 
 
 def test_migration_to_single_stall(tmp_path):
@@ -212,7 +212,7 @@ def test_migration_to_single_stall(tmp_path):
     con.close()
     db = Database(p)
     rows = [tuple(r) for r in db.all("SELECT id, key, position FROM slot")]
-    assert rows == [("b", "A", 1)] and db.scalar("PRAGMA user_version") == 7
+    assert rows == [("b", "A", 1)] and db.scalar("PRAGMA user_version") == 8
 
 
 def test_pinned_install_commands_for_self_signed_cert(env, tmp_path):
