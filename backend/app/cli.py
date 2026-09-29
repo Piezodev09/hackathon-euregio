@@ -19,6 +19,7 @@ import time
 
 from .config import load_settings
 from .core import Core
+from .plans import get_plan
 from .security import hash_password, hash_token, new_id, new_token, password_problems
 from . import billing
 from .parking import Parking
@@ -58,7 +59,8 @@ def create_demo(core: Core, email: str, org: str, plan: str) -> None:
     display = new_token("bsp_")
     stall = new_token("bss_")
     with core.db.tx() as c:
-        c.execute("INSERT INTO tenant (id, name, plan, status, created_at) VALUES (?,?,?,?,?)", (tid, org, plan, "active", now))
+        c.execute("INSERT INTO tenant (id, name, plan, status, created_at, trial_started_at) VALUES (?,?,?,?,?,?)",
+                  (tid, org, plan, "active", now, now if get_plan(plan).trial_days else None))
         c.execute(
             "INSERT INTO user (id, tenant_id, email, name, role, password_hash, email_verified_at, created_at, password_changed_at) "
             "VALUES (?,?,?,?,?,?,?,?,?)",

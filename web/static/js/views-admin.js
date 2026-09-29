@@ -5,6 +5,7 @@ import { el, clear, field, toast, confirmDialog, fmtDateTime, fmtMoney, copyText
 import { state, can, go } from "./state.js";
 import { licenseCard } from "./views-parking.js";
 import { notificationsCard } from "./views-more.js";
+import { helpCard } from "./help.js";
 
 const errorCard = (e) => el("div", { class: "alert-box error", role: "alert" }, describeError(e));
 const th = (...hs) => el("thead", {}, el("tr", {}, hs.map((h) => el("th", { scope: "col" }, h))));
@@ -215,7 +216,7 @@ export function viewSecurity(rerender) {
     location.href = "/";
   });
 
-  clear(node, banner, me.tenant ? notificationsCard() : null,
+  clear(node, banner, me.tenant ? notificationsCard() : null, me.tenant ? helpCard() : null,
     el("div", { class: "grid cols-2" }, el("div", {}, mfa, sessions), el("div", {}, profile, pwForm, delForm)));
   return node;
 }
@@ -266,16 +267,16 @@ export function viewOrg() {
 }
 
 // ---------------------------------------------------------------------- Tarif
-function planFeatures(p) {
+function planFeatures(p, trialUsed = false) {
   return [t("bill.f_stations", { n: p.max_stations }), t("bill.f_users", { n: p.max_users }),
     t("bill.f_retention", { n: p.retention_days }), p.nfc ? t("feat.nfc") : null, p.parking_billing ? t("feat.parking_billing") : null,
     p.parking_billing ? t("feat.prepaid") : null, p.reservations ? t("feat.reservations") : null, t("feat.hours"), t("feat.notifications"),
     p.reports ? t("feat.reports") : null, p.integrations ? t("feat.integrations") : null,
     p.stall_view ? t("feat.stall_view") : null, p.camera ? t("feat.camera") : null, p.ml_enabled ? t("bill.f_ml") : null,
     p.audit_log ? t("bill.f_audit") : null, p.public_display ? t("bill.f_display") : null,
-    p.trial_days ? t("bill.f_trial", { n: p.trial_days }) : null].filter(Boolean);
+    p.trial_days && !trialUsed ? t("bill.f_trial", { n: p.trial_days }) : null].filter(Boolean);
 }
-export function planCard(p, { current, action, featured } = {}) {
+export function planCard(p, { current, action, featured, trialUsed } = {}) {
   const eur = (c) => new Intl.NumberFormat(getLang(), { style: "currency", currency: "EUR" }).format(c / 100);
   return el("article", { class: `card plan${featured ? " featured" : ""}` },
     el("h3", {}, p.name, current ? [" ", el("span", { class: "badge ok" }, t("bill.current_badge"))] : null,
@@ -284,7 +285,18 @@ export function planCard(p, { current, action, featured } = {}) {
       ? [el("p", { class: "price" }, eur(p.price_per_stall_day_cents), el("span", { class: "small muted" }, " " + t("bill.per_stall_day"))),
         el("p", { class: "small muted" }, t("bill.plus_base", { p: eur(p.base_month_cents) }))]
       : el("p", { class: "price" }, t("bill.free")),
-    el("ul", {}, planFeatures(p).map((f) => el("li", {}, f))), action || null);
+    el("ul", {}, planFeatures(p, trialUsed).map((f) => el("li", {}, f))),
+    p.trial_days && trialUsed && !current ? el("p", { class: "small muted" }, t("bill.trial_used")) : null, action || null);
+}
+
+// Bestätigungstext mit Hochrechnung (gleiche Formel wie der Rechner auf der Startseite)
+function planChangeText(pl, stations, trialUsed) {
+  const eur = (c) => new Intl.NumberFormat(getLang(), { style: "currency", currency: "EUR" }).format(c / 100);
+  const q = t("bill.confirm", { plan: pl.name });
+  if (!pl.base_month_cents && !pl.price_per_stall_day_cents) return `${q} ${t("bill.confirm_free")}`;
+  const n = Math.max(1, stations);
+  const m = eur(pl.base_month_cents + n * 30 * pl.price_per_stall_day_cents);
+  return `${q} ${trialUsed ? t("bill.confirm_paid_now", { m, n }) : t("bill.confirm_trial", { d: pl.trial_days, m, n })}`;
 }
 
 export function viewBilling(rerender) {
@@ -301,10 +313,10 @@ export function viewBilling(rerender) {
     meter(t("bill.stations"), u.stations, p.max_stations), meter(t("bill.users"), u.users, p.max_users),
     el("p", { class: "muted" }, `${t("bill.devices")}: ${u.devices}`));
   const plans = el("div", { class: "grid cols-3" });
-  get("/api/v1/org/plans").then(({ plans: list }) => {
-    clear(plans, list.map((pl) => planCard(pl, { current: pl.id === p.id, featured: pl.id === "school",
+  get("/api/v1/org/plans").then(({ plans: list, trial_used: trialUsed }) => {
+    clear(plans, list.map((pl) => planCard(pl, { current: pl.id === p.id, featured: pl.id === "school", trialUsed,
       action: pl.id !== p.id && can("owner") ? el("button", { class: "btn primary", type: "button", onclick: async () => {
-        if (!(await confirmDialog(t("bill.confirm", { plan: pl.name })))) return;
+        if (!(await confirmDialog(planChangeText(pl, u.stations, trialUsed)))) return;
         try { await post("/api/v1/org/plan", { plan: pl.id }); await refreshMe(); toast(t("bill.changed")); rerender(); }
         catch (e) { toast(describeError(e), "error"); }
       } }, t("bill.choose")) : null })));

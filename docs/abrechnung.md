@@ -86,8 +86,13 @@ Alle Preise sind Richtwerte für die Demo, zzgl. MwSt.
 
 Regeln:
 
-- **Testphase ist kostenlos.** Solange sie läuft, fallen weder Stellplatz-Tage noch Grundgebühr an. Sie endet
-  nach 30 Tagen oder früher, sobald der Plattform-Betreiber einen Vertrag einträgt.
+- **Testphase ist kostenlos und gibt es einmal.** Sie beginnt beim **ersten Wechsel in einen kostenpflichtigen Tarif**
+  (bei der Registrierung mit Tarif „Schule“ sofort) – nicht schon bei der Registrierung im Tarif Free. Solange sie läuft,
+  fallen weder Stellplatz-Tage noch Grundgebühr an. Sie endet nach 30 Tagen oder früher, sobald der Plattform-Betreiber
+  einen Vertrag einträgt. Ein späterer Wechsel Free → Schule oder Schule → Pro startet keine neue Testphase; die Tarifkarte
+  zeigt dann „Testphase bereits genutzt“, der Bestätigungsdialog nennt die Hochrechnung.
+- **Grundgebühr anteilig.** Im Monat, in dem die Abrechnung beginnt, wird die Grundgebühr nur für die abrechenbaren Tage
+  berechnet (z. B. Beginn am 14. eines 30-Tage-Monats bis zum 30.: 17/30). Die Vorschau zählt bis heute.
 - **Vertragspreise.** Der Plattform-Betreiber kann je Kunde einen eigenen Tagespreis, eine eigene Grundgebühr,
   eine Laufzeit und Notizen hinterlegen (Plattform → Rechnungen → *Lizenz bearbeiten*).
 - **Rechnungen.** Die Vorschau zählt bis heute. *Festschreiben* erzeugt eine unveränderliche Rechnung mit

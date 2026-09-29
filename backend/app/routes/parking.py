@@ -10,9 +10,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 
 from .. import billing
 from ..core import Ctx, core_of, require
-from ..parking import Parking, normalize_uid, prepaid
+from ..parking import Parking, normalize_uid, prepaid, uid_from
 from ..plans import get_plan
-from ..schemas import CardIn, CardPatch, PaidIn, PaymentModeIn, StationTariffIn, TapIn, TariffIn, TopupIn
+from ..schemas import CardIn, CardPatch, LearnIn, PaidIn, PaymentModeIn, StationTariffIn, TapIn, TariffIn, TopupIn
 from .stations import _station, require_device
 
 router = APIRouter(tags=["parking"])
@@ -48,7 +48,7 @@ def nfc_tap(body: TapIn, request: Request, dev=Depends(require_device)):
     except ValueError:
         raise HTTPException(422, "invalid_uid") from None
     st = core.db.one("SELECT * FROM station WHERE id = ?", (dev["station_id"],))
-    out = parking(request).tap(st, dev["id"], body.sequence, uid, body.age_ms / 1000, body.source)
+    out = parking(request).tap(st, dev["id"], body.sequence, uid, body.age_ms / 1000, body.source, body.reader)
     # Die Antwort enthält keine Kartendaten – nur das Ergebnis für die Anzeige am Stellplatz.
     return {k: v for k, v in out.items() if k in ("result", "amount_cents", "previous", "balance_cents")}
 
@@ -106,14 +106,35 @@ def create_card(body: CardIn, request: Request, ctx: Ctx = Depends(require("admi
     core = core_of(request)
     _feature(ctx, "nfc")
     try:
-        normalize_uid(body.uid)
+        uid = uid_from(body.uid, body.uid_format)
     except ValueError:
         raise HTTPException(422, "invalid_uid") from None
-    c = parking(request).find_or_create_card(ctx.tenant_id, body.uid, label=body.label, status="active")
+    c = parking(request).find_or_create_card(ctx.tenant_id, uid, label=body.label, status="active")
     if c["status"] == "pending" or not c["label"]:
         core.db.execute("UPDATE card SET status = 'active', label = ? WHERE id = ?", (body.label, c["id"]))
     core.audit("card_created", tenant_id=ctx.tenant_id, user_id=ctx.user["id"], actor=ctx.actor, ip=ctx.ip, target=c["id"])
     return _card_out(core, _card(core, ctx, c["id"]))
+
+
+@router.post("/api/v1/cards/learn")
+def start_learn(body: LearnIn, request: Request, ctx: Ctx = Depends(require("admin"))):
+    """Anlern-Modus: die nächste Karte an einem Leser der Organisation (60 s) wird so benannt und freigegeben."""
+    core = core_of(request)
+    _feature(ctx, "nfc")
+    if not core.db.scalar("SELECT COUNT(*) FROM device WHERE tenant_id = ? AND revoked_at IS NULL", (ctx.tenant_id,)):
+        raise HTTPException(409, "no_reader")
+    core.audit("card_learn_started", tenant_id=ctx.tenant_id, user_id=ctx.user["id"], actor=ctx.actor, ip=ctx.ip)
+    return parking(request).start_learn(ctx.tenant_id, body.label, ctx.user["id"])
+
+
+@router.get("/api/v1/cards/learn")
+def learn_status(request: Request, ctx: Ctx = Depends(require("admin"))):
+    return parking(request).learn_status(ctx.tenant_id)
+
+
+@router.delete("/api/v1/cards/learn", status_code=204)
+def cancel_learn(request: Request, ctx: Ctx = Depends(require("admin"))):
+    parking(request).cancel_learn(ctx.tenant_id)
 
 
 @router.patch("/api/v1/cards/{card_id}")

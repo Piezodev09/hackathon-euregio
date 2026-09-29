@@ -6,7 +6,8 @@ import { state, can, every } from "./state.js";
 
 const errorCard = (e) => el("div", { class: "alert-box error", role: "alert" }, describeError(e));
 const th = (...hs) => el("thead", {}, el("tr", {}, hs.filter(Boolean).map((h) => el("th", { scope: "col" }, h))));
-const thisMonth = () => new Date().toISOString().slice(0, 7);
+// Aktueller Monat in lokaler Zeit (toISOString wäre UTC und am Monatsersten vor 1/2 Uhr noch der Vormonat)
+const thisMonth = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; };
 const featureOff = (f) => !state.me?.tenant?.plan?.[f];
 const upsell = (f) => el("div", { class: "alert-box info" }, t("pk.feature_off", { f: t("feat." + f) }), " ",
   el("a", { href: "#/billing" }, t("nav.billing")));
@@ -42,12 +43,19 @@ export function viewCards() {
 
   const uid = el("input", { type: "text", required: true, maxlength: "40", placeholder: "04:A1:B2:C3", autocomplete: "off" });
   const label = el("input", { type: "text", required: true, maxlength: "100" });
+  // USB-Leser am Büro-PC tippen die Nummer oft dezimal (z. B. 0012345678) und drücken Enter.
+  // „automatisch“: nur Ziffern und nicht 8/14/20 Zeichen lang -> dezimal (Bytes umgekehrt), sonst Hex – wie der Agent am Pi.
+  const fmt = el("select", {}, ["auto", "hex", "dec_rev", "dec"].map((f) => el("option", { value: f }, t("pk.fmt_" + f))));
   const form = el("form", { class: "card" }, el("h2", {}, t("pk.add_card")), el("p", { class: "muted" }, t("pk.add_hint")),
-    el("div", { class: "grid cols-2" }, field(t("pk.uid"), uid, t("pk.uid_hint")), field(t("pk.label"), label, t("pk.label_hint"))),
+    el("p", { class: "small" }, t("pk.learn_hint"), " ", el("a", { href: "#/readers" }, t("rd.learn_title"))),
+    el("div", { class: "grid cols-3" }, field(t("pk.uid"), uid, t("pk.uid_hint")), field(t("pk.uid_format"), fmt, t("pk.uid_format_hint")),
+      field(t("pk.label"), label, t("pk.label_hint"))),
     el("button", { class: "btn primary", type: "submit" }, t("pk.add_card")));
   form.addEventListener("submit", async (ev) => {
     ev.preventDefault();
-    try { await post("/api/v1/cards", { uid: uid.value, label: label.value }); uid.value = ""; label.value = ""; toast(t("c.saved")); load(); }
+    const raw = uid.value.trim();
+    const f = fmt.value === "auto" ? (/^\d+$/.test(raw) && ![8, 14, 20].includes(raw.length) ? "dec_rev" : "hex") : fmt.value;
+    try { await post("/api/v1/cards", { uid: raw, uid_format: f, label: label.value }); uid.value = ""; label.value = ""; toast(t("c.saved")); load(); }
     catch (e) { toast(describeError(e), "error"); }
   });
   every(10000, load);

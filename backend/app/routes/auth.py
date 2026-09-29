@@ -160,8 +160,8 @@ def register(body: RegisterIn, request: Request, response: Response):
     user_id = new_id("usr")
     pw = hash_password(body.password, core.s.scrypt_n)
     with core.db.tx() as c:
-        c.execute("INSERT INTO tenant (id, name, plan, status, created_at) VALUES (?,?,?,?,?)",
-                  (tenant_id, body.org_name, body.plan, "active", now))
+        c.execute("INSERT INTO tenant (id, name, plan, status, created_at, trial_started_at) VALUES (?,?,?,?,?,?)",
+                  (tenant_id, body.org_name, body.plan, "active", now, now if get_plan(body.plan).trial_days else None))
         c.execute(
             "INSERT INTO user (id, tenant_id, email, name, role, password_hash, locale, created_at, password_changed_at) "
             "VALUES (?,?,?,?,?,?,?,?,?)",

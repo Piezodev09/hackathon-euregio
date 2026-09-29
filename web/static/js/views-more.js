@@ -254,9 +254,10 @@ export function viewIntegrations() {
 
   const load = async (flash) => {
     try {
-      const r = await get("/api/v1/integrations");
+      const [r, { stations }] = await Promise.all([get("/api/v1/integrations"), get("/api/v1/stations")]);
       if (!r.enabled) return clear(node, upsell("integrations"));
       const base = r.base_url;
+      const exampleId = stations[0]?.id || "STELLPLATZ_ID"; // echtes Beispiel, sobald ein Stellplatz existiert
       // API-Schlüssel
       const name = el("input", { type: "text", required: true, maxlength: "100", placeholder: t("int.key_name_ph") });
       const sRead = el("input", { type: "checkbox", checked: true });
@@ -285,7 +286,7 @@ export function viewIntegrations() {
         kf,
         el("details", {}, el("summary", {}, t("int.examples")),
           el("pre", { class: "code" }, `curl -H "Authorization: Bearer sbk_…" ${base}/api/v1/ext/stations\n\n` +
-            `curl -X POST -H "Authorization: Bearer sbk_…" -H "Content-Type: application/json" \\\n  -d '{"minutes": 30, "label": "Besuch"}' ${base}/api/v1/ext/stations/<id>/reservations`),
+            `curl -X POST -H "Authorization: Bearer sbk_…" -H "Content-Type: application/json" \\\n  -d '{"minutes": 30, "label": "Besuch"}' ${base}/api/v1/ext/stations/${exampleId}/reservations`),
           el("p", { class: "small muted" }, t("int.endpoints"))));
 
       // Webhooks

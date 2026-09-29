@@ -24,7 +24,9 @@ UID_RE = re.compile(r"^[0-9A-F]{8,20}$")
 TAP_MAX_AGE_S = 60  # ältere, nachgesendete Taps werden nicht mehr ausgeführt
 
 RESULTS = ("checked_in", "checked_out", "unknown_card", "blocked", "occupied_by_other", "open_elsewhere", "expired",
-           "duplicate", "feature_disabled", "maintenance", "closed", "reserved", "insufficient_balance")
+           "duplicate", "feature_disabled", "maintenance", "closed", "reserved", "insufficient_balance", "learned")
+LEARN_WINDOW_S = 60  # Anlern-Modus: so lange wartet der Server auf die nächste Karte an einem Leser der Organisation
+UID_FORMATS = ("hex", "dec", "dec_rev")
 TOPUP_MAX_CENTS = 50_000
 
 
@@ -33,6 +35,26 @@ def normalize_uid(uid: str) -> str:
     if not UID_RE.match(u):
         raise ValueError("invalid_uid")
     return u
+
+
+def uid_from(value: str, fmt: str = "hex") -> str:
+    """UID in Hex umrechnen. USB-Leser im Tastaturmodus tippen die UID oft als Dezimalzahl: "dec" = Bytes in
+    Lese-Reihenfolge, "dec_rev" = Bytes umgekehrt (häufig bei 10-stelliger Ausgabe, z. B. 0012345678)."""
+    if fmt == "hex":
+        return normalize_uid(value)
+    v = re.sub(r"\s", "", value or "")
+    if not v.isdigit() or len(v) > 20:
+        raise ValueError("invalid_uid")
+    n = int(v)
+    length = 4 if n < 2**32 else 7 if n < 2**56 else 10
+    if n >= 2 ** (8 * length):
+        raise ValueError("invalid_uid")
+    raw = n.to_bytes(length, "big")
+    if fmt == "dec_rev":
+        raw = raw[::-1]
+    elif fmt != "dec":
+        raise ValueError("invalid_uid_format")
+    return normalize_uid(raw.hex())
 
 
 def uid_hmac(core: Core, tenant_id: str, uid: str) -> str:
@@ -98,15 +120,16 @@ class Parking:
                            (station_id,))
 
     # ------------------------------------------------------------------ Tap
-    def tap(self, station: sqlite3.Row, device_id: str, sequence: int, uid: str, age_s: float, source: str) -> dict:
+    def tap(self, station: sqlite3.Row, device_id: str, sequence: int, uid: str, age_s: float, source: str,
+            reader: str | None = None) -> dict:
         now = self.core.clock()
         t = now - age_s
         tenant_id = station["tenant_id"]
 
         def log(result: str, card_id=None, amount=None) -> dict:
             cur = self.db.execute(
-                "INSERT OR IGNORE INTO nfc_tap (tenant_id, station_id, device_id, sequence, card_id, at, result, amount_cents, source) "
-                "VALUES (?,?,?,?,?,?,?,?,?)", (tenant_id, station["id"], device_id, sequence, card_id, t, result, amount, source))
+                "INSERT OR IGNORE INTO nfc_tap (tenant_id, station_id, device_id, sequence, card_id, at, result, amount_cents, source, reader) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?)", (tenant_id, station["id"], device_id, sequence, card_id, t, result, amount, source, reader))
             if cur.rowcount == 0:
                 prev = self.db.one("SELECT result, amount_cents FROM nfc_tap WHERE device_id = ? AND sequence = ?", (device_id, sequence))
                 return {"result": "duplicate", "previous": prev["result"], "amount_cents": prev["amount_cents"]}
@@ -121,6 +144,10 @@ class Parking:
             return log("expired")
         if station["maintenance"]:
             return log("maintenance")
+
+        learn = self.db.one("SELECT * FROM card_learn WHERE tenant_id = ? AND expires_at >= ? AND card_id IS NULL", (tenant_id, now))
+        if learn is not None and source == "live":
+            return self._learn(learn, log, tenant_id, uid, station["id"])
 
         card = self.find_or_create_card(tenant_id, uid, station["id"])
         self.db.execute("UPDATE card SET last_seen_at = ?, last_station_id = ? WHERE id = ?", (now, station["id"], card["id"]))
@@ -178,6 +205,45 @@ class Parking:
                 "station_id": station["id"], "station_name": station["name"], "session_id": sid, "card_id": card["id"],
                 "card_label": card["label"], "amount_cents": amt, "simulated": source == "simulated"})
         return out
+
+    # ------------------------------------------------------------------ Anlern-Modus
+    def _learn(self, learn: sqlite3.Row, log, tenant_id: str, uid: str, station_id: str) -> dict:
+        """Nächste Karte an irgendeinem Leser der Organisation wird benannt und freigegeben (kein Check-in)."""
+        card = self.find_or_create_card(tenant_id, uid, station_id, label=learn["label"], status="active")
+        known = card["status"] != "pending" and card["label"] and card["label"] != learn["label"]
+        if not known:
+            self.db.execute("UPDATE card SET status = 'active', label = ?, last_seen_at = ?, last_station_id = ? WHERE id = ?",
+                            (learn["label"], self.core.clock(), station_id, card["id"]))
+        self.db.execute("UPDATE card_learn SET card_id = ?, outcome = ?, station_id = ? WHERE tenant_id = ?",
+                        (card["id"], "known" if known else "learned", station_id, tenant_id))
+        self.core.audit("card_learned", tenant_id=tenant_id, user_id=learn["created_by"], actor="nfc", target=card["id"],
+                        detail={"known": bool(known)})
+        return {**log("learned", card["id"]), "card_id": card["id"]}
+
+    def start_learn(self, tenant_id: str, label: str, user_id: str) -> dict:
+        now = self.core.clock()
+        self.db.execute("INSERT INTO card_learn (tenant_id, label, created_by, created_at, expires_at) VALUES (?,?,?,?,?) "
+                        "ON CONFLICT (tenant_id) DO UPDATE SET label = excluded.label, created_by = excluded.created_by, "
+                        "created_at = excluded.created_at, expires_at = excluded.expires_at, card_id = NULL, outcome = NULL, station_id = NULL",
+                        (tenant_id, label, user_id, now, now + LEARN_WINDOW_S))
+        return self.learn_status(tenant_id)
+
+    def learn_status(self, tenant_id: str) -> dict:
+        r = self.db.one("SELECT * FROM card_learn WHERE tenant_id = ?", (tenant_id,))
+        now = self.core.clock()
+        if r is None:
+            return {"state": "idle"}
+        if r["card_id"]:
+            card = self.db.one("SELECT id, label, status FROM card WHERE id = ?", (r["card_id"],))
+            st = self.db.scalar("SELECT name FROM station WHERE id = ?", (r["station_id"],))
+            return {"state": r["outcome"], "label": r["label"], "station_name": st,
+                    "card": {"id": card["id"], "label": card["label"], "status": card["status"]} if card else None}
+        if r["expires_at"] < now:
+            return {"state": "expired", "label": r["label"]}
+        return {"state": "waiting", "label": r["label"], "expires_at": _iso(r["expires_at"]), "seconds_left": round(r["expires_at"] - now)}
+
+    def cancel_learn(self, tenant_id: str) -> None:
+        self.db.execute("DELETE FROM card_learn WHERE tenant_id = ?", (tenant_id,))
 
     # ------------------------------------------------------------------ Ausgabe
     def session_out(self, s: sqlite3.Row, *, public: bool = False) -> dict:

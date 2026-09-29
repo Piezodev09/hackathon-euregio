@@ -72,7 +72,8 @@
   async function poll() {
     if (!TOKEN && !LOCAL) { invalid = true; render(); return; }
     try {
-      const r = LOCAL ? await fetch("/local/status", { cache: "no-store" })
+      const stall = params.get("stall");
+      const r = LOCAL ? await fetch("/local/status" + (stall ? "?stall=" + encodeURIComponent(stall) : ""), { cache: "no-store" })
         : await fetch("/api/v1/public/display/status", { cache: "no-store", credentials: "omit", headers: { "X-Display-Token": TOKEN } });
       if (r.status === 404) { invalid = true; last = null; }
       else if (r.ok) {

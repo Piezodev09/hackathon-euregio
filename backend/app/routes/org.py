@@ -45,7 +45,9 @@ def patch_org(body: OrgPatch, request: Request, ctx: Ctx = Depends(require("admi
 
 @router.get("/plans")
 def list_plans(ctx: Ctx = Depends(require("viewer"))):
-    return {"plans": [p.to_dict() for p in PLANS.values()], "current": ctx.tenant["plan"]}
+    # Testphase gibt es einmal; ältere Konten in einem bezahlten Tarif haben sie ebenfalls schon genutzt.
+    used = ctx.tenant["trial_started_at"] is not None or bool(PLANS.get(ctx.tenant["plan"], PLANS["free"]).trial_days)
+    return {"plans": [p.to_dict() for p in PLANS.values()], "current": ctx.tenant["plan"], "trial_used": used}
 
 
 @router.post("/plan")
@@ -59,6 +61,11 @@ def change_plan(body: PlanIn, request: Request, ctx: Ctx = Depends(require("owne
         raise HTTPException(409, {"code": "plan_limits_exceeded", "usage": usage})
     old = ctx.tenant["plan"]
     core.db.execute("UPDATE tenant SET plan = ? WHERE id = ?", (plan.id, ctx.tenant_id))
+    if plan.trial_days and ctx.tenant["trial_started_at"] is None:
+        # Testphase gibt es einmal: ab dem ersten Wechsel in einen kostenpflichtigen Tarif.
+        # War schon ein kostenpflichtiger Tarif aktiv (ältere Konten ohne Eintrag), zählt das Anlagedatum.
+        start = core.clock() if not PLANS.get(old, PLANS["free"]).trial_days else ctx.tenant["created_at"]
+        core.db.execute("UPDATE tenant SET trial_started_at = ? WHERE id = ?", (start, ctx.tenant_id))
     if not plan.ml_enabled:
         core.db.execute("UPDATE station SET alert_source = 'rule' WHERE tenant_id = ?", (ctx.tenant_id,))
     core.audit("plan_changed", tenant_id=ctx.tenant_id, user_id=ctx.user["id"], actor=ctx.actor, ip=ctx.ip,

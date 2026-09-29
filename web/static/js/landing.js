@@ -26,20 +26,42 @@ function render() {
   renderCalc();
 }
 
-// Kostenrechner: Grundgebühr + Stellplätze x 30 Tage x Tagespreis (Richtwert, zzgl. MwSt.)
+// Kostenrechner: Grundgebühr + Stellplätze x 30 Tage x Tagespreis (Richtwert, zzgl. MwSt.).
+// Passt die Anzahl nicht in den gewählten Tarif, wird nicht still gekappt, sondern der passende Tarif empfohlen.
+const monthCents = (p, n) => p.base_month_cents + n * 30 * p.price_per_stall_day_cents;
+
 function renderCalc() {
   const sel = document.getElementById("calc-plan");
   const n = document.getElementById("calc-stalls");
+  const note = document.getElementById("calc-note");
   const paid = plans.filter((p) => p.price_per_stall_day_cents || p.base_month_cents);
   if (!paid.length) return;
   if (sel.options.length !== paid.length) {
     clear(sel, paid.map((p) => el("option", { value: p.id, selected: p.id === "school" }, p.name)));
   }
+  const maxAll = Math.max(...paid.map((x) => x.max_stations));
+  n.max = String(maxAll);
   const p = paid.find((x) => x.id === sel.value) || paid[0];
-  const stalls = Math.max(1, Math.min(p.max_stations, parseInt(n.value, 10) || 1));
+  const stalls = Math.max(1, Math.min(maxAll, parseInt(n.value, 10) || 1));
   const eur = (c) => new Intl.NumberFormat(getLang(), { style: "currency", currency: "EUR" }).format(c / 100);
-  const month = p.base_month_cents + stalls * 30 * p.price_per_stall_day_cents;
-  document.getElementById("calc-result").textContent = t("l.calc_result", { m: eur(month), y: eur(month * 12), n: stalls });
+  const fitting = paid.filter((x) => x.max_stations >= stalls);
+  const best = fitting.sort((a, b) => monthCents(a, stalls) - monthCents(b, stalls))[0];
+  const result = document.getElementById("calc-result");
+  note.hidden = true;
+  if (stalls > p.max_stations) {
+    result.textContent = t("l.calc_too_many", { plan: p.name, max: p.max_stations });
+    note.hidden = false;
+    clear(note, t("l.calc_use", { plan: best.name, m: eur(monthCents(best, stalls)) }), " ",
+      el("button", { class: "btn link", type: "button", onclick: () => { sel.value = best.id; renderCalc(); } }, t("l.calc_switch", { plan: best.name })));
+    return;
+  }
+  const month = monthCents(p, stalls);
+  result.textContent = t("l.calc_result", { m: eur(month), y: eur(month * 12), n: stalls });
+  if (best && best.id !== p.id) {
+    note.hidden = false;
+    clear(note, t("l.calc_cheaper", { plan: best.name, m: eur(monthCents(best, stalls)) }), " ",
+      el("button", { class: "btn link", type: "button", onclick: () => { sel.value = best.id; renderCalc(); } }, t("l.calc_switch", { plan: best.name })));
+  }
 }
 document.getElementById("calc-plan").addEventListener("change", renderCalc);
 document.getElementById("calc-stalls").addEventListener("input", renderCalc);

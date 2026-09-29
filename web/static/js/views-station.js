@@ -51,14 +51,12 @@ export function viewOverview() {
     try {
       const [{ stations }, { events }] = await Promise.all([get("/api/v1/stations"), get("/api/v1/events?open_only=true&limit=100")]);
       const count = (st) => stations.filter((s) => (s.live?.state || "unknown") === st).length;
+      // Tageswerte rechnet der Server (Tagesgrenze Europe/Berlin, auch über Monatsgrenzen hinweg)
       let today = { checkins: "–", revenue: "–" };
       try {
-        const { sessions } = await get(`/api/v1/parking/sessions?month=${new Date().toISOString().slice(0, 7)}&limit=1000`);
-        const d0 = new Date(); d0.setHours(0, 0, 0, 0);
-        const todays = sessions.filter((s) => new Date(s.started_at) >= d0);
-        const ended = sessions.filter((s) => s.status === "closed" && s.ended_at && new Date(s.ended_at) >= d0);
-        today = { checkins: todays.length, revenue: fmtCents(ended.reduce((a, s) => a + (s.amount_cents || 0), 0)) };
-      } catch (_) { /* Parkvorgänge optional */ }
+        const d = await get("/api/v1/stats/today");
+        today = { checkins: d.checkins, revenue: fmtCents(d.fees_cents) };
+      } catch (_) { /* Kennzahlen optional */ }
       clear(kpis, kpi(stations.length, t("ov.stations")), kpi(count("free"), t("ov.state_free")),
         kpi(count("unknown"), t("ov.state_unknown")), kpi(events.length, t("ov.alerts")),
         kpi(stations.filter((s) => s.live?.session).length, t("ov.parked_now")), kpi(today.checkins, t("ov.checkins_today")),
@@ -339,29 +337,10 @@ export function viewStationSettings(id, setTitle) {
       catch (e) { autoUpd.checked = !autoUpd.checked; toast(describeError(e), "error"); }
     });
 
-    const cmdRow = (label, text) => el("div", { class: "field" }, el("div", { class: "small muted" }, label),
-      el("div", { class: "btn-row" }, el("code", { class: "secret-box mono small cmd" }, text),
-        el("button", { class: "btn small", type: "button", onclick: () => copyText(text) }, t("c.copy"))));
-
     const setup = el("button", { class: "btn primary", type: "button", onclick: async () => {
       try {
         const r = await post(`/api/v1/stations/${id}/enrollments`, { name: "Pi-Gateway" });
-        const c = r.install.commands;
-        clear(reveal, el("div", { class: "alert-box info" },
-          el("h3", {}, t("ag.setup_title")),
-          el("p", {}, t("ag.code_label")), el("p", { class: "enroll-code mono" }, r.code),
-          el("p", { class: "small muted" }, t("ag.code_expires", { t: fmtDateTime(r.expires_at) })),
-          r.install.tls ? el("p", { class: "small" }, t("ag.tls_hint"), " ", el("code", { class: "mono" }, r.install.tls.fingerprint)) : null,
-          el("ol", { class: "steps" },
-            el("li", {}, t("ag.step_os")),
-            c.fetch_cert ? el("li", {}, cmdRow(t("ag.step_cert"), c.fetch_cert)) : null,
-            el("li", {}, cmdRow(t("ag.step_download"), c.download)),
-            el("li", {}, cmdRow(t("ag.step_verify"), c.verify)),
-            el("li", {}, cmdRow(t("ag.step_install"), c.install)),
-            el("li", {}, t("ag.step_done"))),
-          el("details", {}, el("summary", {}, t("ag.oneliner")), el("p", { class: "small muted" }, t("ag.oneliner_hint")),
-            cmdRow("", c.oneliner)),
-          el("p", { class: "small muted" }, t("ag.simulator_hint"), " ", el("code", { class: "mono" }, "--source simulator"))));
+        clear(reveal, enrollBox(r));
         loadAll();
       } catch (e) { toast(describeError(e), "error"); }
     } }, "+ " + t("ag.setup"));
@@ -387,6 +366,7 @@ export function viewStationSettings(id, setTitle) {
             el("td", { class: "small" }, healthSummary(d)),
             el("td", { class: "small" }, fmtDateTime(d.last_heartbeat_at || d.last_seen_at)),
             el("td", {}, d.revoked_at ? "–" : el("div", { class: "btn-row" },
+              d.managed ? el("button", { class: "btn small", type: "button", onclick: () => command(d, "identify") }, t("ag.identify")) : null,
               d.managed ? el("button", { class: "btn small", type: "button", onclick: () => command(d, "restart") }, t("ag.restart")) : null,
               d.managed ? el("button", { class: "btn small", type: "button", onclick: () => command(d, "rotate_token", t("ag.rotate_confirm")) }, t("ag.rotate")) : null,
               d.managed && d.update_available ? el("button", { class: "btn small", type: "button", onclick: () => command(d, "update") }, t("ag.update")) : null,
@@ -556,29 +536,185 @@ export function healthSummary(d) {
     h.last_error ? el("div", { class: "small", title: h.last_error }, "⚠ " + h.last_error.slice(0, 80)) : null);
 }
 
+const cmdRow = (label, text) => el("div", { class: "field" }, el("div", { class: "small muted" }, label),
+  el("div", { class: "btn-row" }, el("code", { class: "secret-box mono small cmd" }, text),
+    el("button", { class: "btn small", type: "button", onclick: () => copyText(text) }, t("c.copy"))));
+
+// Anleitung mit Kopplungscode (ein oder mehrere Stellplätze an einem Pi)
+function enrollBox(r) {
+  const c = r.install.commands;
+  return el("div", { class: "alert-box info" },
+    el("h3", {}, t("ag.setup_title")),
+    el("p", {}, t("ag.code_label")), el("p", { class: "enroll-code mono" }, r.code),
+    el("p", { class: "small muted" }, t("ag.code_expires", { t: fmtDateTime(r.expires_at) })),
+    r.station_ids && r.station_ids.length > 1 ? el("p", {}, t("ag.multi_code", { n: r.station_ids.length })) : null,
+    r.install.tls ? el("p", { class: "small" }, t("ag.tls_hint"), " ", el("code", { class: "mono" }, r.install.tls.fingerprint)) : null,
+    el("ol", { class: "steps" },
+      el("li", {}, t("ag.step_os")),
+      el("li", {}, t("ag.step_hw")),
+      c.fetch_cert ? el("li", {}, cmdRow(t("ag.step_cert"), c.fetch_cert)) : null,
+      el("li", {}, cmdRow(t("ag.step_download"), c.download)),
+      el("li", {}, cmdRow(t("ag.step_verify"), c.verify)),
+      el("li", {}, cmdRow(t("ag.step_install"), c.install)),
+      el("li", {}, t("ag.step_done"))),
+    el("details", {}, el("summary", {}, t("ag.oneliner")), el("p", { class: "small muted" }, t("ag.oneliner_hint")),
+      cmdRow("", c.oneliner)),
+    el("p", { class: "small muted" }, t("ag.simulator_hint"), " ", el("code", { class: "mono" }, "--source simulator")));
+}
+
+// Auswahl für Port/Leser eines Stellplatzes am Pi: automatisch oder fest
+function assignSelect(d, key, options, label) {
+  const current = d[`assigned_${key}`] || "";
+  const sel = el("select", { "aria-label": label },
+    el("option", { value: "" }, t("ag.auto")),
+    options.map((o) => el("option", { value: o.value, selected: o.value === current }, o.label)));
+  if (current && !options.some((o) => o.value === current)) sel.append(el("option", { value: current, selected: true }, `${current} (${t("ag.missing")})`));
+  sel.addEventListener("change", async () => {
+    try { await put(`/api/v1/devices/${d.id}/assign`, { [key]: sel.value }); toast(t("ag.assigned")); }
+    catch (e) { toast(describeError(e), "error"); }
+  });
+  return sel;
+}
+
+const shortPort = (p) => p.replace("/dev/serial/by-id/", "").replace(/-if\d+(-port\d+)?$/, "");
+
 export function viewDevices() {
-  const box = el("div", { class: "card" }, t("c.loading"));
+  const box = el("div", {}, el("p", {}, t("c.loading")));
+  const reveal = el("div");
+  let stations = [];
   const load = async () => {
     try {
-      const { devices, latest_version } = await get("/api/v1/devices");
+      const [{ devices, latest_version }, st] = await Promise.all([get("/api/v1/devices"), get("/api/v1/stations")]);
+      stations = st.stations;
       const active = devices.filter((d) => !d.revoked_at);
       const online = active.filter((d) => d.online).length;
+      const groups = new Map();
+      for (const d of active) {
+        const g = groups.get(d.gateway_id) || [];
+        g.push(d);
+        groups.set(d.gateway_id, g);
+      }
+      const command = async (d, cmd) => {
+        try { await post(`/api/v1/stations/${d.station_id}/devices/${d.id}/command`, { command: cmd }); toast(t("ag.queued")); }
+        catch (e) { toast(describeError(e), "error"); }
+      };
       clear(box, el("p", {}, t("ag.fleet_summary", { online, total: active.length, v: latest_version })),
-        active.length ? el("div", { class: "table-wrap" }, el("table", {},
-          el("thead", {}, el("tr", {}, [t("ev.station"), t("ss.device_name"), t("c.status"), t("ag.version"), t("ag.health"), t("ag.last_contact")]
-            .map((h) => el("th", { scope: "col" }, h)))),
-          el("tbody", {}, active.map((d) => el("tr", {},
-            el("td", {}, can("admin") ? el("a", { href: `#/stations/${d.station_id}/settings` }, d.station_name) : d.station_name),
-            el("td", {}, d.name, d.hostname ? el("div", { class: "small muted mono" }, d.hostname) : null),
-            el("td", {}, deviceStatus(d)),
-            el("td", {}, d.agent_version || "–", d.update_available ? el("div", {}, el("span", { class: "badge warn" }, t("ag.update_avail", { v: latest_version }))) : null),
-            el("td", { class: "small" }, healthSummary(d)),
-            el("td", { class: "small" }, fmtDateTime(d.last_heartbeat_at || d.last_seen_at)))))))
-          : el("p", { class: "muted" }, t("ag.none")));
+        active.length ? [...groups.values()].map((list) => {
+          const head = list[0];
+          const hw = list.find((d) => d.hw)?.hw;
+          const ports = (hw?.ports || []).map((p) => ({ value: p.path, label: `${shortPort(p.path)} · ${p.kind}${p.firmware ? " · " + p.firmware : ""}` }));
+          const readers = (hw?.readers || []).map((r) => ({ value: r.id, label: `${r.name} (${r.kind.toUpperCase()})` }));
+          return el("section", { class: "card gateway-card" },
+            el("h2", {}, icon("plug"), " ", head.hostname || head.name, " ", deviceStatus(head)),
+            el("p", { class: "small muted" }, [t("ag.version"), ": ", head.agent_version || "–", " · ", healthSummary(head),
+              hw ? [" · ", t("ag.hw_summary", { p: hw.ports.length, r: hw.readers.length }), " · ", t("ag.camera"), ": ", hw.camera || "–",
+                " · ", t("ag.kiosk"), ": ", hw.kiosk ? t("c.yes") : t("c.no")] : null]),
+            head.update_available ? el("p", {}, el("span", { class: "badge warn" }, t("ag.update_avail", { v: latest_version }))) : null,
+            el("div", { class: "table-wrap" }, el("table", {},
+              el("thead", {}, el("tr", {}, [t("ev.station"), t("ag.port"), t("ag.reader"), t("c.status"), t("ag.last_contact"), can("admin") ? t("c.actions") : null]
+                .filter(Boolean).map((h) => el("th", { scope: "col" }, h)))),
+              el("tbody", {}, list.map((d) => el("tr", {},
+                el("td", {}, can("admin") ? el("a", { href: `#/stations/${d.station_id}/settings` }, d.station_name) : d.station_name),
+                el("td", {}, d.managed && can("admin") && ports.length ? assignSelect(d, "port", ports, t("ag.port"))
+                  : el("span", { class: "mono small" }, d.hw?.port ? shortPort(d.hw.port) : "–"),
+                  d.hw && d.managed ? el("div", { class: "small muted" }, d.source === "simulator" ? t("ag.sim_port")
+                    : d.hw.port ? t("ag.in_use", { v: shortPort(d.hw.port) }) : t("ag.no_port")) : null),
+                el("td", {}, d.managed && can("admin") && readers.length ? assignSelect(d, "reader", readers, t("ag.reader"))
+                  : el("span", { class: "small" }, d.hw?.reader || "–")),
+                el("td", {}, deviceStatus(d)),
+                el("td", { class: "small" }, fmtDateTime(d.last_heartbeat_at || d.last_seen_at)),
+                can("admin") ? el("td", {}, d.managed ? el("button", { class: "btn small", type: "button", onclick: () => command(d, "identify") }, t("ag.identify")) : "–") : null))))));
+        }) : el("p", { class: "card muted" }, t("ag.none")));
     } catch (e) { clear(box, errorCard(e)); }
   };
   every(15000, load);
-  return el("div", {}, el("p", { class: "muted" }, t("ag.fleet_hint")), box);
+
+  // Ein Pi für mehrere Stellplätze
+  const multi = can("admin") ? el("details", { class: "card" }, el("summary", {}, "+ ", t("ag.multi_setup")),
+    el("p", { class: "muted" }, t("ag.multi_hint"))) : null;
+  if (multi) {
+    const form = el("form", {});
+    multi.append(form);
+    multi.addEventListener("toggle", () => {
+      if (!multi.open) return;
+      const boxes = stations.map((s) => ({ s, box: el("input", { type: "checkbox", value: s.id }) }));
+      clear(form, el("fieldset", { class: "field" }, el("legend", {}, t("ag.multi_pick")),
+        el("div", { class: "grid cols-2 checks" }, boxes.map(({ s, box }) => el("label", { class: "check" }, box, el("span", {}, s.name))))),
+      el("button", { class: "btn primary", type: "submit" }, t("ag.multi_create")));
+      form.onsubmit = async (ev) => {
+        ev.preventDefault();
+        const ids = boxes.filter((x) => x.box.checked).map((x) => x.s.id);
+        if (!ids.length) return toast(t("ag.multi_none"), "error");
+        try { clear(reveal, enrollBox(await post("/api/v1/stations/enrollments", { name: "Pi-Gateway", station_ids: ids }))); load(); }
+        catch (e) { toast(describeError(e), "error"); }
+      };
+    });
+  }
+  return el("div", { class: "page-stack" }, el("p", { class: "muted" }, t("ag.fleet_hint")), multi, reveal, box);
+}
+
+// ---------------------------------------------------------------------- NFC-Lesegeräte
+export function viewReaders() {
+  const box = el("div", { class: "page-stack" }, el("p", {}, t("c.loading")));
+  const learnBox = el("section", { class: "card" });
+  const load = async () => {
+    try {
+      const { gateways, learn } = await get("/api/v1/readers");
+      renderLearn(learn);
+      const withReaders = gateways.filter((g) => g.readers.length || g.stalls.some((s) => s.reader));
+      clear(box, withReaders.length ? withReaders.map((g) => el("section", { class: "card" },
+        el("h2", {}, icon("card"), " ", g.hostname || t("ag.gateway"), " ",
+          el("span", { class: `badge ${g.online ? "ok" : "warn"}` }, g.online ? t("ag.online") : t("ag.offline"))),
+        el("div", { class: "table-wrap" }, el("table", {},
+          el("thead", {}, el("tr", {}, [t("rd.reader"), t("rd.kind"), t("ev.station"), t("sx.taps"), t("sx.tap_success"), t("sx.last_tap")]
+            .map((h) => el("th", { scope: "col" }, h)))),
+          el("tbody", {}, g.readers.map((r) => el("tr", {},
+            el("td", {}, r.name, el("div", { class: "small muted mono" }, r.id)),
+            el("td", {}, t("rd.kind_" + (r.kind || "pn532"))),
+            el("td", {}, r.station_name || el("span", { class: "badge warn" }, t("rd.unassigned"))),
+            el("td", {}, String(r.taps)),
+            el("td", {}, r.success === null ? "–" : `${Math.round(r.success * 100)} %`),
+            el("td", { class: "small" }, fmtDateTime(r.last_at))))))),
+        el("p", { class: "small muted" }, t("rd.assign_hint"), " ", el("a", { href: "#/devices" }, t("nav.devices")))))
+        : el("section", { class: "card" }, el("p", { class: "muted" }, t("rd.none"))),
+      el("details", { class: "card" }, el("summary", {}, t("rd.supported")),
+        el("ul", {}, ["pn532", "hid", "pcsc"].map((k) => el("li", {}, el("strong", {}, t("rd.kind_" + k)), " – ", t("rd.about_" + k))))));
+    } catch (e) { clear(box, errorCard(e)); }
+  };
+
+  let learnTimer = null;
+  function renderLearn(l) {
+    const label = el("input", { type: "text", required: true, maxlength: "100", placeholder: t("rd.learn_ph") });
+    const form = el("form", { class: "btn-row" }, field(t("pk.label"), label), el("button", { class: "btn primary", type: "submit" }, t("rd.learn_start")));
+    form.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      try { renderLearn(await post("/api/v1/cards/learn", { label: label.value })); poll(); }
+      catch (e) { toast(describeError(e), "error"); }
+    });
+    let status = null;
+    if (l?.state === "waiting") {
+      status = el("div", { class: "alert-box info", role: "status" }, el("strong", {}, t("rd.learn_waiting", { label: l.label, s: l.seconds_left })), " ",
+        el("button", { class: "btn small", type: "button", onclick: async () => { await del("/api/v1/cards/learn"); renderLearn({ state: "idle" }); } }, t("c.cancel")));
+    } else if (l?.state === "learned") {
+      status = el("div", { class: "alert-box ok", role: "status" }, "✓ ", t("rd.learn_done", { label: l.card?.label || l.label, st: l.station_name || "" }));
+    } else if (l?.state === "known") {
+      status = el("div", { class: "alert-box warn", role: "status" }, t("rd.learn_known", { label: l.card?.label || "" }));
+    } else if (l?.state === "expired") {
+      status = el("div", { class: "alert-box warn", role: "status" }, t("rd.learn_expired"));
+    }
+    clear(learnBox, el("h2", {}, t("rd.learn_title")), el("p", { class: "muted" }, t("rd.learn_intro")), status, l?.state === "waiting" ? null : form);
+  }
+  async function poll() {
+    if (learnTimer) clearTimeout(learnTimer);
+    try {
+      const l = await get("/api/v1/cards/learn");
+      renderLearn(l);
+      if (l.state === "waiting" && document.body.contains(learnBox)) learnTimer = setTimeout(poll, 1500);
+      else load(); // Taps/Leser aktualisieren
+    } catch (_) { /* nächster Versuch beim Neuladen */ }
+  }
+  every(30000, load);
+  return el("div", { class: "page-stack" }, learnBox, box);
 }
 
 // ---------------------------------------------------------------------- Meldungen

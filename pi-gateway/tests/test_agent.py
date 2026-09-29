@@ -268,18 +268,18 @@ def test_local_display_offline_fallback_and_server_status(tmp_path):
     s = disp.status()
     assert s["offline"] is True and s["state"] == "unknown" and s["unknown_reason"] == "no_data"
     agent.gw.handle_line('{"presence":0,"vibration":0,"seq":1}')
-    disp._fetched_at = 0
+    disp._fetched.clear()
     s = disp.status()
     assert s["offline"] is True and s["state"] == "free" and s["simulated_data"] is True
     agent.gw.last_local["at"] -= 31  # älter als 30 s -> unbekannt, nie „frei“
-    disp._fetched_at = 0
+    disp._fetched.clear()
     assert disp.status()["state"] == "unknown" and disp.status()["unknown_reason"] == "stale"
     agent.gw.handle_line('{"presence":-1,"vibration":0,"seq":2,"state":"error"}')
-    disp._fetched_at = 0
+    disp._fetched.clear()
     assert disp.status()["unknown_reason"] == "sensor_error"
     # Plattform erreichbar: deren Status (inkl. Reservierung) wird durchgereicht
     disp.api.request = lambda *a, **k: (200, {"state": "reserved", "display_name": "Schulhof", "reservation": {"until": "x"}})
-    disp._fetched_at = 0
+    disp._fetched.clear()
     s = disp.status()
     assert s["offline"] is False and s["state"] == "reserved"
 

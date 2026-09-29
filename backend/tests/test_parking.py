@@ -177,7 +177,9 @@ def test_license_invoice_per_stall_day(env):
     # Vertrag ab heute (beendet die Testphase) -> Stellplatz-Tage des Monats werden abgerechnet
     assert ops.put(f"/api/v1/platform/tenants/{tid}/license", {"valid_until": "2027-07-31"}).status_code == 200
     p = owner.get("/api/v1/org/license").json()["current"]
-    assert p["trial_until"] is None and p["stall_days"] == 5 and p["total_cents"] == 900 + 5 * 20
+    # Grundgebühr anteilig: Vertrag beginnt heute (14.11.) -> 1 von 30 Tagen
+    assert p["trial_until"] is None and p["stall_days"] == 5 and p["total_cents"] == round(900 / 30) + 5 * 20
+    assert "anteilig 1/30" in p["lines"][0]["text"]
     r = ops.get(f"/api/v1/platform/invoices?month={month}")
     assert r.status_code == 200, r.text
     row = [x for x in r.json()["rows"] if x["tenant_id"] == tid][0]
@@ -211,3 +213,97 @@ def test_license_invoice_issue_and_custom_price(env):
     assert lic.issue(t, month)["id"] == inv["id"]  # festgeschrieben, nicht doppelt
     assert owner.get("/api/v1/org/license").json()["invoices"][0]["number"] == inv["number"]
     assert lic.record_usage() >= 1
+
+
+def test_trial_starts_on_first_paid_plan_and_only_once(env):
+    owner = env.register(org="Später Schule")  # Free
+    tid = owner.me().json()["tenant"]["id"]
+    lic = owner.get("/api/v1/org/license").json()["license"]
+    assert lic["trial"] is False and lic["trial_used"] is False
+    # Konto ist schon 40 Tage alt (Sitzungen laufen in Tests sonst ab)
+    env.core.db.execute("UPDATE tenant SET created_at = created_at - ? WHERE id = ?", (40 * 86400, tid))
+    assert owner.post("/api/v1/org/plan", {"plan": "school"}).status_code == 200
+    lic = owner.get("/api/v1/org/license").json()["license"]
+    # Testphase beginnt erst mit dem Wechsel, nicht bei der Registrierung
+    assert lic["trial"] is True and lic["days_left"] == 30 and not lic["expired"]
+    # zurück zu Free, Testphase ist vorbei, wieder Schule: keine zweite Testphase
+    assert owner.post("/api/v1/org/plan", {"plan": "free"}).status_code == 200
+    env.core.db.execute("UPDATE tenant SET trial_started_at = trial_started_at - ? WHERE id = ?", (31 * 86400, tid))
+    assert owner.post("/api/v1/org/plan", {"plan": "school"}).status_code == 200
+    lic = owner.get("/api/v1/org/license").json()["license"]
+    assert lic["expired"] is True and lic["days_left"] == 0 and lic["trial_used"] is True
+    # Wechsel Schule -> Pro startet ebenfalls keine neue Testphase
+    assert owner.post("/api/v1/org/plan", {"plan": "pro"}).status_code == 200
+    assert owner.get("/api/v1/org/license").json()["license"]["expired"] is True
+
+
+def test_legacy_paid_tenant_keeps_created_at_as_trial_start(env):
+    owner = env.register(org="Alt")
+    env.set_plan(owner, "school")  # ohne trial_started_at, wie ältere Datenbanken
+    tid = owner.me().json()["tenant"]["id"]
+    env.core.db.execute("UPDATE tenant SET created_at = created_at - ? WHERE id = ?", (40 * 86400, tid))
+    assert owner.get("/api/v1/org/license").json()["license"]["expired"] is True
+    assert owner.post("/api/v1/org/plan", {"plan": "pro"}).status_code == 200
+    assert owner.get("/api/v1/org/license").json()["license"]["expired"] is True
+
+
+def test_uid_formats_for_usb_readers():
+    from app.parking import uid_from
+    assert uid_from("04:aa:00:01", "hex") == "04AA0001"
+    # 10-stellige Dezimalausgabe eines USB-Lesers (Bytes umgekehrt) -> gleiche UID wie am PN532
+    assert uid_from(str(int.from_bytes(bytes.fromhex("04AA0001")[::-1], "big")), "dec_rev") == "04AA0001"
+    assert uid_from(str(0x04AA0001), "dec") == "04AA0001"
+    assert uid_from("0012345678", "dec") == "00BC614E"
+    import pytest
+    for bad in ("12ab", "", "9" * 21):
+        with pytest.raises(ValueError):
+            uid_from(bad, "dec")
+
+
+def test_card_learn_mode(env):
+    from conftest import Device
+    owner = env.register(plan="school")
+    sid, token = env.station(owner)
+    dev = Device(owner, sid, token)
+
+    def tap(uid, reader=None):
+        dev.seq += 1
+        body = {"station_id": sid, "sequence": dev.seq, "uid": uid}
+        if reader:
+            body["reader"] = reader
+        return owner.c.post("/api/v1/nfc/tap", json=body, headers={"Authorization": f"Bearer {token}"}).json()
+
+    assert owner.get("/api/v1/cards/learn").json() == {"state": "idle"}
+    r = owner.post("/api/v1/cards/learn", {"label": "Karte 7a-12"}).json()
+    assert r["state"] == "waiting" and r["seconds_left"] == 60
+    assert tap("04AA0001", reader="hid:usb-Reader")["result"] == "learned"
+    st = owner.get("/api/v1/cards/learn").json()
+    assert st["state"] == "learned" and st["card"]["label"] == "Karte 7a-12" and st["card"]["status"] == "active"
+    # danach wieder normaler Betrieb: Check-in, kein zweites Anlernen
+    assert tap("04AA0001")["result"] == "checked_in"
+    assert env.core.db.scalar("SELECT reader FROM nfc_tap WHERE result = 'learned'") == "hid:usb-Reader"
+    # Zeitfenster abgelaufen -> Karte ist wieder "unbekannt"
+    owner.post("/api/v1/cards/learn", {"label": "Zu spät"})
+    env.clock.advance(61)
+    assert owner.get("/api/v1/cards/learn").json()["state"] == "expired"
+    assert tap("04BB0002")["result"] == "unknown_card"
+    # Abbrechen
+    owner.post("/api/v1/cards/learn", {"label": "X"})
+    assert owner.delete("/api/v1/cards/learn").status_code == 204
+    assert owner.get("/api/v1/cards/learn").json() == {"state": "idle"}
+    # bekannte Karte wird nicht umbenannt
+    owner.post("/api/v1/cards/learn", {"label": "Neu"})
+    assert tap("04AA0001")["result"] == "learned"
+    st = owner.get("/api/v1/cards/learn").json()
+    assert st["state"] == "known" and st["card"]["label"] == "Karte 7a-12"
+    # Rechte und Tarif
+    viewer = env.invite(owner, "leser@example.org", "viewer")
+    assert viewer.post("/api/v1/cards/learn", {"label": "Y"}).status_code == 403
+    # Dezimal-UID im Portal
+    c = owner.post("/api/v1/cards", {"uid": "0012345678", "uid_format": "dec", "label": "USB"})
+    assert c.status_code == 201, c.text
+
+
+def test_card_learn_needs_reader(env):
+    owner = env.register(plan="school")
+    assert owner.post("/api/v1/cards/learn", {"label": "A"}).status_code == 409

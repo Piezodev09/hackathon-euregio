@@ -208,10 +208,16 @@ class TapIn(Strict):
     uid: NfcUid
     age_ms: int = Field(default=0, ge=0, le=86_400_000)
     source: Literal["live", "simulated"] = "live"
+    reader: str | None = Field(default=None, max_length=80, pattern=r"^[A-Za-z0-9_.:\- ]+$")  # z. B. "pn532", "hid:usb-ACME"
 
 
 class CardIn(Strict):
-    uid: NfcUid
+    uid: str = Field(min_length=4, max_length=40, pattern=r"^[0-9A-Fa-f:\- ]+$")
+    uid_format: Literal["hex", "dec", "dec_rev"] = "hex"
+    label: Name
+
+
+class LearnIn(Strict):
     label: Name
 
 
