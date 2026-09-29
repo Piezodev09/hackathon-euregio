@@ -263,7 +263,65 @@ export function viewOrg() {
       location.href = "/";
     });
   }
-  return el("div", { class: "grid cols-2" }, el("div", {}, general, security), el("div", {}, exportCard, delCard));
+  return el("div", { class: "grid cols-2" }, el("div", {}, general, security, cyclistCard()), el("div", {}, statusPageCard(), exportCard, delCard));
+}
+
+// Radfahrende: Selbst-Reservierung in der Karten-App erlauben
+function cyclistCard() {
+  const tn = state.me.tenant;
+  const planOk = !!tn.plan.reservations;
+  const box = el("input", { type: "checkbox", disabled: !planOk });
+  get("/api/v1/org").then((o) => { box.checked = !!o.cyclist_reserve; }).catch(() => {});
+  box.addEventListener("change", async () => {
+    try { await patch("/api/v1/org", { cyclist_reserve: box.checked }); toast(t("c.saved")); }
+    catch (e) { box.checked = !box.checked; toast(describeError(e), "error"); }
+  });
+  return el("section", { class: "card" }, el("h2", {}, t("ca.org_title")), el("p", { class: "muted" }, t("ca.org_intro")),
+    el("label", { class: "check" }, box, el("span", {}, t("ca.org_reserve"))),
+    el("p", { class: "hint" }, planOk ? t("ca.org_reserve_hint") : t("pk.feature_off", { f: t("feat.reservations") })));
+}
+
+// Öffentliche Status-Seite: Link verwalten, aktuelle Störungen mit öffentlicher Notiz
+function statusPageCard() {
+  const card = el("section", { class: "card" }, el("h2", {}, t("sp.title")), el("p", {}, t("c.loading")));
+  const reveal = el("div");
+  const load = async () => {
+    try {
+      const r = await get("/api/v1/incidents");
+      const sp = r.status_page;
+      const incidents = [...r.open, ...r.history.slice(0, 5)];
+      clear(card, el("h2", {}, t("sp.title")), el("p", { class: "muted" }, t("sp.intro")),
+        el("p", {}, el("span", { class: `badge ${sp.enabled ? "ok" : ""}` }, sp.enabled ? t("sp.on") : t("sp.off"))),
+        can("admin") ? el("div", { class: "btn-row" },
+          el("button", { class: "btn", type: "button", onclick: async () => {
+            if (sp.has_link && !(await confirmDialog(t("sp.rotate_confirm")))) return;
+            try {
+              const { url } = await post("/api/v1/org/status-page");
+              clear(reveal, el("div", { class: "alert-box info" }, el("p", {}, t("sp.once")), el("p", { class: "secret-box mono small" }, url),
+                el("div", { class: "btn-row" }, el("button", { class: "btn small", type: "button", onclick: () => copyText(url) }, t("c.copy")),
+                  el("a", { class: "btn small", href: url, target: "_blank", rel: "noopener noreferrer" }, t("sp.open")))));
+              load();
+            } catch (e) { toast(describeError(e), "error"); }
+          } }, sp.has_link ? t("sp.rotate") : t("sp.create")),
+          sp.enabled ? el("button", { class: "btn danger", type: "button", onclick: async () => {
+            try { await del("/api/v1/org/status-page"); clear(reveal); load(); } catch (e) { toast(describeError(e), "error"); }
+          } }, t("sp.disable")) : null) : null,
+        reveal,
+        el("h3", {}, t("sp.incidents")),
+        incidents.length ? el("ul", { class: "incident-list" }, incidents.map((x) => {
+          const note = el("input", { type: "text", maxlength: "200", value: x.note || "", placeholder: t("sp.note_ph"), "aria-label": t("sp.note") });
+          return el("li", {}, el("strong", {}, `${x.station_name}: ${t("sp.k_" + x.kind)}`),
+            el("span", { class: "small muted" }, x.ended_at ? `${fmtDateTime(x.started_at)} – ${fmtDateTime(x.ended_at)}` : t("sp.since", { t: fmtDateTime(x.started_at) })),
+            x.simulated ? el("span", { class: "badge" }, "SIMULATION") : null,
+            can("operator") ? el("form", { class: "btn-row", onsubmit: async (ev) => {
+              ev.preventDefault();
+              try { await patch(`/api/v1/incidents/${x.id}`, { note: note.value }); toast(t("c.saved")); } catch (e) { toast(describeError(e), "error"); }
+            } }, note, el("button", { class: "btn small", type: "submit" }, t("c.save"))) : null);
+        })) : el("p", { class: "muted small" }, t("sp.none")));
+    } catch (e) { clear(card, errorCard(e)); }
+  };
+  load();
+  return card;
 }
 
 // ---------------------------------------------------------------------- Tarif

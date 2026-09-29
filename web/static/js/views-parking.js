@@ -3,6 +3,7 @@ import { get, post, patch, put, del, describeError } from "./api.js";
 import { t } from "./i18n.js";
 import { el, clear, field, toast, confirmDialog, fmtDateTime, fmtCents, fmtDuration, icon } from "./ui.js";
 import { state, can, every } from "./state.js";
+import { qrData, printSticker } from "./views-station.js";
 
 const errorCard = (e) => el("div", { class: "alert-box error", role: "alert" }, describeError(e));
 const th = (...hs) => el("thead", {}, el("tr", {}, hs.filter(Boolean).map((h) => el("th", { scope: "col" }, h))));
@@ -104,10 +105,43 @@ async function txDialog(c) {
   d.showModal();
 }
 
+// Persönlicher Link zur Karten-App (QR-Code zum Ausdrucken). Nur einmal sichtbar; neu erzeugen sperrt den alten.
+function appLinkDialog(c, reload) {
+  const body = el("div", {}, el("p", {}, t("ca.intro")));
+  const d = el("dialog", { "aria-modal": "true", class: "app-link-dialog" }, el("h2", {}, t("ca.title", { name: c.label })), body,
+    el("div", { class: "btn-row" }, el("button", { class: "btn", type: "button", onclick: () => d.close() }, t("c.close"))));
+  const make = async () => {
+    if (c.app_link && !(await confirmDialog(t("ca.renew_confirm")))) return;
+    try {
+      const { url } = await post(`/api/v1/cards/${c.id}/link`);
+      const qr = qrData(url);
+      c.app_link = true;
+      clear(body, el("div", { class: "alert-box info" }, el("p", {}, t("ca.once")), el("p", { class: "secret-box mono small" }, url),
+        qr ? el("p", {}, el("img", { class: "qr-img", src: qr, alt: t("ca.qr_alt"), width: "200", height: "200" })) : null,
+        el("div", { class: "btn-row" },
+          qr ? el("button", { class: "btn small primary", type: "button", onclick: () => printSticker(c.label, qr, t("ca.sticker")) }, t("sv.print")) : null)),
+      el("p", { class: "small muted" }, t("ca.privacy")));
+      reload();
+    } catch (e) { toast(describeError(e), "error"); }
+  };
+  clear(body, el("p", {}, t("ca.intro")), el("p", { class: "small muted" }, c.app_link ? t("ca.has", { t: fmtDateTime(c.app_link_created_at) }) : t("ca.none")),
+    el("div", { class: "btn-row" }, el("button", { class: "btn primary", type: "button", onclick: make }, c.app_link ? t("ca.renew") : t("ca.create")),
+      c.app_link ? el("button", { class: "btn danger", type: "button", onclick: async () => {
+        try { await del(`/api/v1/cards/${c.id}/link`); c.app_link = false; toast(t("ca.revoked")); reload(); d.close(); } catch (e) { toast(describeError(e), "error"); }
+      } }, t("ca.revoke")) : null));
+  d.addEventListener("close", () => d.remove());
+  document.body.append(d);
+  d.showModal();
+}
+
 function cardActions(c, reload, prepaid) {
   const money = prepaid && c.status === "active" ? [
     el("button", { class: "btn small primary", type: "button", onclick: () => topupDialog(c, reload) }, icon("wallet"), t("wl.topup")),
     el("button", { class: "btn small", type: "button", onclick: () => txDialog(c) }, t("wl.tx"))] : [];
+  if (c.status === "active") {
+    money.push(el("button", { class: "btn small", type: "button", onclick: () => appLinkDialog(c, reload) },
+      c.app_link ? t("ca.button_on") : t("ca.button")));
+  }
   if (!can("admin")) return el("div", { class: "btn-row" }, money);
   const act = async (body) => { try { await patch(`/api/v1/cards/${c.id}`, body); reload(); } catch (e) { toast(describeError(e), "error"); } };
   const learn = async () => {
