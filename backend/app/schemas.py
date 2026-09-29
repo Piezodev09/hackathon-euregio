@@ -145,6 +145,7 @@ class OrgPatch(Strict):
     name: Name | None = None
     mfa_required: bool | None = None
     onboarding_hidden: bool | None = None
+    cyclist_reserve: bool | None = None  # Radfahrende dürfen in der Karten-App selbst reservieren
 
 
 class RoleIn(Strict):
@@ -312,3 +313,41 @@ class WebhookIn(Strict):
 class WebhookPatch(Strict):
     active: bool | None = None
     events: list[WebhookEvent] | None = Field(default=None, min_length=1, max_length=10)
+
+
+class SiteIn(Strict):
+    name: Name
+    location: ShortText = ""
+    station_ids: list[Annotated[str, Field(pattern=ID_PATTERN)]] = Field(default_factory=list, max_length=100)
+
+
+class SitePatch(Strict):
+    name: Name | None = None
+    location: ShortText | None = None
+    station_ids: list[Annotated[str, Field(pattern=ID_PATTERN)]] | None = Field(default=None, max_length=100)
+    waitlist_enabled: bool | None = None
+    hold_minutes: int | None = Field(default=None, ge=5, le=30)
+
+
+class CardReservationIn(Strict):
+    station_id: str = Field(pattern=ID_PATTERN)
+    minutes: int = Field(default=15, ge=5, le=30)
+
+
+class WaitlistIn(Strict):
+    site_id: str = Field(pattern=ID_PATTERN)
+
+
+class PushKeys(Strict):
+    p256dh: str = Field(min_length=80, max_length=100, pattern=r"^[A-Za-z0-9_-]+=*$")
+    auth: str = Field(min_length=16, max_length=30, pattern=r"^[A-Za-z0-9_-]+=*$")
+
+
+class PushSubIn(Strict):
+    endpoint: str = Field(min_length=12, max_length=500, pattern=r"^https://[^\s]+$")
+    keys: PushKeys
+    expirationTime: float | None = None  # noqa: N815 – Feldname aus der Browser-API
+
+
+class PushOffIn(Strict):
+    endpoint: str | None = Field(default=None, max_length=500)

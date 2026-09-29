@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex">
+  <title>Status · Smart Bicycle Box</title>
+  <link rel="icon" href="/static/img/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/css/fonts.css">
+  <link rel="stylesheet" href="/static/css/tokens.css">
+  <link rel="stylesheet" href="/static/css/components.css">
+  <link rel="stylesheet" href="/static/css/public.css">
+  <script type="module" src="/static/js/status.js"></script>
+</head>
+<body class="sbb-root status-page">
+  <header class="app-bar">
+    <span class="brand"><img src="/static/img/icon.svg" alt="" width="32" height="32"><span id="org">Smart Bicycle Box</span></span>
+    <nav class="lang" aria-label="Sprache / Taal / Language">
+      <button type="button" data-lang="de" lang="de">DE</button>
+      <button type="button" data-lang="nl" lang="nl">NL</button>
+      <button type="button" data-lang="en" lang="en">EN</button>
+    </nav>
+  </header>
+  <main>
+    <h1 data-i18n="title"></h1>
+    <p id="invalid" class="note err" hidden data-i18n="invalid"></p>
+    <section id="overall" class="status-overall" data-state="unknown" aria-live="polite"></section>
+    <p id="sim" class="note warn" hidden data-i18n="simulated"></p>
+    <h2 data-i18n="stalls"></h2>
+    <ul id="stalls" class="status-list"></ul>
+    <h2 data-i18n="open"></h2>
+    <ul id="open" class="status-inc"></ul>
+    <h2 data-i18n="history"></h2>
+    <ul id="history" class="status-inc"></ul>
+    <p class="small muted" data-i18n="about"></p>
+  </main>
+</body>
+</html>

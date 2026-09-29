@@ -384,3 +384,27 @@ fieldset.field legend { font-weight: 700; margin-bottom: 8px; }
   background: var(--surface-raised); border: 2px solid var(--line-strong); border-radius: var(--radius-md); box-shadow: var(--shadow-card); padding: 6px; }
 .help-item { text-align: left; font: inherit; color: var(--ink); background: none; border: 0; border-radius: 6px; padding: 10px 12px; min-height: 44px; cursor: pointer; }
 .help-item:hover, .help-item:focus-visible { background: var(--petrol-soft); color: var(--ink); }
+
+/* ---------- Anlagen ---------- */
+.site-kpi { display: flex; flex-direction: column; gap: 4px; text-decoration: none; color: var(--ink); border-left: 8px solid var(--line-strong); }
+.site-kpi--free { border-left-color: var(--free-line); }
+.site-kpi--occupied { border-left-color: var(--occupied-bg); }
+.site-kpi--unknown { border-left-color: var(--unknown-line); border-left-style: dashed; }
+.site-kpi__num { font-size: 36px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.site-kpi__of { font-size: 22px; color: var(--ink-muted); }
+.site-kpi__label { color: var(--ink-muted); }
+.site-kpi .badge { align-self: flex-start; }
+.site-head { justify-content: space-between; align-items: flex-start; }
+.site-head .site-kpi { box-shadow: none; padding: 8px 16px; min-width: 160px; }
+.site-mini { list-style: none; padding: 0; margin: 12px 0; display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.site-mini__tile { display: grid; grid-template-columns: auto 1fr; grid-template-areas: "ico name" "ico word"; gap: 0 10px; align-items: center;
+  padding: 8px 12px; border-radius: var(--radius-md); border: 3px solid; }
+.site-mini__tile .sbb-icon { grid-area: ico; width: 28px; height: 28px; }
+.site-mini__tile[data-state="free"] { background: var(--free-bg); color: var(--free-ink); border-color: var(--free-line); }
+.site-mini__tile[data-state="occupied"] { background: var(--occupied-bg); color: var(--occupied-ink); border-color: var(--occupied-bg); }
+.site-mini__tile[data-state="reserved"] { background: var(--reserved-bg); color: var(--reserved-ink); border-color: var(--reserved-line); border-style: double; }
+.site-mini__tile[data-state="unknown"] { background: var(--unknown-bg); color: var(--unknown-ink); border-color: var(--unknown-line); border-style: dashed; }
+.incident-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.incident-list li { display: flex; flex-direction: column; gap: 4px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.incident-list input { flex: 1; min-width: 12em; }
+.app-link-dialog { max-width: 520px; }

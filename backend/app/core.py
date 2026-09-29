@@ -40,6 +40,8 @@ class Core:
         self.mail_limiter = RateLimiter(5 / 3600.0, 5)
         # "Problem melden" in der öffentlichen Stellplatz-Ansicht: je IP 3 pro 10 Minuten
         self.report_limiter = RateLimiter(3 / 600.0, 3)
+        # Karten-App: je IP 1 Anfrage/s im Mittel, kurze Spitzen erlaubt (Links sind geheim, aber ratbar wäre schlimm)
+        self.card_limiter = RateLimiter(1.0, 30)
         # Registrierung: großzügiger als andere Mails (viele Personen hinter einer Schul-IP), trotzdem begrenzt
         self.signup_limiter = RateLimiter(30 / 3600.0, 30)
         # Ereignis-Kanal für E-Mail-Benachrichtigungen und Webhooks: listener(kind, tenant_id, data)

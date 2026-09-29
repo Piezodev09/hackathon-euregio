@@ -1,0 +1,17 @@
+{
+  "name": "Smart Bicycle Box – Meine Karte",
+  "short_name": "Fahrradkarte",
+  "description": "Freie Stellplätze, Reservierung, Warteliste, Guthaben und Verlauf Ihrer Karte.",
+  "id": "/k",
+  "start_url": "/k",
+  "scope": "/",
+  "display": "standalone",
+  "lang": "de",
+  "background_color": "#f4f6f5",
+  "theme_color": "#0e5a63",
+  "icons": [
+    {"src": "/static/img/app-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "/static/img/app-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
+    {"src": "/static/img/icon.svg", "sizes": "any", "type": "image/svg+xml"}
+  ]
+}

@@ -29,7 +29,12 @@ from .parking import Parking
 from .reports import Reports
 from .stats import Stats
 from .reservations import Reservations
-from .routes import agent, auth, camera, integrations, onboarding, ops, org, parking, platform, reports, stations, stats
+from .routes import (agent, auth, camera, cardapp, integrations, onboarding, ops, org, parking, platform, reports, sites,
+                     stations, stats, status)
+from .incidents import Incidents
+from .sites import Sites
+from .waitlist import Waitlist
+from .webpush import Push
 from .snapshots import Snapshots
 from .service import Monitoring
 
@@ -94,6 +99,10 @@ def create_app(settings: Settings | None = None, clock: Callable[[], float] = ti
     reports_ = Reports(core, monitoring)
     integrations_ = Integrations(core)
     demo = DemoSimulator(core, monitoring, parking_, reservations)
+    sites_ = Sites(core, monitoring)
+    push = Push(core)
+    waitlist = Waitlist(core, monitoring, sites_, reservations, push)
+    incidents = Incidents(core, monitoring)
 
     async def maintenance_loop():
         while True:
@@ -113,6 +122,8 @@ def create_app(settings: Settings | None = None, clock: Callable[[], float] = ti
             try:
                 reservations.expire()
                 notifier.check_devices()
+                incidents.tick()
+                waitlist.tick()
                 notifier.send_due_reports(reports_)
             except Exception:
                 log.exception("Minutenlauf fehlgeschlagen")
@@ -147,6 +158,10 @@ def create_app(settings: Settings | None = None, clock: Callable[[], float] = ti
     app.state.notifier = notifier
     app.state.reports = reports_
     app.state.stats = Stats(core, monitoring)
+    app.state.sites = sites_
+    app.state.push = push
+    app.state.waitlist = waitlist
+    app.state.incidents = incidents
     app.state.integrations = integrations_
     app.state.demo = demo
     app.state.tls = TlsInfo.load(settings.tls_cert_file) if settings.base_url.startswith("https://") else None
@@ -180,7 +195,8 @@ def create_app(settings: Settings | None = None, clock: Callable[[], float] = ti
         h["Content-Security-Policy"] = CSP if settings.secure_cookies else CSP.replace("; upgrade-insecure-requests", "")
         if settings.secure_cookies:
             h["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
-        if path.startswith("/api/") or path in ("/", "/app", "/display") or path.endswith(".html"):
+        if path.startswith("/api/") or path in ("/", "/app", "/display", "/s", "/a", "/k", "/status", "/sw.js") \
+                or path.endswith(".html"):
             h["Cache-Control"] = "no-store"
         if "server" in h:
             del h["server"]
@@ -202,7 +218,8 @@ def create_app(settings: Settings | None = None, clock: Callable[[], float] = ti
 
     # ------------------------------------------------------------------ Router
     for r in (auth.router, org.router, stations.router, agent.router, platform.router, parking.router, camera.router,
-              ops.router, reports.router, integrations.router, onboarding.router, stats.router):
+              ops.router, reports.router, integrations.router, onboarding.router, stats.router, sites.router, cardapp.router,
+              status.router):
         app.include_router(r)
 
     @app.get("/health", include_in_schema=False)
@@ -219,15 +236,27 @@ def create_app(settings: Settings | None = None, clock: Callable[[], float] = ti
 
     # ------------------------------------------------------------------ Weboberfläche
     if WEB_DIR.exists():
-        pages = {"/": "index.html", "/app": "app.html", "/display": "display.html", "/s": "stall.html"}
+        pages = {"/": "index.html", "/app": "app.html", "/display": "display.html", "/s": "stall.html", "/a": "site.html",
+                 "/k": "card.html", "/status": "status.html"}
         for route, file in pages.items():
             def page(file=file):
                 return FileResponse(WEB_DIR / file)
             app.add_api_route(route, page, methods=["GET"], include_in_schema=False)
 
+        # Karten-App (PWA): Service Worker muss unter / liegen, damit er /k steuern darf.
+        @app.get("/sw.js", include_in_schema=False)
+        def service_worker():
+            return FileResponse(WEB_DIR / "static" / "js" / "sw.js", media_type="text/javascript",
+                                headers={"Service-Worker-Allowed": "/"})
+
+        @app.get("/manifest.webmanifest", include_in_schema=False)
+        def manifest():
+            return FileResponse(WEB_DIR / "manifest.webmanifest", media_type="application/manifest+json")
+
         @app.get("/robots.txt", include_in_schema=False)
         def robots():
-            return PlainTextResponse("User-agent: *\nAllow: /$\nDisallow: /app\nDisallow: /display\nDisallow: /api/\n")
+            return PlainTextResponse("User-agent: *\nAllow: /$\nDisallow: /app\nDisallow: /display\nDisallow: /api/\n"
+                                     "Disallow: /s\nDisallow: /a\nDisallow: /k\nDisallow: /status\n")
 
         @app.get("/.well-known/security.txt", include_in_schema=False)
         def security_txt():

@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#0e5a63">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Fahrradkarte">
+  <title>Meine Karte · Smart Bicycle Box</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/static/img/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/static/img/app-192.png">
+  <link rel="stylesheet" href="/static/css/fonts.css">
+  <link rel="stylesheet" href="/static/css/tokens.css">
+  <link rel="stylesheet" href="/static/css/components.css">
+  <link rel="stylesheet" href="/static/css/public.css">
+  <script type="module" src="/static/js/card-app.js"></script>
+</head>
+<body class="sbb-root card-app">
+  <header class="app-bar">
+    <span class="brand"><img src="/static/img/icon.svg" alt="" width="32" height="32"><span data-i18n="title"></span></span>
+    <nav class="lang" aria-label="Sprache / Taal / Language">
+      <button type="button" data-lang="de" lang="de">DE</button>
+      <button type="button" data-lang="nl" lang="nl">NL</button>
+      <button type="button" data-lang="en" lang="en">EN</button>
+    </nav>
+  </header>
+  <main id="main" class="app-main">
+    <p id="conn" class="note warn" hidden data-i18n="connection"></p>
+    <div id="view"></div>
+  </main>
+  <nav id="tabs" class="app-tabs" aria-label="Bereiche" hidden>
+    <button type="button" data-tab="home"></button>
+    <button type="button" data-tab="stalls"></button>
+    <button type="button" data-tab="history"></button>
+    <button type="button" data-tab="settings"></button>
+  </nav>
+</body>
+</html>

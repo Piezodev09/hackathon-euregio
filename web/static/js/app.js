@@ -11,6 +11,7 @@ import * as X from "./views-more.js";
 import { startTour, tourRunning } from "./tour.js";
 import { helpButton } from "./help.js";
 import * as ST from "./views-stats.js";
+import * as SI from "./views-sites.js";
 
 const root = document.getElementById("root");
 const PUBLIC = new Set(["login", "register", "check-email", "verify", "forgot", "reset", "invite"]);
@@ -28,7 +29,7 @@ function navItems() {
     items.push(["section", t("nav.s_monitor")], ["/", t("nav.overview")], ["/events", t("nav.events")], ["/sessions", t("nav.sessions")],
       ["/reservations", t("nav.reservations")], ["/stats", t("nav.stats")], ["/reports", t("nav.reports")]);
     items.push(["section", t("nav.s_billing")], ["/cards", t("nav.cards")], ["/parking-billing", t("nav.parking_billing")]);
-    items.push(["section", t("nav.s_admin")], ["/stations", t("nav.stations")], ["/devices", t("nav.devices")]);
+    items.push(["section", t("nav.s_admin")], ["/stations", t("nav.stations")], ["/sites", t("nav.sites")], ["/devices", t("nav.devices")]);
     if (can("admin")) items.push(["/readers", t("nav.readers")]);
     items.push(["/team", t("nav.team")]);
     if (can("admin")) items.push(["/integrations", t("nav.integrations")], ["/org", t("nav.org")], ["/audit", t("nav.audit")]);
@@ -150,6 +151,7 @@ export async function route() {
   else if (name === "reservations") { title = t("nav.reservations"); view = X.viewReservations(); }
   else if (name === "reports") { title = t("nav.reports"); view = X.viewReports(); }
   else if (name === "stats") { title = t("nav.stats"); view = ST.viewStats(); }
+  else if (name === "sites") { title = t("nav.sites"); view = SI.viewSites(); }
   else if (name === "readers") { title = t("nav.readers"); view = can("admin") ? S.viewReaders() : deny(); }
   else if (name === "integrations") { title = t("nav.integrations"); view = X.viewIntegrations(); }
   else { title = t("err.not_found"); view = el("p", {}, el("a", { href: "#/" }, t("nav.overview"))); }

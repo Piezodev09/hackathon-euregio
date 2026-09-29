@@ -68,6 +68,8 @@ class Settings:
     webhooks_allow_private: bool = False
     # Beispiel-Stellplätze mit Simulation (Registrierung/Tour) erlauben.
     demo_stalls: bool = True
+    # Kontakt im VAPID-Schlüssel für Web-Push (Push-Dienste melden sich hier bei Problemen).
+    push_subject: str = "mailto:admin@example.org"
     # paths / secrets
     db_path: Path = BACKEND_DIR / "bike_station.db"
     tls_cert_file: Path | None = None  # Zertifikat der Plattform (für Pinning bei der Gateway-Einrichtung)
@@ -118,6 +120,12 @@ def _data_key(environment: str, db_path: Path) -> bytes:
 def _tls_cert_file(tls: dict) -> Path | None:
     p = os.environ.get("BIKE_TLS_CERT_FILE", tls.get("cert_file", "/etc/bike-station/tls/server.crt"))
     return Path(p) if p else None
+
+
+def _push_subject(cfg: dict) -> str:
+    raw = str(cfg.get("push", {}).get("subject") or cfg.get("mail", {}).get("from", "no-reply@example.org"))
+    addr = raw.split("<")[-1].rstrip(">").strip()
+    return addr if addr.startswith(("mailto:", "https://")) else f"mailto:{addr}"
 
 
 def load_settings(config_path: str | os.PathLike | None = None) -> Settings:
@@ -192,6 +200,7 @@ def load_settings(config_path: str | os.PathLike | None = None) -> Settings:
             "BIKE_WEBHOOKS_ALLOW_PRIVATE", str(cfg.get("integrations", {}).get("webhooks_allow_private", environment != "production"))
         ).lower() in ("1", "true"),
         demo_stalls=bool(app.get("demo_stalls", True)),
+        push_subject=_push_subject(cfg),
         db_path=db_path,
         tls_cert_file=_tls_cert_file(cfg.get("tls", {})),
         data_key=_data_key(environment, db_path),

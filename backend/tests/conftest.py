@@ -133,8 +133,14 @@ def env(tmp_path, monkeypatch):
     app.state.demo.autorun = False  # Simulation in Tests nur gezielt per step()
     app.state.integrations.sync = True  # Webhooks sofort zustellen
     app.state.integrations.transport = lambda url, headers, body: 200
+    pushes: list = []  # Web-Push: abgefangen statt an echte Push-Dienste gesendet
+    app.state.push.sync = True
+    app.state.push.transport = lambda url, headers, body: (pushes.append((url, headers, body)), 201)[1]
+    app.state.push.check_endpoint = lambda url: None  # keine DNS-Auflösung im Test (eigener Test prüft check_url)
     with TestClient(app):
-        yield Env(app, clock)
+        e = Env(app, clock)
+        e.pushes = pushes
+        yield e
 
 
 class Device:

@@ -34,6 +34,12 @@ wiederholen. T08/T14 nur kontrolliert und nach Absprache mit der IT.
 | Ein Pi für mehrere Stellplätze: Kopplung, Token je Stellplatz, Hardware-Meldung, Portal-Zuordnung mit Tausch, Identifizieren, Leser je Stellplatz | `test_agent.py::test_one_pi_for_several_stalls`, `test_readers_keep_pn532_per_stall` | bestanden |
 | Agent 1.4: Migration des Zustands (Rollback-fähig), Hinzufügen von Stellplätzen, serielle Erkennung, USB-HID- und PC/SC-Leser, Zuordnung, lokale Übersicht | `pi-gateway/tests/test_hardware.py` (11 Tests, gefälschte `/dev`-/`/proc`-Daten) | bestanden |
 | E2E (Browser, 2 simulierte Stellplätze an einem Agent): Rechner-Empfehlung, Hilfe-Menü, Tour fortsetzen, Karte anlernen, Statistik (hell/dunkel/390 px), lokale Übersicht | Playwright, manuell ausgeführt | bestanden |
+| Anlagen: unbekannt/Wartung nie frei, Token, Mandantentrennung, Tarif | `test_cyclists.py::test_site_counts_never_unknown_as_free`, `test_site_display_needs_plan` | bestanden |
+| Karten-App: nur eigene Daten, keine UID, Link erneuern/sperren, Rollen; Selbst-Reservierung nur bei sicher freiem Platz | `test_card_app_link_shows_only_own_data`, `test_card_app_self_reservation_rules` | bestanden |
+| Web-Push: Verschlüsselung nach RFC 8291 (Gegenprobe mit Entschlüsselung), VAPID-Signatur, SSRF-Schutz | `test_webpush_encryption_and_vapid`, `test_push_endpoint_ssrf_is_rejected` | bestanden |
+| Warteliste: Angebot + Push, fremde Karte abgewiesen, Ablauf → Nächster, Check-in erfüllt, 410 löscht Abo, nur bei voller Anlage | `test_waitlist_offer_push_and_next_in_line`, `test_waitlist_only_when_full` | bestanden |
+| Status-Seite: Sensorfehler/Gateway/Wartung, Verfügbarkeit, keine sensiblen Felder, Notiz, Abschalten | `test_status_page_incidents_and_availability` | bestanden |
+| E2E (Browser, 3 simulierte Stellplätze in einer Anlage): Großanzeige hell/dunkel, Karten-App 390 px (Manifest, Service Worker), Warteliste → Angebot in App und Großanzeige, Status-Seite nach Sensorfehler, Portal | Playwright, manuell ausgeführt | bestanden (Push im Headless-Browser nicht verfügbar) |
 
 | Registrierung ohne E-Mail-Bestätigung, strenger Modus, Tour-Status | `test_auth.py::test_register_logs_in_immediately_verification_optional`, `test_strict_mode_requires_verification` | bestanden |
 | Reservierung: RESERVIERT nur bei sicher freiem Platz, Karte, Ablauf, Rollen, Tarif | `test_features.py::test_reservation_*`, `test_free_plan_has_no_reservations` | bestanden |

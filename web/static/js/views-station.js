@@ -7,6 +7,7 @@ import { el, clear, field, toast, confirmDialog, fmtDateTime, fmtTime, copyText,
 import { state, can, every, go } from "./state.js";
 import { sessionSummary, tariffForm, tariffText } from "./views-parking.js";
 import { onboardingCard, reservationBox, hoursCard, createDemoStation } from "./views-more.js";
+import { siteTile } from "./views-sites.js";
 
 let devicesTimer = null;
 const errorCard = (e) => el("div", { class: "alert-box error", role: "alert" }, describeError(e));
@@ -46,7 +47,8 @@ export function viewOverview() {
   const kpis = el("div", { class: "grid cols-4", "data-tour": "kpis" });
   const cards = el("div", { class: "grid cols-3" });
   const onboarding = onboardingCard();
-  const node = el("div", { class: "page-stack" }, onboarding, kpis, el("h2", { class: "visually-hidden" }, t("nav.stations")), cards);
+  const sitesRow = el("div", { class: "grid cols-3", hidden: true });
+  const node = el("div", { class: "page-stack" }, onboarding, sitesRow, kpis, el("h2", { class: "visually-hidden" }, t("nav.stations")), cards);
   every(5000, async () => {
     try {
       const [{ stations }, { events }] = await Promise.all([get("/api/v1/stations"), get("/api/v1/events?open_only=true&limit=100")]);
@@ -62,6 +64,11 @@ export function viewOverview() {
         kpi(stations.filter((s) => s.live?.session).length, t("ov.parked_now")), kpi(today.checkins, t("ov.checkins_today")),
         kpi(today.revenue, t("ov.revenue_today")));
       clear(cards, stations.length ? stations.map(stallCard) : emptyOverview());
+      try {
+        const { sites } = await get("/api/v1/sites");
+        sitesRow.hidden = !sites.length;
+        clear(sitesRow, sites.map(siteTile));
+      } catch (_) { sitesRow.hidden = true; }
     } catch (e) { clear(cards, errorCard(e)); }
   });
   return node;
@@ -738,12 +745,21 @@ export function viewEvents() {
     el("p", { class: "small muted" }, t("st.disclaimer")), box);
 }
 
-// Druckansicht für den QR-Aufkleber am Stellplatz.
-function printSticker(name, qrDataUrl) {
+// QR-Code als Daten-URL (lokal erzeugt, der Link verlässt den Browser nicht)
+export function qrData(url) {
+  if (!window.qrcode) return null;
+  const q = window.qrcode(0, "M");
+  q.addData(url);
+  q.make();
+  return q.createDataURL(6, 2);
+}
+
+// Druckansicht für einen QR-Aufkleber (Stellplatz, Karten-App).
+export function printSticker(name, qrDataUrl, text = t("sv.sticker_text")) {
   const sheet = el("div", { class: "print-sticker" },
     el("p", { class: "print-sticker__title" }, name),
     el("img", { src: qrDataUrl, alt: "", width: "260", height: "260" }),
-    el("p", {}, t("sv.sticker_text")), el("p", { class: "small" }, "Smart Bicycle Box"));
+    el("p", {}, text), el("p", { class: "small" }, "Smart Bicycle Box"));
   document.body.append(sheet);
   document.body.classList.add("printing");
   const done = () => { sheet.remove(); document.body.classList.remove("printing"); window.removeEventListener("afterprint", done); };
