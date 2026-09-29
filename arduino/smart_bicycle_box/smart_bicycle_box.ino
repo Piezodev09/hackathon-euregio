@@ -112,11 +112,12 @@ int8_t readPresence() {
   delayMicroseconds(10);
   digitalWrite(PRESENCE_PIN, LOW);
   pinMode(PRESENCE_PIN, INPUT);
-  unsigned long us = pulseIn(PRESENCE_PIN, HIGH, 25000UL);  // ~4 m Timeout
-  if (us == 0) return -1;
+  // Grove liefert bei "kein Objekt" ein langes Echo (~30 ms) statt gar keins -> großzügiger Timeout.
+  unsigned long us = pulseIn(PRESENCE_PIN, HIGH, 40000UL);
+  if (us == 0) return -1;                    // gar kein Echo -> Sensor nicht angeschlossen
   unsigned long cm = us / 58UL;
-  if (cm == 0 || cm > MAX_VALID_CM) return -1;
-  return cm < OCCUPIED_BELOW_CM ? 1 : 0;
+  if (cm == 0) return -1;
+  return cm < OCCUPIED_BELOW_CM ? 1 : 0;     // nah = belegt, weit (auch Maximalwert) = frei
 #elif PRESENCE_TYPE == PRESENCE_ULTRASONIC
   digitalWrite(TRIGGER_PIN, LOW);
   delayMicroseconds(2);
